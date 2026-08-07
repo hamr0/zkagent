@@ -1,0 +1,28 @@
+# Local agent/tool state — machine-specific, not project content
+.claude/settings.local.json
+.barebrowse/
+.litectx/
+
+# Real passport-derived material must never enter the tree (NO-GO #9).
+# M0 test vectors built from a real chip contain MRZ data (name, DOB,
+# document number). Keep them local; commit only synthetic/ICAO-sample vectors.
+fixtures/real/
+*.mrz
+*.dg1
+*.sod
+secrets/
+
+# Build / runtime
+node_modules/
+dist/
+build/
+*.log
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+*~
