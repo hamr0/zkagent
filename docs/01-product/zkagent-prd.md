@@ -1,43 +1,76 @@
-# zkagent — PRD v1.0 (draft)
+# zkagent — PRD v1.4 (draft)
 
-**Status**: Draft — owner decisions D1–D8 signed off 2026-07-26; awaiting M0 evidence before any promise hardens.
-**Owner**: hamr · **Repo**: zkagent (new; sibling of 8een) · **npm**: `zkagent` (reserve `0.0.0` placeholder — owner action, browser UI)
+**Status**: Draft. D1–D8 signed 2026-07-26; D9 still open pending M0 evidence. **No promise in this document survives a miss at M0, which has not been run.**
+**Project**: `zkagent` · **Published package**: `chiproof` · **Owner**: hamr · **Repo**: zkagent (sibling of 8een)
 **Parent standards**: `AGENT_RULES.md` (POC-first, dependency hierarchy, prove-don't-assert, security invariants). When anything here disagrees with AGENT_RULES, AGENT_RULES wins.
+**Version history**: §15. This revision (v1.4) restructured the document into rungs, split disclosure into two modes (D13), and narrowed FR6.
+**Companion**: `docs/02-engineering/zkagent-design.md` — the design and disclosure model: how the read works, what each mode emits, the legal posture, and the operator's configuration surface. Description, not commitment; **this PRD wins on any conflict**.
 
-**One-liner**: Prove there is exactly one accountable, blockable human behind an AI agent — captcha-grade, anonymous, no CA, no ZK circuits in v1 — rooted in the passport chip the government already issued.
+**One-liner**: Read the chip in a government-issued document, verify the government's own signature on it, and answer exactly one question about the holder — *over 18?* or *seen here before?* — disclosing nothing else, storing nothing anywhere, with no issuer, CA, wallet or server of ours in the path.
+
+**Claim discipline (standing, applies to every sentence anyone writes about this project)**: the project name may be aspirational; the *claims* may not. v1 is attested selective disclosure, not zero-knowledge. Nothing shipped, published, committed or spoken may describe v1 as a zero-knowledge proof (NO-GO #5, NO-GO #7). See §2.1 for the plain statement of why.
 
 ---
 
 ## 1. Problem
 
-Agent traffic passed human traffic and every emerging auth standard (Web Bot Auth, Visa TAP, Google AP2, OAuth on-behalf-of drafts) roots trust in a **vendor** ("OpenAI's agent") or a **custodial account** (an IdP login — free, infinite, ban-proof). The IETF's own drafts name the gap: the `sub` claim is "routinely overloaded… without a standard classification mechanism"; delegation chains have no anchored origin. The personhood-credentials literature (arXiv 2408.07892, 2501.09674) calls for exactly the missing piece — a unique, privacy-preserving, human root — but assumes an *issuer* nobody has stood up.
+Two gaps, one root cause, one chip that closes both.
 
-zkagent supplies the root, issuer-free: the passport chip **is** the already-issued credential.
+**Agent accountability.** Agent traffic passed human traffic and every emerging auth standard (Web Bot Auth, Visa TAP, Google AP2, OAuth on-behalf-of drafts) roots trust in a **vendor** ("OpenAI's agent") or a **custodial account** (an IdP login — free, infinite, ban-proof). The IETF's own drafts name the gap: the `sub` claim is "routinely overloaded… without a standard classification mechanism"; delegation chains have no anchored origin. The personhood-credentials literature (arXiv 2408.07892, 2501.09674) calls for exactly the missing piece — a unique, privacy-preserving human root — but assumes an *issuer* nobody has stood up.
+
+**Age verification.** Present demand, legal deadlines in several jurisdictions, and incumbent solutions (ID upload, credit-card check, face estimation) that are expensive, privacy-hostile, or both. The EU's own answer requires a wallet, an attestation provider, and a batch-issuance round trip — infrastructure that must exist before a user can prove anything.
+
+**The root cause is the same: everyone assumes an issuer.** zkagent supplies the root issuer-free — the government already issued the credential and it is in the holder's pocket. The chip **is** the attestation provider.
 
 ## 2. What v1 is
 
 ```
-SCANNER APP (thin native iOS app; the ONLY native piece)
-  1. NFC-read passport chip            (vetted lib: NFCPassportReader — never our parsing)
-  2. Verify government signature       (public masterlist — ICAO PKD / BSI; no CA of ours)
-  3. secret = KDF(chip stable data)    (never leaves device; Secure Enclave, biometric-gated)
-     tag    = HMAC(secret, verified service domain)
-  4. App Attest: Apple signs "genuine iPhone, unmodified app ran steps 1–3"
-  5. Hand {tag, over18: bool, attestation, challenge-nonce} to the web flow (QR / universal link)
+SCANNER APP (thin native Android app; the ONLY native piece)
+  1. NFC-read the chip                  (vetted lib: JMRTD — never our parsing)
+  2. Verify the government signature    (public masterlist — ICAO PKD / BSI; no CA of ours)
+  3. Evaluate the verifier's request against the chip contents
+  4. Attest that unmodified code ran steps 1–3     (root chosen at Q14)
+  5. Hand the answer to the web flow    (QR / app link)
 
-VERIFIER SDK (Node, stateless — the npm package services install)
-  verify attestation (Apple root) → verify challenge nonce (single-use)
-  → check adopter-supplied blocklist → verdict {ok, allowed, reason}
+  ── MODE A · ANONYMOUS (default) ─────────────────────────────────
+     out: { claims: { over_threshold: bool }, attestation, challenge }
+     NO identifier of any kind. Two presentations by the same holder to the
+     same service are unlinkable. Nothing is derived, nothing is cached that
+     could become an identity. This is the age-verification mode. (D13)
 
-AGENT LAYER (after the human loop works)
-  delegation cert: {agent pubkey, tag, scope, expiry, serial} signed under the tag
-  agent signs requests per RFC 9421; verifier checks chain + blocklist
+  ── MODE B · PSEUDONYMOUS (opt-in, requested in the challenge) ───
+     secret = KDF(chip stable data)     (never leaves device; Keystore/StrongBox,
+                                         biometric-gated, max age enforced — D10)
+     zktag  = HMAC(secret, verified service domain)
+     out: { zktag, claims{…}, attestation, challenge }
+     Linkable WITHIN one service — that is the point: dedupe, blocklist,
+     "have I seen this human before." Unlinkable ACROSS services. (D13)
+
+VERIFIER SDK (Node, stateless — the npm package `chiproof`, services install it)
+  verify attestation → verify challenge nonce (single-use)
+  → check client against adopter trust list (FR10)
+  → mode B only: check adopter-supplied blocklist
+  → verdict { ok, allowed, reason }
+
+AGENT LAYER — RUNG 2, see §4. Not v1.
 ```
 
-- Passport data never leaves the phone. A service sees: a tag, a yes/no, a signature chain.
-- Same human + same service = same tag, forever (deterministic). Different services = unlinkable tags.
-- Ban the tag → all the human's agents die at that service, and there is no re-mint (no second passport).
-- Forging requires beating Apple hardware attestation or forging a government chip — far above the captcha bar this product promises. **Not above a bank's bar. Never claim otherwise.**
+- Chip data never leaves the phone. In mode A a service sees one bit and a signature chain; in mode B it additionally sees a pseudonym scoped to its own domain.
+- Mode B: same human + same service = same zktag, forever (deterministic). Different services = unlinkable zktags. Ban the zktag → every agent of that human dies at that service, with no re-mint (no second passport).
+- Forging requires beating hardware attestation or forging a government chip — far above the captcha bar this product promises. **Not above a bank's bar. Never claim otherwise.**
+
+### 2.1 Why this is not zero-knowledge, stated plainly
+
+A zero-knowledge proof lets the verifier check the mathematics itself; the proof carries the guarantee. zkagent is structurally different:
+
+| | What the verifier does |
+|---|---|
+| ZK | "Here is a proof. Check it yourself." |
+| zkagent | "Here is an answer. A hardware vendor attests that unmodified code computed it." |
+
+The verifier never checks a proof — it checks an attestation that unmodified code ran, then believes the number that code produced. Break the attestation and the claim collapses; with ZK, breaking attestation buys you nothing because the mathematics still has to hold. The *privacy outcome* in mode A is comparable (one bit crosses the wire). The *trust model* is not. D1 and NO-GO #7 forbid ZK circuits in v1 — not built, not vendored, not scaffolded.
+
+**Uniqueness is not a ZK property and never was.** ZK gives selective disclosure with proof. Uniqueness comes from the credential being scarce — one passport per person. The two pull against each other: a ZK age proof is unlinkable by construction, which makes it *useless* for "have I seen this person before." 8een cannot do uniqueness, by construction. zkagent can. That is the strongest argument for zkagent existing as a separate project at all.
 
 ## 3. The invariant (inherited from 8een, adopted verbatim)
 
@@ -47,112 +80,182 @@ A broken verifier saying "no" is indistinguishable from a working one — it wou
 
 | Condition | Verdict |
 |---|---|
-| tag on blocklist | `ok:true, allowed:false` (real no) |
-| attestation invalid / nonce replayed | `ok:true, allowed:false` (real no) |
-| masterlist half-loaded, blocklist store unreachable, Apple endpoint down | `ok:false, allowed:null` — never a "no" |
+| holder under the requested threshold | `ok:true, allowed:false` (real no) |
+| zktag on blocklist (mode B) | `ok:true, allowed:false` (real no) |
+| attestation invalid / nonce replayed / client not on trust list | `ok:true, allowed:false` (real no) |
+| masterlist half-loaded, blocklist store unreachable, attestation root unreachable | `ok:false, allowed:null` — never a "no" |
 
 Corollary (8een's recurring bug shape, found 7+ times there): **never trust a health check, a config value, or a client-supplied field.** The masterlist is a PEM list — assume it can silently half-load (19-in-file-17-parsed) and prove it can't.
 
-## 4. Goals / Non-goals
+## 4. Rungs — what ships when, and what is deliberately not yet built
 
-**Goals (v1)**
-- G1: One human ↦ one stable tag per service, from a passport scan, iPhone-first.
-- G2: Captcha-grade verification a service adopts with one npm install and zero PII handling.
-- G3: Agent delegation certs + RFC 9421 request verification riding the tag.
-- G4: Blocklist + pseudonymous appeal, all state adopter-supplied.
+The PRD previously described one product with five milestones. It is two rungs, and only the first is v1. Everything in rung 2 is real, decided, and **not being built yet**; it stays in this document so it is not re-invented, not because it is in scope.
+
+| Rung | Contents | Milestones | Status |
+|---|---|---|---|
+| **1 — the core** | Chip read, government-signature verification, mode A age bit, mode B zktag, attestation, verifier SDK, demo. Published as `chiproof`. | M0–M3 | **This is v1.** Nothing else is. |
+| **2 — the agent layer** | Delegation certs, RFC 9421 request signing, per-serial revocation, blocklist + pseudonymous appeal. | M4–M5 | Decided, specified (FR5/FR8, Q8), **not started**. Requires rung 1 shipped and at least one real adopter. |
+
+**Rung 1 ships both modes together.** The zktag is the novel bit and it does not get deferred — but it is opt-in per presentation (D13), so the age wedge does not carry it.
+
+**The core is borrowable.** Anyone — including a government — may embed `chiproof` in their own app. We deliver the core; wrap it in your app or use ours. This is a one-sided sale (the adopter brings their own users) and is the single largest mitigation available for the two-sided-market problem in §14. It has two hard prerequisites, both now requirements: the derivation must be a **published spec** (FR11), or two clients fork the identity space; and the verifier must decide **which clients it accepts** (FR10), or the openness that makes the core borrowable also makes it forgeable.
+
+## 5. Goals / Non-goals
+
+**Goals (rung 1)**
+- G1: A holder proves one attribute from a government chip, Android-first, with no issuer, no account, no PII handled by anyone.
+- G2: In mode A, a service learns exactly one bit and cannot link two presentations by the same holder. Measured, not asserted (FR9).
+- G3: In mode B, one human ↦ one stable zktag per service, unlinkable across services.
+- G4: A service adopts with one npm install, zero PII handling, and its own trust list.
+
+**Goals (rung 2, not v1)**
+- G5: Agent delegation certs + RFC 9421 request verification riding the zktag.
+- G6: Blocklist + pseudonymous appeal, all state adopter-supplied.
 
 **Non-goals (v1) — the scope-creep magnets, named explicitly**
-- ZK circuits (D1 — future tier, not built, not scaffolded).
-- Android (until a device exists; design must not preclude Play Integrity).
-- Money/payments, legal-grade identity, one-person-one-vote (k-bound makes it dishonest — see NO-GO #5).
-- EU wallet / mdoc / eIDAS integration (the "EU way" we're diverting from; zk8een remains the bridge if ever needed).
-- **National eID cards** — v1 reads passports only (NFCPassportReader's domain). eID cards are a different read path; later.
-- **Predicates beyond `over18`** — v1 discloses exactly two claims: unique tag + over-18. No under-18 spaces, no nationality, no residency. Each added predicate leaks anonymity bits and grows the scanner; new predicates require a PRD change (NO-GO #10).
-- **signedreply / attestation-ledger / reputation integration** — separate product; zkagent must stand alone. No cross-product coupling in v1.
-- **Federated/shared blocklist service** — v1 defines the signed blocklist *format* and adopter store interface only. We run no list, host no reputation.
-- **Tag continuity across passport renewal** — deferred to D9 evidence; at captcha-grade a ~10-yearly tag rotation may simply be acceptable.
+- ZK circuits (D1 — future tier; not built, not vendored, not scaffolded).
+- iOS (deferred until demand justifies $99/yr and a Mac or cloud-Mac build path; design must not preclude App Attest).
+- Money/payments, legal-grade identity, one-person-one-vote (k-bound makes it dishonest — NO-GO #5).
+- Becoming an EU wallet, an attestation provider, or an eIDAS-conformant component. zkagent may share privacy *properties* with the EU Age Verification Solution (§12) — it is not part of that ecosystem and must never imply certification. zk8een remains the bridge if one is ever needed.
+- **Non-chip documents.** The readable set is **ICAO 9303-compliant chip documents** — anything carrying an SOD signature chain verifiable against a public masterlist. **Explicitly excluded and not "later":** US driving-licence PDF417 barcodes and equivalents (AAMVA-encoded text with *no verifiable signature*, so step 2 has nothing to check and anyone can print one); photos; photocopies; OCR. Signed mobile credentials (US mDL) may qualify eventually but are a separate read path.
+- **Predicates beyond a single threshold per presentation.** Mode A discloses exactly one bit; mode B adds exactly one pseudonym. No nationality, no residency, no under-18 spaces, no "and also". Each added predicate leaks anonymity bits and grows the scanner; new predicates require a PRD change (NO-GO #10).
+- **Unifying identities across documents.** Explicitly rejected as a goal (owner, 2026-08-07). A holder with two documents holds two identities and that is fine. See D9 and NO-GO #5.
+- **signedreply / attestation-ledger / reputation integration** — separate product; zkagent must stand alone.
+- **Federated or shared blocklist service** — rung 2 defines the signed blocklist *format* and adopter store interface only. We run no list, host no reputation, publish no trust list.
 - **Browser extension, desktop scanner, or any second client** — one scanner app, one verifier SDK, one demo page. Nothing else.
 
-## 5. Milestones — small buckets, each with a checkpoint
+## 6. Milestones — small buckets, each with a checkpoint
 
-| M | Deliverable | Checkpoint (evidence, not prose) |
-|---|---|---|
-| **M0 — POC at the riskiest assumption** | Throwaway iPhone spike: read owner's real passport, verify SOD vs public masterlist, derive tag, **rescan → identical tag**; second passport/ID if findable → different tag | Two scan runs logged with matching tag; timings measured (scan, verify, derive); masterlist load count asserted against file count. Evidence doc `docs/02-evidence/M0-EVIDENCE.md`. POC is thrown away, never shipped |
-| **M1 — Verifier SDK core** | `verdict.js`-style never-throw classifier; challenge nonce (port 8een `challenge.js` pattern); App Attest verification against fixtures captured from the M0 device | Full negative matrix runs (bad attestation, replayed nonce, half-loaded masterlist ⇒ `ok:false`); every reject-test paired with a non-vacuity pass-test |
-| **M2 — Scanner app (rewrite, not graduate)** | Real app: enclave storage, biometric gate, App Attest wired, QR/universal-link handoff | End-to-end on real device against local verifier; tag stability across app reinstall + re-scan measured |
-| **M3 — Captcha-replacement demo** | Web page: "prove you're a unique adult human" via phone scan; responsive (mandatory) | Live flow demo; second scan from same passport rejected as duplicate tag (uniqueness shown, not asserted). *Clarification vs NO-GO #1: the demo site acts as its own adopter and keeps its own seen-tags store — the zkagent SDK still stores nothing* |
-| **M4 — Agent layer** | Delegation certs, RFC 9421 middleware, per-serial revocation | Agent request accepted with valid chain; killed by tag-block; single-use serial burns once |
-| **M5 — Blocklist/appeal** | Signed blocklist format, adopter store interface, prove-control-of-tag appeal | Replay 8een's store pattern: fails closed, never silently falls back to in-memory |
+| M | Rung | Deliverable | Checkpoint (evidence, not prose) |
+|---|---|---|---|
+| **M0 — POC at the riskiest assumption** | 1 | Throwaway spike on a physical NFC Android phone + JMRTD (D2; stock-ROM Pixel/Samsung-class per the M2 assurance bar). Read owner's real passport, verify SOD vs public masterlist, read DOB, derive zktag, **rescan → identical zktag**; second document if findable → different zktag. **Report which data groups and fields the chip actually contains, and whether it supports Active or Chip Authentication** (feeds D9, D14, Q12, Q18) | Two scan runs logged with matching zktag; timings measured (scan, verify, derive); masterlist load count asserted against file count; chip field inventory recorded, AA/CA support recorded. Evidence doc `docs/02-evidence/M0-EVIDENCE.md`. POC is thrown away, never shipped |
+| **M1 — Verifier SDK core** | 1 | `verdict.js`-style never-throw classifier; challenge nonce (port 8een `challenge.js`); mode negotiation; trust-list check (FR10); attestation verification against fixtures captured from the M0 device | Full negative matrix runs (bad attestation, replayed nonce, untrusted client, half-loaded masterlist ⇒ `ok:false`); every reject-test paired with a non-vacuity pass-test |
+| **M1b — Mode-A unlinkability probe** | 1 | Black-box byte comparison of N mode-A presentations from the same device, same holder, same service, borrowing 8een §7.3 method **including a planted positive control** | No field differs across presentations except those proven independent of holder and device. **A planted stable field must make the check fail** — a guard you have not watched fire is not a guard. Blocks M3. Answers Q15 |
+| **M2 — Scanner app (rewrite, not graduate)** | 1 | Real app: Keystore/StrongBox, biometric gate, attestation wired, mode A + mode B, QR/app-link handoff | End-to-end on real device against local verifier; zktag stability across app reinstall + re-scan measured; mode A confirmed to emit no zktag even after a mode-B presentation on the same device |
+| **M3 — Demo** | 1 | Web page: "prove you're over 18" (mode A) and "prove you're a unique adult human" (mode B); responsive (mandatory) | Live flow. Mode B: second scan from same passport rejected as duplicate zktag (uniqueness shown, not asserted). Mode A: two presentations indistinguishable. *Clarification vs NO-GO #1: the demo site is its own adopter and keeps its own store — the SDK still stores nothing* |
+| **M4 — Agent layer** | 2 | Delegation certs, RFC 9421 middleware (FR8), per-serial revocation, phone→agent cert handoff (D-Q9) | Agent request accepted with valid chain; killed by zktag-block; single-use serial burns once; signature verifies against an off-the-shelf RFC 9421 verifier with no zkagent-specific patches; cert reaches a headless agent host with no zkagent-run server in the path |
+| **M5 — Blocklist/appeal** | 2 | Signed blocklist format, adopter store interface, prove-control-of-zktag appeal | Replay 8een's store pattern: fails closed, never silently falls back to in-memory |
 
 One milestone at a time. Each works alone before the next integrates.
 
-## 6. Riskiest-assumption register (what M0 must answer — no PRD promise survives a miss)
+## 7. Riskiest-assumption register (what M0 must answer)
 
-1. **Issuer-free derivation works**: chip's stable data is readable, verifiable against a public masterlist, and yields the same secret on every scan. (The PHC literature assumes an issuer; nobody has published the issuer-free variant. This is the novel bit — and the whole product.)
-2. **NFCPassportReader + owner's actual passport + owner's dev account/NFC entitlement** actually cooperate on this desk, this month.
-3. **Masterlist coverage**: owner's issuing country's CSCA cert is present and current in the free public lists.
-4. **App Attest verification is implementable within our dependency rules** (see Open Question Q1).
-5. Derivation-field choice: document number (changes at renewal → tag rotates ~10-yearly — acceptable at captcha grade?) vs personal number where present. M0 reports what the chip actually contains; decision D9 taken after, on evidence.
+1. **Issuer-free derivation works**: the chip's stable data is readable, verifiable against a public masterlist, and yields the same secret on every scan. The PHC literature assumes an issuer; nobody has published the issuer-free variant. This is the novel bit — and the whole product.
+2. **JMRTD + the owner's actual passport + the acquired Android phone** actually cooperate on this desk, this month.
+3. **Masterlist coverage**: the owner's issuing country's CSCA cert is present and current in the free public lists.
+4. **Attestation verification is implementable within our dependency rules** — whichever root Q14 selects.
+5. **Derivation-field choice** (D9): document number (changes at renewal → zktag rotates ~10-yearly) vs personal number where present. M0 reports what the chip actually contains; D9 is taken after, on evidence.
+6. **We are not issuer-free — attestation has an issuer.** "No CA, no issuer" is true of *identity* (the government already issued the document) and false of *attestation*. NO-GO #3 forbids *us* running an issuer and is silent on depending on someone else's. The size of that dependency is decided by Q14:
+   - **Play Integrity** — a live Google *service*: Play Console registration, Play Services on device, quotas, revocable. No fallback if access is denied.
+   - **Hardware key attestation** — a vendor-signed *certificate root* the verifier pins. No runtime service call, no registration, no quota, no gatekeeper. A CA relationship, not a dependency on someone's uptime or goodwill.
 
-## 7. Requirements (condensed — full behavior specified per-milestone at build time)
+   Correct phrasing either way: **issuer-free identity, vendor-rooted attestation.** Never claim more.
+7. **Attestation choice decides whether the product contradicts its own audience.** Anonymous, no-PII personhood proof appeals disproportionately to people running GrapheneOS, CalyxOS and de-Googled devices. Under Play Integrity those users fail permanently, by design. Observed concretely during the M0 hardware search: six custom-ROM devices rejected outright. **Mitigable, and the mitigation is Q14** — key attestation needs no Play Services and GrapheneOS supports it deliberately.
+8. **The attestation may itself be the identifier that mode A promises not to emit** (Q15). Mode A's guarantee is only as good as the attestation payload: a device-unique attestation key, an unshared certificate intermediate, an OS/patch-level string, or a precise timestamp each reintroduce linkability through the back door. **Mode A is a claim about the whole payload, not about our fields.** Unmeasured until M1b; until then mode A is a design intent, not a property.
 
-- FR1 Scanner: vetted-lib chip read; local SOD verification; KDF in enclave; no telemetry, no account, no network call except masterlist refresh.
-- FR2 Tag: `HMAC(secret, verified-domain)`; domain computed client-side (FIDO-style origin binding), never accepted from the server.
-- FR3 Verifier: stateless; never-throw; verdict `{ok, allowed, reason}`; all stores adopter-supplied and failing closed.
-- FR4 Challenge: HMAC self-authenticating nonce, single-use spend, atomic store shape (Redis `SET NX PX`) — 8een piece-2 design reused.
-- FR5 Delegation: VC-shaped cert, per-agent serial, individually revocable, expiry mandatory.
-- FR6 Uniformity: all clients emit identical-shaped payloads (fixed sizes/versions); metadata must not fingerprint (decided v1, not retrofittable).
-- FR7 Any web surface is responsive, mobile-first (AGENT_RULES hard requirement).
+## 8. Requirements
 
-## 8. NO-GO table — check before proposing any feature
+- **FR1 Scanner** — vetted-lib chip read; local SOD verification; no telemetry, no account, no network call except masterlist refresh. Mode B derivation happens in the enclave and the secret carries an enclave-enforced max age (D10) — never app-side date arithmetic. An expired secret blocks mode-B presentation and cert issuance alike. **Mode A derives no secret and caches no identity-bearing material.**
+- **FR2 zktag (mode B only)** — `HMAC(secret, verified-domain)`; the domain is computed client-side (FIDO-style origin binding) and never accepted from the server.
+- **FR3 Verifier** — stateless; never-throw; verdict `{ok, allowed, reason}`; all stores adopter-supplied and failing closed.
+- **FR4 Challenge** — HMAC self-authenticating nonce, single-use spend, atomic store shape (Redis `SET NX PX`) — 8een piece-2 design reused. The challenge also carries the **mode request**, the threshold, and any freshness requirement (D10).
+- **FR5 Delegation (rung 2)** — VC-shaped cert, per-agent serial, individually revocable, expiry mandatory.
+- **FR6 Uniformity — narrowed (v1.4, D15).** All presentations from **one client build in one mode** MUST be byte-shape identical: fixed field set, fixed sizes, fixed version string, no per-device assurance-tier metadata, no per-user optional fields, coarse timestamps. **Cross-client distinguishability is accepted, and is the mechanism** — package name and signing-certificate digest are visible by design because FR10's trust list works by reading exactly those. Consequence, written down rather than discovered: **the anonymity set is "users of this client build in this mode," not "all zkagent users."** A client with 10,000 users offers a set three orders of magnitude smaller than one with 10 million. An adopter that trusts many clients enlarges its users' sets; an adopter that trusts one shrinks it, and should be told so. Not retrofittable. Must be measured (FR9), not asserted.
+- **FR7 Responsive** — any web surface is responsive, mobile-first (AGENT_RULES hard requirement).
+- **FR8 RFC 9421 mapping (rung 2)** — agent requests signed with `alg="ed25519"`; `keyid` = thumbprint of the agent public key. **RFC 9421's own `tag` signature parameter is reserved for protocol labelling and MUST NOT carry the zktag** — the zktag rides only inside the delegation cert. Signature `expires` MUST be ≤ cert `expiry`; the verifier enforces the earlier. The cert travels in its own header, never in `keyid`. A conformant off-the-shelf 9421 verifier must accept our signature without zkagent-specific patches; zkagent adds fields, it does not alter the base.
+- **FR9 Unlinkability budget (new, v1.4)** — mode A's no-identifier guarantee is a property of the **entire emitted payload including the attestation**, not of zkagent's own fields. Every field that crosses the wire in mode A must be shown independent of holder and device, by black-box byte comparison with a planted positive control (8een §7.3). Anything that cannot be shown independent must be removed, coarsened, or the mode-A claim withdrawn. **Blocks M3.**
+- **FR10 Trust list, adopter-held (new, v1.4, D17)** — the verifier is configured with the client identities it accepts: `trustedClients: [{ name, package, certDigest, specVersion }]`. Attestation reports package name + signing-cert digest; that pair *is* the client's identity, and a modified APK must be re-signed, changing the digest. **We publish no list and run no registry** (NO-GO #3) — the adopter curates. Open core, curated trust: being open-source does not make a client trusted. A client not on the list is rejected even if its source is identical.
+- **FR11 Published derivation spec (new, v1.4, D16)** — the mode-B derivation is a **versioned public specification** (`zkagent-derivation/1`), not an implementation detail. `zktag = HMAC(KDF(chip data), domain)` mentions no application, so the same document + same domain MUST produce the same zktag whichever conformant client computed it. This is what makes a borrowable core survivable: an adopter can trust two clients and still block one human once. If two implementations disagree, the identity space forks and blocking silently breaks. The spec version travels in the payload and in every trust-list entry.
+
+## 9. NO-GO table — check before proposing any feature
 
 | # | NO-GO | Why |
 |---|---|---|
-| 1 | **We store nothing server-side. Ever.** No identity, no chip data, no tags-at-rest, no logs of who verified | Statelessness is the security argument, not a limitation (8een NO-GO #7 lineage) |
-| 2 | **No custom security-critical code**: chip parsing, attestation parsing, crypto — vetted libs / platform APIs / stdlib only | AGENT_RULES; 8een NO-GO #8 lineage. If the answer is "write our own X" and X is cryptographic or parses untrusted input, the answer is wrong |
-| 3 | **No CA, no issuer, no enrollment server run by us** | Issuer-free is the product. The day we run an issuer we've rebuilt the thing we set out to kill |
+| 1 | **We store nothing server-side. Ever.** No identity, no chip data, no zktags-at-rest, no logs of who verified | Statelessness is the security argument, not a limitation (8een NO-GO #7 lineage) |
+| 2 | **No custom security-critical code**: chip parsing, attestation parsing, crypto — vetted libs / platform APIs / stdlib only | AGENT_RULES; 8een NO-GO #8. If the answer is "write our own X" and X is cryptographic or parses untrusted input, the answer is wrong |
+| 3 | **No CA, no issuer, no enrollment server, and no trust list run by us** | Issuer-free is the product. The day we run an issuer — or a registry of blessed clients — we've rebuilt the thing we set out to kill |
 | 4 | **No unmasking capability** — not escrowed, not quorum-gated, not "for emergencies." Max penalty = exclusion | A capability that exists can be compelled. Owner decision, final |
-| 5 | **Never claim "one human = one tag"** — always "at most k (k = documents held, ~1–3)". Never claim more than captcha-grade assurance. Never describe v1 as replay-safe/sybil-proof beyond what a measurement showed | Overclaim is the death of a trust product; 8een's evidence-doc discipline applies |
+| 5 | **Never claim "one human = one zktag"** — always "at most k (k = documents held, ~1–3)". Never claim more than captcha-grade. Never describe v1 as replay-safe, sybil-proof or zero-knowledge beyond what a measurement showed | Overclaim is the death of a trust product; 8een's evidence-doc discipline applies |
 | 6 | **No web-NFC scanner** — the scan is native, period | Platform wall (NDEF-only browsers), not a preference |
 | 7 | **No ZK circuits in v1** — not built, not vendored, not scaffolded "for later" | D1. Captcha-grade bar; every line must have a purpose today |
 | 8 | **No npm publish until the package is standalone-usable** — placeholder reservation only; publishing is a deliberate manual owner step | zk8een binary-distribution lesson, verbatim |
 | 9 | **No secrets/test keys in the tree** — runtime-generated, temp dirs only | AGENT_RULES + 8een PRD §10 |
 | 10 | **No feature enters a milestone unless it's in this PRD first.** New idea → PRD change → owner sign-off → build. Mid-milestone additions are refused by default, including owner-tempting ones ("while we're in there…") | The scope gate. This project's conversation history generates ideas faster than any team could build them; the PRD is the filter, not the collector |
+| 11 | **No stable identifier in mode A** — not a zktag, not a device id, not a "rate-limit key", not a hashed anything, not "just for fraud detection" | This is where the pressure will come from, and it will sound reasonable every time. Mode A's entire value is that the field does not exist to be leaked, subpoenaed or correlated. An adopter that needs to recognise a returning holder must request mode B and be seen to request it (D13) |
 
-## 9. Owner decisions (signed 2026-07-26)
+## 10. Owner decisions
 
 | D | Decision |
 |---|---|
 | D1 | v1 trust root = government chip signature + OS attestation. No ZK circuits in v1; ZK is a named future tier |
-| D2 | Native thin scanner app (iOS first, owner's own app wrapping NFCPassportReader); everything else web |
-| D3 | Stateless, 8een-style: blocklist/nonce stores adopter-supplied; we store nothing |
+| D2 | *(amended 2026-08-02, device settled 2026-08-07)* Native thin scanner app, **Android first** (owner's own app wrapping JMRTD); everything else web. Google Play $25 one-time vs Apple $99/yr, builds on the owner's Fedora box with no Mac, test builds sideload free. iOS revisited only when demand justifies the cost. **Development device: Pixel, stock ROM. All other vendors ruled out for M0–M2.** Reasoning recorded so it is not relitigated: NFC Type A/B is *not* the discriminator (baseline on every phone-class NFC controller), and the extended-length-APDU variance that drives commercial ID vendors' device blocklists does not apply to us because we never read DG2 — DG1 + SOD fit in short APDUs with chaining. The real discriminator is attestation quality (Q14b), where Pixel gives the reference implementation, guaranteed StrongBox, stock ROM and the longest update runway. Huawei and China-market ROMs are excluded outright (no Play Services; a non-Google attestation root). **Rationale is debuggability, not capability** — on a Pixel a failure means our code is wrong; on an unpredictable OEM it means our code is wrong *or* the vendor's Keymaster is. A non-Pixel second device is an M2 concern (testing only on Pixel silently encodes Pixel assumptions), not an M0 one |
+| D3 | Stateless, 8een-style: blocklist/nonce/trust stores adopter-supplied; we store nothing |
 | D4 | `ok`/`allowed` invariant adopted verbatim (§3) |
-| D5 | `tag = HMAC(chip-derived secret, verified service domain)` — client-side scope binding |
-| D6 | New repo; zk8een reused as lessons + `challenge.js` pattern + verdict/test discipline; zk8een repo untouched |
-| D7 | Name: **zkagent** (repo + npm). Verifier SDK ships via npm; scanner app via TestFlight/App Store |
+| D5 | *(amended 2026-08-02)* `zktag = HMAC(chip-derived secret, verified service domain)` — client-side scope binding. Named `zktag`, not `tag`, to avoid a silent collision with RFC 9421's own `tag` signature parameter |
+| D6 | New repo; 8een reused as lessons + `challenge.js` pattern + verdict/test discipline; 8een repo untouched |
+| D7 | *(amended 2026-08-07 → superseded in part by D12)* Name: **zkagent** as the project. Verifier SDK ships via npm; scanner app via Play |
 | D8 | Issuer-free derivation is the named riskiest assumption; M0 targets it before anything else is built |
-| D9 | *(open — taken after M0 evidence)* derivation field: document number vs personal number; renewal-rotation acceptability |
+| D9 | *(open — taken after M0 evidence)* Derivation field: document number vs personal number; renewal-rotation acceptability. **Narrowed 2026-08-07**: cross-document unification is a *non-goal*, so a national personal number's ability to merge a passport and an ID card into one identity is a **cost to be avoided**, not a feature to be sought — unless M0 evidence shows renewal stability is otherwise unobtainable. Decide on chip evidence, not on theory |
+| D10 | *(2026-08-03, revised 2026-08-07)* **The mode-B derived secret has an enclave-enforced maximum age; a fresh scan is required to renew it.** Default 30 days; the client build may configure 30/60/90/180 and MUST NOT exceed 180. Rationale unchanged: indefinite caching meant a single borrowed scan bought a permanent identity the document's owner could neither detect nor revoke; a ceiling converts one-time possession into recurring possession. **Freshness is negotiated, not fingerprinted:** a verifier that needs fresher may state `max_scan_age_days` in the challenge, and the presentation answers with **one bit** — never an age in days, which would be a fingerprint (FR6). Accepted cost: the document must stay accessible; a lost document degrades to no-renewal after the ceiling. **Mode A is unaffected — it caches no secret** |
+| D11 | *(2026-08-03)* **Age threshold is configurable; the output stays one bit.** Adopted verbatim from 8een D6 (`src/index.js:195-217`, `src/verdict.js:103-117`): the adopter sets `threshold` (default 18), the SDK requires claim `age_over_${threshold}`, and the verdict carries a single `over_threshold` boolean. Rejected alternative: emitting a ladder of thresholds (13/16/18/21) at once — that narrows the holder's age to a bucket and roughly doubles the entropy disclosed, where one requested threshold discloses exactly one bit. **A proof of a threshold other than the one requested MUST be rejected, not accepted as close enough** (8een `src/verdict.js:211`). Fixed allowed set caps binary-search probing; see Q11 |
+| D12 | *(2026-08-07)* **Project and package names split: project `zkagent`, published package `chiproof`.** Precedent: the owner's own `8een` project / `zk8een` package. The project name carries the direction of travel; the package name says what it does — it reads a chip and proves something about it. `chiproof` verified available on npm 2026-08-07 (404 on the registry); reserve early — 8een lost the bare name to npm's typo-squat filter with no appeal. **Reserved 2026-08-07** — `chiproof@0.0.0` published by the owner as a manual step (NO-GO #8), source at `packages/chiproof/`: two files, no code, README stating plainly that it does nothing and that this is not zero-knowledge. **Licensed Apache-2.0, matching the repo**, correcting the standing defect in the `zkagent@0.0.0` placeholder, which is published as MIT and must be fixed or deprecated when NO-GO #8 is next revisited |
+| D13 | *(2026-08-07)* **Disclosure has two modes, and the verifier must ask for the one it needs.** **Mode A (anonymous, default)** emits one bit and no identifier; two presentations by the same holder to the same service are unlinkable. **Mode B (pseudonymous, opt-in)** additionally emits the domain-scoped zktag, which is linkable within that service and unlinkable across services. Rationale: uniqueness and unlinkability are in direct tension and only one leg of the product needs each. Age verification needs no pseudonym and emitting one is a pure privacy regression; agent accountability is *defined* by recognising a returning human. This also aligns the age leg with the EU Age Verification Blueprint's own privacy properties (§12) without adopting its infrastructure. **Rules:** mode B MUST be requested explicitly in the challenge and MUST NOT be inferred, defaulted to, or silently upgraded; the app SHOULD show the holder which is being asked ("this site only learns you are over 18" vs "this site can recognise you again"); a mode-A payload MUST be byte-shape identical whether or not that device has ever made a mode-B presentation (FR6). **The rung-2 agent layer is mode B only, structurally** — a delegation cert hangs off a persistent human root, so an agent that cannot be recognised cannot be revoked, and mode A emits nothing to bind a cert to. Agent delegation cannot be built on the anonymous path; do not attempt it |
+| D14 | *(2026-08-07)* **Accepted document types are adopter-configurable, and the default is greedy.** `acceptedDocuments` defaults to every ICAO 9303 document the client can read; an adopter narrows it. Reach is the default because **`k` has no cost in mode A** — with no identifier emitted, a holder with three documents is not three identities, they are three ways to answer the same question. `k` is a real cost only in mode B, where it bounds the uniqueness claim; a mode-B adopter that needs k≈1 narrows to `['passport']` and knowingly trades reach for it. Consequence: NO-GO #5's "at most k" wording is a **mode-B** claim and must not be stated as a general limitation of the product, nor omitted from any mode-B pitch |
+| D15 | *(2026-08-07)* **FR6 is narrowed, not retired.** Uniformity is required *within* a client build and mode; cross-client distinguishability is accepted because the trust list (FR10) works by reading exactly the package name and signing-cert digest that distinguish clients. This is safe only because of FR11: since the derivation is a published spec, two clients reading the same document produce the same zktag — so a visible client identity partitions the *anonymity set*, not the *identity space*. The anonymity-set cost is stated in FR6 and must be measured, not assumed |
+| D16 | *(2026-08-07)* **The derivation is a published, versioned specification** (FR11) — a prerequisite of the borrowable core, not a nice-to-have |
+| D17 | *(2026-08-07)* **The trust list is held by the adopter, never by us** (FR10). Worked example, recorded because it is the model: a national police force publishes once — package `nl.politie.id`, cert digest `sha256:CC:DD:…`, spec version `zkagent-derivation/1`. A webshop configures `trustedClients: [official, politie]` alongside `threshold`, `acceptedDocuments`, `mode` and `masterlist`. At verify time the SDK validates the attestation signature, extracts package + digest, and accepts only what is listed. A malicious clone is rejected even though the source is open. No API key, no contract, no relationship with us — and no registry for us to run, be compelled to alter, or be blamed for |
+| D18 | *(2026-08-07)* **Sequencing: the agent layer is not designed, discussed or specified further until the age-verification leg is finished.** Rung 2 stays as written — decided, bounded, not started — and reopening it before rung 1 ships is refused by default, including on a passing owner request. Rationale from this session's evidence rather than from principle: Q18 (chip cloning defeating mode-B uniqueness, and with it D10's entire rationale) sat undetected through four PRD revisions and surfaced only when the read path had to be written out concretely for the design companion. More design is currently producing more surface, not more certainty. This PRD carries 18 decisions, 11 requirements and 9 open questions against zero lines of code; the agent layer would add a third document's worth of each. **M0 first** |
 
-## 10. Open questions (resolve at the milestone that hits them, on evidence)
+**Resolved and closed** (kept as one-liners; full reasoning is in the version history and session stashes): **Q2** — Apple entitlement moot for M0. **Q5** — Android is primary (D2). **Q6** — iOS deferred (D2). **Q9** — phone→agent cert handoff ships all three paths (QR ~400–550 bytes in one static QR with no fountain coding; LAN POST; user-moved file, which leaks the zktag to whatever routes it and must be documented rather than blocked). The cert carries the agent's *public* key and is signed by the phone, so integrity is free and the channel needs neither confidentiality nor authentication. No zkagent-run server in any path.
 
-- **Q1 (M1)**: App Attest verification needs CBOR + X.509 parsing of untrusted input. AGENT_RULES demands a vetted lib for that; zk8een tradition demands zero runtime deps. One well-vetted, dependency-light attestation-verification lib may be the honest exception — decide at M1 against the External Dependency Checklist, not before.
-- **Q2 (M0)**: does the owner's Apple dev account already carry the NFC tag-reading entitlement?
-- **Q3 (M3)**: uniqueness demo needs a second document (borrowed, consenting) to show different-passport ⇒ different-tag; plan for it.
-- **Q4 (M4)**: delegation cert format — plain JSON+sig vs W3C VC envelope. Start plain (simplicity advocate); adopt VC shape only when an integration (AP2 mandate embed) actually needs it.
-- **Q5 (later)**: Android + Play Integrity when a device exists.
+## 11. Open questions (resolve at the milestone that hits them, on evidence)
 
-## 11. Grounding (why this isn't a dart in the dark)
+- **Q7 (M2)** — device-assurance tier vs FR6 uniformity. StrongBox-backed Keystore and `MEETS_STRONG_INTEGRITY` exist on some devices (Pixel 3+, Galaxy S21+) and not on most of the Android base. Exposing which tier a client achieved is exactly the fingerprinting FR6 forbids and it shrinks the anonymity set. Either (a) accept a small fingerprinting cost for a stronger signal, or (b) stay uniform and enforce one global hardware bar — permissive by default (NFC + TEE-backed Keystore + device integrity), treating StrongBox as an unreported bonus. Note the Pixel requirement is a **dev-device** requirement, not a user requirement.
+- **Q8 (M4, rung 2)** — RFC 9421 mapping details not fixed by FR8. (a) Which header carries the delegation cert — a zkagent-specific one, or does Web Bot Auth's `Signature-Agent` fit? *Its exact semantics are unverified; check before adopting.* (b) The cert is sent **inline** per request (~400–550 bytes base64); confirm against real adopter header limits. **URL-reference is rejected for v1**: hosting it anywhere we control violates NO-GO #1/#3, adopter-side hosting is merely caching what inline already delivered, and agent-side hosting assumes the agent runs a web server. Web Bot Auth's directory-URL pattern does not transfer — it serves bot *operators* with many rotating keys, not one user's single agent. (c) Which covered components are mandatory in the signature base — at minimum `@method`, `@authority`, `@path`, plus `content-digest` when there is a body. Decide against a live off-the-shelf verifier, not on paper.
+- **Q11 (M3, mode B only)** — age-threshold probing. D11 lets the adopter choose `N`; an adopter free to choose any `N` and re-ask can binary-search the holder's exact date of birth in ~7 queries. **D13 shrinks this considerably**: in mode A there is no identifier to accumulate answers against, so probing requires the site to correlate presentations by its own account or session — a threat it already had. The question is therefore now: is a fixed allowed set (13/16/18/21, capping resolution at 5 buckets) still needed in mode A, or only in mode B? And should distinct thresholds be rate-limited per zktag in mode B? Decide before M3 goes public.
+- **Q12 (M0/M3)** — **which** ICAO documents actually read. D14 settles the *policy* (greedy default); this question is now purely empirical. Many EU national ID cards are ICAO 9303 eMRTDs readable by the same JMRTD path; others (e.g. the German Personalausweis eID function) use a different protocol stack entirely. Needs per-country verification. Until M0 reports, do not state coverage numbers in any pitch.
+- **Q13 (M3, strategic)** — **adoption: who asks first.** See §14. Nobody requests "zkagent" by name; adopters request an age check or an RFC 9421 signature, and zkagent is one optional answer riding on top. The borrowable core (§4) changes the shape of this question — the first adopter may be a *client* builder rather than a verifier. Log the first-adopter path as evidence, not assertion.
+- **Q14 (M1, then M2)** — **attestation root: Play Integrity, hardware key attestation, or both.** Key attestation returns a certificate chain rooted in a vendor hardware root, asserting key-in-hardware (TEE/StrongBox), verified-boot state and root-of-trust key, OS version and patch level, and the **attestation application ID** (package name + signing-cert digest — the field FR10 depends on). It needs **no runtime service call, no Play Console registration, no quota, and no Play Services on device**, so it works on GrapheneOS and de-Googled builds (risk 7). Likely answer is **both**: key attestation primary, Play Integrity as an optional bonus where Play Services exists. **Three things must be verified before this becomes a decision:** (a) *keybox extraction* — attestation keys have been pulled from real devices and circulated; how far that degrades the guarantee today needs a current check; (b) *vendor implementation quality* — not every OEM implements attestation correctly and some fall back to software attestation, bounding the trustworthy device set; (c) *revocation* — a published revocation list must be fetched and honoured, reintroducing a small live dependency. Key attestation proves key origin, app identity and boot state; it does **not** cover active runtime tampering the way Play Integrity's rolled-up verdicts attempt to. **Also folds in the former Q1**: attestation verification needs CBOR + X.509 parsing of untrusted input, AGENT_RULES demands a vetted lib, and 8een tradition demands zero runtime deps — one well-vetted, dependency-light library may be the honest exception. Decide at M1 against the External Dependency Checklist, with M0 device evidence in hand.
+- **Q15 (M1b) — does the attestation defeat mode A?** *(new, v1.4 — the blocker for the entire mode-A claim.)* Named suspects, each of which must be shown independent of holder and device or removed: the attested key itself (must be freshly generated per presentation, never reused); the certificate intermediate (must be a **batch** attestation key shared across a large device population — a device-unique intermediate is a permanent identifier); OS version and patch level in the attestation extension (a fingerprint bucket at best — coarsen or drop); attestation-ID fields such as serial or IMEI (**must never be requested**); precise timestamps (the EU AVS blurs `ValidityInfo` clock fields for exactly this reason — do the same); total payload length. Until measured at M1b, **mode A is a design intent and must be described as one.**
+- **Q16 (M2) — mode-A scan cadence.** Purest form is re-scan per presentation: nothing cached, nothing to steal, matching the "no storage" goal exactly, at the cost of tapping a document to the phone every time. The alternative caches the *verified claim* (not a secret) under the D10 ceiling, which is far less dangerous than caching an identity but reintroduces borrowed-document risk. Decide on real UX evidence from M2, not on principle.
+- **Q17 (before any age pitch) — legal sufficiency in a named jurisdiction.** **Positioning fixed by the owner 2026-08-07: the project is not contesting the regulatory requirement and is not seeking certification. The point being demonstrated is that the privacy properties the rules reach for can be obtained with far less machinery than the official route requires.** That framing is deliberate and it lowers what must be proven — a demonstration must be *honest*, not *certified*. It does not remove the question, it defers it: whether a mode-A presentation may legally satisfy an age-verification duty anywhere is a compliance question, not a cryptographic one. v1.4 improves the *technical* argument materially — mode A matches the EU Age Verification Blueprint's stated privacy properties (single-use, no persistent identifier, one bit, no issuer learning the destination) without a wallet, an attestation provider or batch issuance. It does **not** make zkagent a certified provider, and a rule demanding certification makes technical equivalence irrelevant. **Must be checked against a named jurisdiction before the framing shifts from demonstration to pitch.** Use 8een's `docs/02-evidence/EU-STACK-AUDIT.md` method: adversarial refutation, every claim pinned to file and commit, retractions written down, checkers instructed to default to REFUTED on thin evidence.
+- **Q18 (M0, then M2) — chip cloning vs the uniqueness claim.** *(new, v1.4 — surfaced while writing the design companion; load-bearing for mode B only.)* Verifying the SOD is **passive authentication**: it proves the data was signed by the issuing government, not that the chip presenting it is the original. A dumped data set replayed from a cloned or emulated chip would pass §2 steps 1–2 and mint **the same zktag as the genuine document** — which breaks the uniqueness and blocking guarantees at their root, since a blocked human could re-present from a clone. The defence is the chip's own challenge-response — **Active Authentication (AA)** or **Chip Authentication (CA)** — which proves the chip holds a private key it never releases. Neither is universally present: AA is optional in ICAO 9303 and omitted by some issuers on privacy grounds; CA arrives with EAC/PACE-era documents. **M0 must report which of AA/CA the owner's document actually supports** (add to the chip field inventory). Then decide: require chip authentication for mode B and accept the coverage loss, or accept clone-replay as within the captcha-grade bar and **say so in the claim**. **Mode A is unaffected** — with no identifier emitted there is nothing to impersonate, and a cloned chip proves an age that was true of the original holder anyway.
+
+## 12. Grounding (why this isn't a dart in the dark)
 
 - Personhood credentials called for, issuer assumed, none stood up: arXiv **2408.07892** (OpenAI/Microsoft/Harvard et al.); delegation-to-agents follow-up: arXiv **2501.09674** (MIT et al.)
 - IETF pipes without a water source: `draft-oauth-ai-agents-on-behalf-of-user`, `draft-klrc-aiagent-auth`, AIP `draft-prakash-aip`, WIMSE — delegation chains rooted in custodial IdP accounts; `sub`-overloading and chain-splicing named as open gaps
-- Transport converged on RFC 9421 (Web Bot Auth live at Cloudflare edge since 2026-03; Visa TAP same base) — zkagent attaches as fields, competes with nothing
+- Transport converged on RFC 9421 (Web Bot Auth live at Cloudflare edge since 2026-03; Visa TAP same base) — zkagent attaches as fields and competes with nothing. RFC 9421 signs the *message* (survives CDN/proxy TLS termination) but explicitly puts key **trust** out of scope: `keyid` is opaque and "determining trustworthiness is out of scope for this document." **That gap is the zkagent insertion point** — and it cuts both ways: because the RFC defines no delegation or trust mechanism at all, we are free to define one, and obliged to (FR8/FR10/Q8).
 - Deployed precedent for attestation-backed anonymous auth at captcha-grade: Apple Private Access Tokens
-- Prior art for passport-derived proofs (ZK variant, web3-aimed, no agent story): zkPassport, Self, Anon-Aadhaar — de-risks the chip side, validates the gap on the agent side
-- Trust root: ICAO Doc 9303 (signed chip + SOD), public CSCA masterlists (ICAO PKD, BSI). Passport numbers change on renewal (drives D9)
+- Prior art for document-derived proofs (ZK variant, web3-aimed, no agent story): zkPassport, Self, Anon-Aadhaar — de-risks the chip side, validates the gap on the agent side
+- Trust root: ICAO Doc 9303 (signed chip + SOD), public CSCA masterlists (ICAO PKD, BSI). Document numbers change on renewal (drives D9)
+- **EU Age Verification Blueprint** (`ageverification.dev`, `eu-digital-identity-wallet/av-doc-technical-specification`) — checked 2026-08-07, and it settles the linkability question in the opposite direction from a common assumption: **linkability is not required by the EU approach, it is the thing the EU approach engineers against.** *"An Age Verification App SHALL use a Proof of Age attestation only once and then remove it from the batch of the issued attestations"* (§4.2); *"An Attestation Provider SHALL support batch issuance"* (§4.3); *"SHALL set the timestamp included in the `ValidityInfo` structure with a precision that limits the linkability information"* (§4.3); and the design principle *"Domain-specific identifiers, or pseudonyms, are used to enable users to avoid relying on the same unique identifier when interacting with online services"* (§2.4). The batch machinery exists because their wallet must round-trip to an attestation provider and cannot do ZK; **zkagent has no issuer in the path, so per-presentation freshness is free and needs no batching** — which is why D13 mode A can meet the property directly. Also confirms our hardware posture: *"An Age Verification App SHALL rely on the device's native cryptographic hardware capabilities, such as the Secure Enclave on iOS, or the Trusted Execution Environment (TEE) and Strongbox on Android"* (§4.2). **Not verified and not to be claimed:** that meeting these properties confers any legal standing (Q17). Cross-reference 8een's `EU-STACK-AUDIT.md` for the ZK-is-`SHOULD`-not-`SHALL` finding and the `FallbackToFullDisclosure` default.
 
-## 12. Success criteria
+## 13. Success criteria
 
-- S1: M0 evidence shows same-tag-twice from a real passport, all numbers measured (no guessed timings — 8een's 10×-wrong lesson).
-- S2: A service integrates the verifier with zero PII handling, one dependency decision documented.
-- S3: The demo shows a ban that survives identity reset (new bots, new keys, new IP — same human blocked).
-- S4: Every milestone has an evidence doc with deviations and retractions recorded, 8een-style.
+- S1: M0 evidence shows same-zktag-twice from a real document, all numbers measured (no guessed timings — 8een's 10×-wrong lesson).
+- S2: M1b shows two mode-A presentations byte-identical, with a planted stable field proven to break the check.
+- S3: A service integrates the verifier with zero PII handling and one dependency decision documented.
+- S4: The demo shows a mode-B ban that survives identity reset (new bots, new keys, new IP — same human blocked).
+- S5: Every milestone has an evidence doc with deviations and retractions recorded, 8een-style.
+
+## 14. Adoption risk (named, because it outranks the crypto risks)
+
+The dominant risk is not a break in the chain — it is that no one installs the verifier.
+
+- **Two-sided market.** Sites will not check for a signal users do not carry; users will not carry a signal no site checks. Nothing in the cryptography solves this.
+- **The borrowable core is the real mitigation** (§4). An adopter who embeds `chiproof` in their own app brings their own users, which converts a two-sided problem into a one-sided sale. It works only if FR10 and FR11 hold: a trust list the adopter controls, and a derivation spec that keeps two clients from forking the identity space.
+- **Partial mitigation:** integration cost is near-zero for a site already verifying RFC 9421 — header present ⇒ extra signal, header absent ⇒ unchanged behaviour. Low cost to adopt is not the same as a reason to adopt.
+- **The two legs have different timing.** Agent accountability is forecast demand. Age verification is present demand with legal deadlines and incumbent solutions that are expensive and privacy-hostile. zkagent is **one product with two positionings**, not two products: same app, same chip read, same SDK — D13 makes the difference a mode flag rather than a fork. Rung 1 serves the age wedge; rung 2 is the agent bet. Sequencing already hedges the speculative leg.
+- **M3 is a demo, not evidence of demand.** The demo site is its own adopter. It proves the flow works; it proves nothing about whether anyone wants it.
+- **Standing warning (NO-GO #10 lineage):** this document is the filter, not the collector. v1.4 removed four resolved questions and folded one into another; it still carries 9 open questions, 17 decisions and 11 requirements for a project with zero lines of code. **M0 has not been run. Nothing here is evidence.**
+
+## 15. Version history
+
+| Version | Date | Change |
+|---|---|---|
+| v1.0 | 2026-07-26 | Initial. D1–D8 signed, NO-GO table, M0–M5, riskiest-assumption register |
+| v1.1 | 2026-07-26 | M0 de-platformed — cheapest working NFC path, not iPhone-gated. Q2 moot; Q6 added |
+| v1.2 | 2026-08-02 | D2 flipped to Android-first; `tag` → `zktag` throughout (RFC 9421 collision); FR8 added; Q7, Q8 added; Q5/Q6 resolved |
+| v1.3 | 2026-08-03 | D10 (secret expiry), D11 (configurable threshold, one bit); Q9 resolved; Q8 narrowed to inline cert; §13 adoption risk; Q11–Q14; risk items 6–7; ICAO-scope non-goal rewritten |
+| **v1.4** | **2026-08-07** | **Restructured into rungs (§4). D12 package name `chiproof`. D13 two disclosure modes — mode A anonymous is now the default and the age leg carries no pseudonym. D14 greedy `acceptedDocuments` (k is a mode-B cost only). D15 FR6 narrowed rather than retired. D16/FR11 published derivation spec. D17/FR10 adopter-held trust list. D10 revised to a configurable ceiling with one-bit freshness negotiation. New FR9 unlinkability budget + M1b probe + Q15 (attestation as covert identifier — blocks the mode-A claim). New NO-GO #11. Cross-document unification made an explicit non-goal; D9 narrowed accordingly. Q1 folded into Q14; Q2/Q5/Q6/Q9 closed out of §11. EU Age Verification Blueprint checked and cited in §12. Legal posture fixed as demonstration-not-certification (Q17). New Q18 — passive authentication does not prove the chip is the original, so a clone could mint the same zktag; M0 must report AA/CA support. Companion design doc added at `docs/02-engineering/zkagent-design.md`** |

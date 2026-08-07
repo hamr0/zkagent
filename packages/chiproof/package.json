@@ -1,0 +1,29 @@
+{
+  "name": "chiproof",
+  "version": "0.0.0",
+  "description": "Name reservation — not usable yet. Verifier SDK for attested, windowed disclosure from ICAO 9303 chip documents. Part of the zkagent project.",
+  "license": "Apache-2.0",
+  "author": "hamr0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hamr0/zkagent.git",
+    "directory": "packages/chiproof"
+  },
+  "homepage": "https://github.com/hamr0/zkagent",
+  "bugs": "https://github.com/hamr0/zkagent/issues",
+  "keywords": [
+    "icao-9303",
+    "emrtd",
+    "passport",
+    "age-verification",
+    "selective-disclosure",
+    "attestation",
+    "privacy"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "README.md"
+  ]
+}
