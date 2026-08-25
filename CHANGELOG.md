@@ -5,6 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs reorganised with docs-builder.** `docs/01-product/`, `docs/02-engineering/`
+  and `docs/context/` (each holding a single file) flattened into `docs/product/`
+  and `docs/logs/`: `zkagent-prd.md` and `zkagent-design.md` classified as
+  `product` (live specs); `future-digital.md` classified as `logs` rather than
+  `product` on its own self-declaration as "the collector" — a session record of
+  the strategy discussion that produced the PRD, distinct from the PRD itself,
+  which the same sentence calls "the filter." 15 inbound links across
+  `.claude/stash/`, `README.md` and `packages/chiproof/README.md` rewritten to
+  match. New `docs/index.md` (generated, whole-corpus map — never hand-edited)
+  and `docs/log.md` (append-only reorg history). New `CLAUDE.md`, carrying only
+  the marker-wrapped pointer to `docs/index.md`. Nothing was oversized (largest
+  file: 385 lines against a 500-line ceiling), so no split ran.
 - **Development device settled (D2): Pixel, stock ROM; all other vendors ruled
   out for M0–M2.** Recorded with the reasoning so it is not relitigated: NFC
   Type A/B is not the discriminator (baseline on every phone-class NFC
