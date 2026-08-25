@@ -42,7 +42,7 @@ the PRD and is binding.
 
 ## Repo layout
 
-- `docs/01-product/zkagent-prd.md` — the PRD: architecture, milestones, NO-GO table,
+- `docs/product/zkagent-prd.md` — the PRD: architecture, milestones, NO-GO table,
   owner decisions. Start here.
 - `docs/02-evidence/` — measured evidence per milestone (created as milestones run).
 

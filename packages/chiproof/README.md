@@ -18,8 +18,8 @@ Pre-everything. The riskiest assumption — that a passport chip can be read and
 
 ## Design
 
-- Product requirements: [`docs/01-product/zkagent-prd.md`](https://github.com/hamr0/zkagent/blob/main/docs/01-product/zkagent-prd.md)
-- Design and disclosure model: [`docs/02-engineering/zkagent-design.md`](https://github.com/hamr0/zkagent/blob/main/docs/02-engineering/zkagent-design.md)
+- Product requirements: [`docs/product/zkagent-prd.md`](https://github.com/hamr0/zkagent/blob/main/docs/01-product/zkagent-prd.md)
+- Design and disclosure model: [`docs/product/zkagent-design.md`](https://github.com/hamr0/zkagent/blob/main/docs/02-engineering/zkagent-design.md)
 
 ## License
 

@@ -75,7 +75,7 @@ Nothing committed. No code written. M0 still not run — that remains the top bl
 
 ## Doc/repo state
 
-- `docs/01-product/zkagent-prd.md` — now "PRD v1.3 (draft)" with amendment lines for v1.2
+- `docs/product/zkagent-prd.md` — now "PRD v1.3 (draft)" with amendment lines for v1.2
   and v1.3 in the header. **Still uncommitted** (all of v1.1, v1.2, v1.3 are uncommitted).
 - `CHANGELOG.md` — updated with all v1.2/v1.3 changes under `[Unreleased]`.
   **Still uncommitted.**
@@ -113,7 +113,7 @@ non-goal rewritten (ICAO 9303 scope, see Key decisions).
 ### RFC 9421 conformance check (drove the rename)
 
 The repo referenced RFC 9421 five times as an ASSUMPTION, never verified: PRD lines 35, 62,
-85, 150 and `docs/context/future-digital.md:59`. Checked against the actual spec. Four
+85, 150 and `docs/logs/future-digital.md:59`. Checked against the actual spec. Four
 problems found:
 1. **`tag` collision** — RFC 9421 §2.3 already defines `tag` as a signature parameter: "An
    application-specific tag for the signature as a String value... used by applications to
