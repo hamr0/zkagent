@@ -26,3 +26,6 @@ build/
 .vscode/
 .DS_Store
 *~
+
+# docs-builder machine state — regenerated every run; ledger stamp is per-clone
+/docs/.docs-builder/
