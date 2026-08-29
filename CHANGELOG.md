@@ -98,6 +98,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   identifies *clients* by signing-cert digest — neither of which covers *operator*
   identity. Both stay parked until rung 1 ships (D18).
 
+- **Licence and provenance recorded for the vendored spike.** `spikes/m0/LICENSE`
+  (Apache-2.0, matching the repo) and `spikes/m0/NOTICE` added. The NOTICE records
+  what the spike is a copy of, that **upstream states Apache-2.0 in its README but
+  ships no LICENSE file** (so the text here rests on that statement and must be
+  revisited if upstream's licensing is ever clarified otherwise), every modification
+  made and why, and the fact that **the package name is still upstream's and must be
+  changed before any distribution**. Upstream's own `google-services.json` (their
+  Firebase project keys, dead once the flavour was removed) and `PRIVACY.md` (a
+  Play-listing policy describing upstream's app) were deleted rather than carried.
+
 - **Toolchain, reproducible and rootless.** Temurin JDK 21 at `~/opt` (Fedora 44
   packages only JDK 25/26 — `java-21-openjdk-devel` does not exist there) and the
   Android SDK at `~/Android/Sdk` (platform-tools 37.0.1, platform 36, build-tools
