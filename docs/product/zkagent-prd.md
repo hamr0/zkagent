@@ -1,9 +1,9 @@
-# zkagent — PRD v1.4 (draft)
+# zkagent — PRD v1.5 (draft)
 
 **Status**: Draft. D1–D8 signed 2026-07-26; D9 still open pending M0 evidence. **No promise in this document survives a miss at M0, which has not been run.**
 **Project**: `zkagent` · **Published package**: `chiproof` · **Owner**: hamr · **Repo**: zkagent (sibling of 8een)
 **Parent standards**: `AGENT_RULES.md` (POC-first, dependency hierarchy, prove-don't-assert, security invariants). When anything here disagrees with AGENT_RULES, AGENT_RULES wins.
-**Version history**: §15. This revision (v1.4) restructured the document into rungs, split disclosure into two modes (D13), and narrowed FR6.
+**Version history**: §15. This revision (v1.5) rewrote the M0 row so the spike can fail, named the documents and the access protocol, and added the M0 go/no-go table (§6.1). v1.4 restructured the document into rungs, split disclosure into two modes (D13), and narrowed FR6.
 **Companion**: `docs/product/zkagent-design.md` — the design and disclosure model: how the read works, what each mode emits, the legal posture, and the operator's configuration surface. Description, not commitment; **this PRD wins on any conflict**.
 
 **One-liner**: Read the chip in a government-issued document, verify the government's own signature on it, and answer exactly one question about the holder — *over 18?* or *seen here before?* — disclosing nothing else, storing nothing anywhere, with no issuer, CA, wallet or server of ours in the path.
@@ -128,7 +128,7 @@ The PRD previously described one product with five milestones. It is two rungs, 
 
 | M | Rung | Deliverable | Checkpoint (evidence, not prose) |
 |---|---|---|---|
-| **M0 — POC at the riskiest assumption** | 1 | Throwaway spike on a physical NFC Android phone + JMRTD (D2; stock-ROM Pixel/Samsung-class per the M2 assurance bar). Read owner's real passport, verify SOD vs public masterlist, read DOB, derive zktag, **rescan → identical zktag**; second document if findable → different zktag. **Report which data groups and fields the chip actually contains, and whether it supports Active or Chip Authentication** (feeds D9, D14, Q12, Q18) | Two scan runs logged with matching zktag; timings measured (scan, verify, derive); masterlist load count asserted against file count; chip field inventory recorded, AA/CA support recorded. Evidence doc `docs/02-evidence/M0-EVIDENCE.md`. POC is thrown away, never shipped |
+| **M0 — POC at the riskiest assumption** | 1 | Throwaway spike on the owner's **Pixel 6a, stock Android 17** (D2; last OS for this device, security patches to 2027-07 — the attestation horizon for M1–M2 is that date plus the 12-month strong-integrity grace). Vehicle: a fork of an existing open-source JMRTD Android reader (non-telemetry build flavour only, DG2 read removed), not a from-scratch app. **Documents: the owner's US passport (primary) and NL identity card (second document, PACE-only since 2022).** Access protocol is **whatever the chip announces** — BAC or PACE, negotiated by the library, never hardcoded per country; the MRZ key (document number, DOB, expiry) is **typed by hand** in M0, never stored, never in source. Read **DG1 + SOD only**, plus DG14/DG15 to probe CA/AA. Verify SOD against the **BSI-published all-country master list** (public ZIP) and assert the issuing CSCA — and any link certs — is present. Derive a **candidate zktag per stable field** (document number; DG1 optional-data field; full-DG1 hash; AA public-key hash if DG15 exists; CA public-key hash if DG14 exists) against a fixed test domain; **rescan → each candidate identical**; second document → every candidate different. **Planted negatives, mandatory**: (i) flip one DG1 byte → passive auth MUST fail; (ii) master list with the issuing CSCA removed → MUST yield `ok:false`, never a `no`. **Report which data groups and fields each chip actually contains, and which of AA / CA each supports** (feeds D9, D14, Q12, Q18) | Two scan runs per document logged with matching candidates; both negatives observed to fire; timings measured at four marks (tag→access established, →DG1+SOD read, →PA verified, →derived); master-list certs-parsed asserted equal to certs-declared in the CMS; chip field inventory and AA/CA support recorded per document; **no PII value in the evidence doc — field names and hashes only.** Evidence doc `docs/logs/M0-EVIDENCE.md`. POC is thrown away, never shipped |
 | **M1 — Verifier SDK core** | 1 | `verdict.js`-style never-throw classifier; challenge nonce (port 8een `challenge.js`); mode negotiation; trust-list check (FR10); attestation verification against fixtures captured from the M0 device | Full negative matrix runs (bad attestation, replayed nonce, untrusted client, half-loaded masterlist ⇒ `ok:false`); every reject-test paired with a non-vacuity pass-test |
 | **M1b — Mode-A unlinkability probe** | 1 | Black-box byte comparison of N mode-A presentations from the same device, same holder, same service, borrowing 8een §7.3 method **including a planted positive control** | No field differs across presentations except those proven independent of holder and device. **A planted stable field must make the check fail** — a guard you have not watched fire is not a guard. Blocks M3. Answers Q15 |
 | **M2 — Scanner app (rewrite, not graduate)** | 1 | Real app: Keystore/StrongBox, biometric gate, attestation wired, mode A + mode B, QR/app-link handoff | End-to-end on real device against local verifier; zktag stability across app reinstall + re-scan measured; mode A confirmed to emit no zktag even after a mode-B presentation on the same device |
@@ -138,10 +138,26 @@ The PRD previously described one product with five milestones. It is two rungs, 
 
 One milestone at a time. Each works alone before the next integrates.
 
+### 6.1 M0 go/no-go — what each outcome means, written before the run
+
+| Observation | Meaning | Consequence |
+|---|---|---|
+| Phone never establishes BAC/PACE with a document that KYC apps have read | Harness or library problem, not a chip problem | Stop. Debug the spike (typed MRZ, library version, NFC settings) before believing anything else |
+| Access works, DG1 + SOD read, passive auth passes on the genuine document | Baseline holds | Continue |
+| Passive auth fails on a genuine document | Assume harness bug first (digest algorithm, chain building) — a real finding only after the genuine path is shown to work on the other document | Debug before recording |
+| Either planted negative does **not** fire | The checker cannot say "no" — every positive result above is void | Stop. Fix the negative before any result is written down |
+| Issuing CSCA absent from the BSI list | Risk #3 is live for that country | Try the ICAO master list (terms form). If absent there too, record it: "issuer-free" is weaker than assumed for that issuer, and this goes in every claim |
+| A candidate differs on rescan | Field is not stable — excluded from D9 | Record which; D9 chooses among the stable ones |
+| Neither AA nor CA on a document | Clone-replay is not detectable for that document | Q18 resolves per D14: mode A unaffected; mode B for that document is **captcha-grade, clone-replayable, and the claim says so** |
+| Only one of AA / CA present | Sufficient for Q18 on that document | Mode B uses whichever exists; the chip decides, never the code |
+| Full read > 10 s wall-clock | UX question, not a stop | Recorded for M2 (Q16); not an M0 failure |
+
+The rule this table enforces (AGENT_RULES): the test must be able to fail, and a result that confirms what we hoped is audited for harness confounds before it is believed.
+
 ## 7. Riskiest-assumption register (what M0 must answer)
 
 1. **Issuer-free derivation works**: the chip's stable data is readable, verifiable against a public masterlist, and yields the same secret on every scan. The PHC literature assumes an issuer; nobody has published the issuer-free variant. This is the novel bit — and the whole product.
-2. **JMRTD + the owner's actual passport + the acquired Android phone** actually cooperate on this desk, this month.
+2. **JMRTD + the owner's actual documents (US passport, NL ID card) + the Pixel 6a** actually cooperate on this desk, this month — including **PACE** for the NL card, which has been PACE-only since 2022. Prior: both documents have been read by commercial KYC NFC apps, so a miss points at our harness before it points at the chip.
 3. **Masterlist coverage**: the owner's issuing country's CSCA cert is present and current in the free public lists.
 4. **Attestation verification is implementable within our dependency rules** — whichever root Q14 selects.
 5. **Derivation-field choice** (D9): document number (changes at renewal → zktag rotates ~10-yearly) vs personal number where present. M0 reports what the chip actually contains; D9 is taken after, on evidence.
@@ -221,6 +237,24 @@ One milestone at a time. Each works alone before the next integrates.
 - **Q17 (before any age pitch) — legal sufficiency in a named jurisdiction.** **Positioning fixed by the owner 2026-08-07: the project is not contesting the regulatory requirement and is not seeking certification. The point being demonstrated is that the privacy properties the rules reach for can be obtained with far less machinery than the official route requires.** That framing is deliberate and it lowers what must be proven — a demonstration must be *honest*, not *certified*. It does not remove the question, it defers it: whether a mode-A presentation may legally satisfy an age-verification duty anywhere is a compliance question, not a cryptographic one. v1.4 improves the *technical* argument materially — mode A matches the EU Age Verification Blueprint's stated privacy properties (single-use, no persistent identifier, one bit, no issuer learning the destination) without a wallet, an attestation provider or batch issuance. It does **not** make zkagent a certified provider, and a rule demanding certification makes technical equivalence irrelevant. **Must be checked against a named jurisdiction before the framing shifts from demonstration to pitch.** Use 8een's `docs/02-evidence/EU-STACK-AUDIT.md` method: adversarial refutation, every claim pinned to file and commit, retractions written down, checkers instructed to default to REFUTED on thin evidence.
 - **Q18 (M0, then M2) — chip cloning vs the uniqueness claim.** *(new, v1.4 — surfaced while writing the design companion; load-bearing for mode B only.)* Verifying the SOD is **passive authentication**: it proves the data was signed by the issuing government, not that the chip presenting it is the original. A dumped data set replayed from a cloned or emulated chip would pass §2 steps 1–2 and mint **the same zktag as the genuine document** — which breaks the uniqueness and blocking guarantees at their root, since a blocked human could re-present from a clone. The defence is the chip's own challenge-response — **Active Authentication (AA)** or **Chip Authentication (CA)** — which proves the chip holds a private key it never releases. Neither is universally present: AA is optional in ICAO 9303 and omitted by some issuers on privacy grounds; CA arrives with EAC/PACE-era documents. **M0 must report which of AA/CA the owner's document actually supports** (add to the chip field inventory). Then decide: require chip authentication for mode B and accept the coverage loss, or accept clone-replay as within the captcha-grade bar and **say so in the claim**. **Mode A is unaffected** — with no identifier emitted there is nothing to impersonate, and a cloned chip proves an age that was true of the original holder anyway.
 
+- **Q19 (parked — owner raised 2026-08-29, not designed) — freshness as a range, not a ceiling.**
+  D10 fixes a *ceiling* on the age of the mode-B secret (operator-configured, 30–180 days). The owner
+  raised the mirror case: a **requester-stated floor** — a bank asking for a scan no older than 24
+  hours — meaning freshness would be a range negotiated per presentation, and the presentation would
+  have to convey *when* the secret was minted. **This is in tension with D10's own rule that freshness
+  answers with one bit, never an age in days, because a precise mint date is a fingerprint (FR6/FR9).**
+  Do not design this before rung 1 ships. When it is taken up, the question is whether a coarse bucket
+  ("fresher than 24h": yes/no) can serve the bank case without reintroducing linkability.
+
+- **Q20 (parked — owner raised 2026-08-29, not designed) — operator identity in a borrowable core.**
+  If anyone may wrap the library, anyone may generate a challenge, so what distinguishes one operator
+  from another inside a nonce? The owner floated a fixed field (country ISO code, or a 5-digit id) and
+  named the hard part himself: **what makes it unique without a registry to allocate it** — and a
+  registry is forbidden by NO-GO #3. Note the existing machinery this must be reconciled with before
+  anything new is invented: FR2 already binds the zktag to the **verified service domain** computed
+  client-side, and FR10's trust list already identifies *clients* by package name + signing-cert
+  digest. The open part is operator identity, which neither covers. Do not design before rung 1 ships.
+
 ## 12. Grounding (why this isn't a dart in the dark)
 
 - Personhood credentials called for, issuer assumed, none stood up: arXiv **2408.07892** (OpenAI/Microsoft/Harvard et al.); delegation-to-agents follow-up: arXiv **2501.09674** (MIT et al.)
@@ -258,4 +292,5 @@ The dominant risk is not a break in the chain — it is that no one installs the
 | v1.1 | 2026-07-26 | M0 de-platformed — cheapest working NFC path, not iPhone-gated. Q2 moot; Q6 added |
 | v1.2 | 2026-08-02 | D2 flipped to Android-first; `tag` → `zktag` throughout (RFC 9421 collision); FR8 added; Q7, Q8 added; Q5/Q6 resolved |
 | v1.3 | 2026-08-03 | D10 (secret expiry), D11 (configurable threshold, one bit); Q9 resolved; Q8 narrowed to inline cert; §13 adoption risk; Q11–Q14; risk items 6–7; ICAO-scope non-goal rewritten |
+| **v1.5** | **2026-08-28** | **M0 row rewritten so the spike can fail**: planted negatives (DG1 byte flip, CSCA removed ⇒ `ok:false`) mandatory; documents named (US passport + NL ID card); access protocol negotiated, never per-country; MRZ typed, never stored; DG1 + SOD only, DG14/DG15 probed; per-field zktag candidates so D9 is decided on a table; BSI all-country master list pinned, certs-parsed = certs-declared assertion; PII-free evidence rule; evidence path moved to `docs/logs/` after the docs reorg; Pixel/Samsung wording aligned with D2. New §6.1 go/no-go table. Risk #2 names PACE and the two documents |
 | **v1.4** | **2026-08-07** | **Restructured into rungs (§4). D12 package name `chiproof`. D13 two disclosure modes — mode A anonymous is now the default and the age leg carries no pseudonym. D14 greedy `acceptedDocuments` (k is a mode-B cost only). D15 FR6 narrowed rather than retired. D16/FR11 published derivation spec. D17/FR10 adopter-held trust list. D10 revised to a configurable ceiling with one-bit freshness negotiation. New FR9 unlinkability budget + M1b probe + Q15 (attestation as covert identifier — blocks the mode-A claim). New NO-GO #11. Cross-document unification made an explicit non-goal; D9 narrowed accordingly. Q1 folded into Q14; Q2/Q5/Q6/Q9 closed out of §11. EU Age Verification Blueprint checked and cited in §12. Legal posture fixed as demonstration-not-certification (Q17). New Q18 — passive authentication does not prove the chip is the original, so a clone could mint the same zktag; M0 must report AA/CA support. Companion design doc added at `docs/product/zkagent-design.md`** |

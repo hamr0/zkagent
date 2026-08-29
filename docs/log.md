@@ -3,3 +3,8 @@
 ## [2026-08-25] apply-reorg | moved 3, skipped 0, 0 oversized split candidate(s), 15 link(s) rewritten, 0 sync failure(s), 3 empty dir(s) removed, CLAUDE.md updated: true
 ## [2026-08-28] index-flat | 3 row(s) (2 product, 1 logs, 0 archive)
 ## [2026-08-28] index-flat | 3 row(s) (2 product, 1 logs, 0 archive)
+## [2026-08-28] index-flat | 3 row(s) (2 product, 1 logs, 0 archive)
+## [2026-08-29] index-flat | 4 row(s) (2 product, 2 logs, 0 archive)
+## [2026-08-29] index-flat | 4 row(s) (2 product, 2 logs, 0 archive)
+## [2026-08-29] index-flat | 4 row(s) (2 product, 2 logs, 0 archive)
+## [2026-08-29] index-flat | 4 row(s) (2 product, 2 logs, 0 archive)

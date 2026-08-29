@@ -5,6 +5,105 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **M0 RUN — the riskiest assumption tested against real documents, and partially
+  retired.** First evidence in this project; everything before this was design.
+  Four valid runs on a Pixel 6a (stock Android 17): the owner's US passport twice
+  and NL identity card twice, from a throwaway fork of `tananaev/passport-reader`
+  (JMRTD 0.7.18) at `spikes/m0/`, telemetry and DG2 stripped. Eight planted
+  negatives across the four runs; **all eight observed to fire.** Evidence:
+  `docs/logs/M0-EVIDENCE.md` (11 findings, with what was *not* established stated
+  as prominently as what was).
+  - **One code path, two protocols, no per-country logic.** The same build read a
+    BAC-only US passport and a PACE NL card, protocol chosen by what the chip
+    advertised (`EF.CardAccess` present ⇒ PACE, absent ⇒ BAC). No configuration
+    change, no rebuild. Two documents from two issuers is not coverage; the ban on
+    coverage numbers stands (Q12).
+  - **Government-signature verification works against a free public list.** The
+    master list bundled with the fork was identified as the BSI all-country list
+    (588 certificates, 116 issuing countries; US 8, NL 10), so PRD risk #3 is
+    retired for both documents. Declared-vs-parsed asserted equal on every run.
+  - **Q18 resolves per document, not per product — and runs opposite to
+    intuition.** The **US passport carries neither DG14 nor DG15** (`SELECT EF.DG15`
+    → `6A82 FILE NOT FOUND`): no challenge-response of any kind, so a cloned data
+    set would mint the identical zktag. The **NL identity card carries both**, and
+    both succeeded (Chip Authentication, and Active Authentication signing a fresh
+    challenge with an EC key). Mode A is unaffected either way. **Mode B is
+    clone-replayable on a US passport and clone-detectable on an NL card**, which
+    makes chip-authenticity an adopter configuration trade-off (`acceptedDocuments`,
+    D14) rather than a product-level claim.
+  - **Derivation input is deterministic per document and distinct across
+    documents.** All candidates byte-identical across two taps and two app processes
+    per document; no candidate collides between the two documents (k>1 for one
+    holder, as D14 predicts). The NL rescan is the stronger of the two, because AA
+    and CA inject per-session randomness that a session-derived candidate would have
+    exposed as a mismatch.
+  - **New constraint on D9, only visible because both documents were read**: the
+    chip-bound fields (`dg14_ca_key`, `dg15_aa_key`) are the most attractive
+    derivation inputs precisely because they defeat cloning — and they **do not
+    exist on a US passport**, so choosing one narrows `acceptedDocuments` by
+    construction. `document_number` exists everywhere but rotates at renewal. D9
+    stays open, now with the trade-off measured rather than theorised.
+  - **A planted negative that silently tested nothing** (M0 run 1, recorded rather
+    than quietly fixed): the CSCA-removal guard matched the literal string
+    `"United States"`, which never appears in the US CSCA DN
+    (`OU=U.S. Department of State MRTD CA … C=US`), so it excluded zero certificates
+    and passive auth passed for the honest reason that the anchor was still present
+    — a *plausible pass* proving nothing. Run 1 was voided under PRD §6.1. The guard
+    now matches the document's real issuer DN and **asserts that the exclusion
+    removed something**, because "excluded nothing" and "failed to fire" were
+    indistinguishable. Carry to M1: every negative test must assert its precondition
+    took effect.
+  - **A live `ok`/`allowed` conflation found in third-party code.** Upstream
+    `doPassiveAuth()` wraps digest comparison, master-list load, path validation and
+    signature check in one `catch { Log.w(...) }`, leaving `passiveAuthSuccess =
+    false` — "forged" and "undecidable" become the same value, exactly what PRD §3
+    forbids, in an app with 451 stars. Replaced in the spike by a
+    `Verdict(ok, allowed, reason)` that cannot represent `ok:false, allowed:false`.
+    Evidence *for* the invariant, from the wild; cite it in the M1 SDK tests.
+  - **Measured timings, no guessed numbers**: clean tap 2.5–3.3 s end to end
+    (US 2,531 ms; NL 3,300/3,322 ms). BAC setup varied 363 ms → 5,537 ms across two
+    taps of the same passport — alignment, not computation. Four runs is not a
+    distribution and no percentile may be quoted from it.
+  - **Explicitly NOT established, and written into the evidence doc as such**:
+    renewal stability (D9's real question — no renewed document exists to test);
+    mode-A unlinkability (no attestation was involved in M0 at all — still a design
+    intent until M1b, FR9/Q15); coverage; performance distribution; anything about
+    attestation, StrongBox or Play Integrity (Q14 unchanged).
+
+- **PRD v1.5 — the M0 row rewritten so the spike could fail.** Written *before* the
+  run, and it is the reason the run produced findings rather than reassurance.
+  Planted negatives made mandatory (DG1 byte flip; issuing CSCA removed ⇒ must not
+  return `allowed:true`); documents named (US passport primary, NL identity card
+  second); access protocol negotiated by the chip and never hardcoded per country;
+  MRZ key typed by hand, never stored, never in source; DG1 + SOD only, with
+  DG14/DG15 probed for authenticity support; a zktag candidate derived per stable
+  field so D9 is decided on a table rather than an argument; BSI all-country master
+  list pinned with a certs-parsed = certs-declared assertion; a PII-free evidence
+  rule (field names, counts, hashes and verdicts only — never values). New **§6.1
+  M0 go/no-go table**: nine outcomes, each with its meaning and consequence, agreed
+  in advance so a surprise could not be rationalised afterwards. Evidence path moved
+  to `docs/logs/` (the `docs/02-evidence/` path predated the reorg); M0 device
+  wording aligned with D2's Pixel-only decision; risk #2 now names PACE and both
+  documents.
+
+- **Q19 and Q20 parked, not designed** (owner-raised, 2026-08-29). **Q19 —
+  freshness as a range, not a ceiling**: D10 fixes an operator *ceiling*, and the
+  mirror case is a requester-stated *floor* (a bank wanting a scan under 24 hours
+  old), which implies conveying when the secret was minted — in direct tension with
+  D10's one-bit answer, since a precise mint date is a fingerprint (FR6/FR9).
+  **Q20 — operator identity in a borrowable core**: if anyone may wrap the library,
+  anyone may generate a challenge, and the hard part is uniqueness without a
+  registry (NO-GO #3 forbids one). Recorded with the two existing mechanisms it must
+  reconcile with — FR2 binds the zktag to the client-verified domain, FR10
+  identifies *clients* by signing-cert digest — neither of which covers *operator*
+  identity. Both stay parked until rung 1 ships (D18).
+
+- **Toolchain, reproducible and rootless.** Temurin JDK 21 at `~/opt` (Fedora 44
+  packages only JDK 25/26 — `java-21-openjdk-devel` does not exist there) and the
+  Android SDK at `~/Android/Sdk` (platform-tools 37.0.1, platform 36, build-tools
+  36.1.0). The spike pins `compileSdk`/`targetSdk` 36 rather than upstream's 37,
+  which is preview-channel only.
+
 - **Docs reorganised with docs-builder.** `docs/01-product/`, `docs/02-engineering/`
   and `docs/context/` (each holding a single file) flattened into `docs/product/`
   and `docs/logs/`: `zkagent-prd.md` and `zkagent-design.md` classified as

@@ -29,3 +29,10 @@ build/
 
 # docs-builder machine state — regenerated every run; ledger stamp is per-clone
 /docs/.docs-builder/
+
+# M0 spike — local toolchain state and any real-chip capture
+spikes/*/local.properties
+spikes/*/.gradle/
+captures/
+*.dg14
+*.dg15

@@ -44,7 +44,7 @@ the PRD and is binding.
 
 - `docs/product/zkagent-prd.md` — the PRD: architecture, milestones, NO-GO table,
   owner decisions. Start here.
-- `docs/02-evidence/` — measured evidence per milestone (created as milestones run).
+- `docs/logs/` — measured evidence per milestone (`M0-EVIDENCE.md` etc., created as milestones run).
 
 ## License
 
