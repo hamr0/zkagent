@@ -1,9 +1,9 @@
-# zkagent — PRD v1.5 (draft)
+# zkagent — PRD v1.6 (draft)
 
 **Status**: Draft. D1–D8 signed 2026-07-26; D9 still open pending M0 evidence. **No promise in this document survives a miss at M0, which has not been run.**
 **Project**: `zkagent` · **Published package**: `chiproof` · **Owner**: hamr · **Repo**: zkagent (sibling of 8een)
 **Parent standards**: `AGENT_RULES.md` (POC-first, dependency hierarchy, prove-don't-assert, security invariants). When anything here disagrees with AGENT_RULES, AGENT_RULES wins.
-**Version history**: §15. This revision (v1.5) rewrote the M0 row so the spike can fail, named the documents and the access protocol, and added the M0 go/no-go table (§6.1). v1.4 restructured the document into rungs, split disclosure into two modes (D13), and narrowed FR6.
+**Version history**: §15. This revision (v1.6) records the post-M0 disclosure model — three tiers, signed challenges, always-read/conditionally-mint — **as decisions of shape only; mechanics are deferred to M1/M2 (D19–D21, Q21)**. v1.5 rewrote the M0 row so the spike can fail, named the documents and the access protocol, and added the M0 go/no-go table (§6.1). v1.4 restructured the document into rungs, split disclosure into two modes (D13), and narrowed FR6.
 **Companion**: `docs/product/zkagent-design.md` — the design and disclosure model: how the read works, what each mode emits, the legal posture, and the operator's configuration surface. Description, not commitment; **this PRD wins on any conflict**.
 
 **One-liner**: Read the chip in a government-issued document, verify the government's own signature on it, and answer exactly one question about the holder — *over 18?* or *seen here before?* — disclosing nothing else, storing nothing anywhere, with no issuer, CA, wallet or server of ours in the path.
@@ -21,6 +21,21 @@ Two gaps, one root cause, one chip that closes both.
 **Age verification.** Present demand, legal deadlines in several jurisdictions, and incumbent solutions (ID upload, credit-card check, face estimation) that are expensive, privacy-hostile, or both. The EU's own answer requires a wallet, an attestation provider, and a batch-issuance round trip — infrastructure that must exist before a user can prove anything.
 
 **The root cause is the same: everyone assumes an issuer.** zkagent supplies the root issuer-free — the government already issued the credential and it is in the holder's pocket. The chip **is** the attestation provider.
+
+## 1.1 Glossary — three objects that must never share a name
+
+The conversation history of this project has used "nonce" for all three of these. They are different
+objects with different lifetimes, and the mode-A claim depends on keeping them apart.
+
+| Term | What it is | Made by | Lifetime | Present in | Can it recognise the holder? |
+|---|---|---|---|---|---|
+| **challenge nonce** | a random single-use number inside the requester's signed challenge (FR4) | the **requester**, fresh per request | one request, then spent | **all tiers — A, B, C** | **No.** It is the requester's number, not the holder's; nothing in it derives from the chip. Reuse is rejected by the verifier, so it cannot be used to correlate two visits — the replay protection and the unlinkability protection are the same mechanism |
+| **secret** | material derived from chip data, held in the phone's secure hardware (D10) | the **app**, at scan time | until the operator's ceiling (30–180 days), then re-scan | B and C only — **never minted in A** | Never leaves the phone; never transmitted to anyone |
+| **zktag** | `HMAC(secret, requester's verified domain)` — the pseudonym (FR2, FR11) | the **app**, per presentation | stable for the life of the secret; same site ⇒ same tag | **B and C only** | **Yes — at that one domain only.** This is what makes tier B "recognisable here"; another domain computes an unrelated tag |
+
+**One line to remember**: the *nonce* proves the **request** is fresh; the *zktag* proves the **person** is
+the same. Tier A wants the first and refuses the second. Anything called "minted id" in earlier notes
+means the secret + zktag pair, not the challenge nonce.
 
 ## 2. What v1 is
 
@@ -118,7 +133,7 @@ The PRD previously described one product with five milestones. It is two rungs, 
 - Money/payments, legal-grade identity, one-person-one-vote (k-bound makes it dishonest — NO-GO #5).
 - Becoming an EU wallet, an attestation provider, or an eIDAS-conformant component. zkagent may share privacy *properties* with the EU Age Verification Solution (§12) — it is not part of that ecosystem and must never imply certification. zk8een remains the bridge if one is ever needed.
 - **Non-chip documents.** The readable set is **ICAO 9303-compliant chip documents** — anything carrying an SOD signature chain verifiable against a public masterlist. **Explicitly excluded and not "later":** US driving-licence PDF417 barcodes and equivalents (AAMVA-encoded text with *no verifiable signature*, so step 2 has nothing to check and anyone can print one); photos; photocopies; OCR. Signed mobile credentials (US mDL) may qualify eventually but are a separate read path.
-- **Predicates beyond a single threshold per presentation.** Mode A discloses exactly one bit; mode B adds exactly one pseudonym. No nationality, no residency, no under-18 spaces, no "and also". Each added predicate leaks anonymity bits and grows the scanner; new predicates require a PRD change (NO-GO #10).
+- **Predicates beyond a single threshold per presentation — in tiers A and B.** Tier A discloses exactly one bit; tier B adds exactly one pseudonym. No nationality, no residency, no under-18 spaces, no "and also". Identifying predicates exist only in **tier C** (D19), come only from the published verb list, and every new verb is a spec revision plus owner sign-off (NO-GO #10). Each added verb leaks anonymity bits; the tier model exists so that cost never touches tier A.
 - **Unifying identities across documents.** Explicitly rejected as a goal (owner, 2026-08-07). A holder with two documents holds two identities and that is fine. See D9 and NO-GO #5.
 - **signedreply / attestation-ledger / reputation integration** — separate product; zkagent must stand alone.
 - **Federated or shared blocklist service** — rung 2 defines the signed blocklist *format* and adopter store interface only. We run no list, host no reputation, publish no trust list.
@@ -222,6 +237,10 @@ The rule this table enforces (AGENT_RULES): the test must be able to fail, and a
 | D17 | *(2026-08-07)* **The trust list is held by the adopter, never by us** (FR10). Worked example, recorded because it is the model: a national police force publishes once — package `nl.politie.id`, cert digest `sha256:CC:DD:…`, spec version `zkagent-derivation/1`. A webshop configures `trustedClients: [official, politie]` alongside `threshold`, `acceptedDocuments`, `mode` and `masterlist`. At verify time the SDK validates the attestation signature, extracts package + digest, and accepts only what is listed. A malicious clone is rejected even though the source is open. No API key, no contract, no relationship with us — and no registry for us to run, be compelled to alter, or be blamed for |
 | D18 | *(2026-08-07)* **Sequencing: the agent layer is not designed, discussed or specified further until the age-verification leg is finished.** Rung 2 stays as written — decided, bounded, not started — and reopening it before rung 1 ships is refused by default, including on a passing owner request. Rationale from this session's evidence rather than from principle: Q18 (chip cloning defeating mode-B uniqueness, and with it D10's entire rationale) sat undetected through four PRD revisions and surfaced only when the read path had to be written out concretely for the design companion. More design is currently producing more surface, not more certainty. This PRD carries 18 decisions, 11 requirements and 9 open questions against zero lines of code; the agent layer would add a third document's worth of each. **M0 first** |
 
+| D19 | *(2026-08-29, shape only — mechanics deferred)* **Disclosure has three tiers, and the tier is what the holder is told, not what the app decides.** Every presentation shows the holder what is being asked before the tap; the tier sets the wording. **Tier A — anonymous, the default**: one boolean, no identifier; screen says *"this site learns one fact and cannot recognise you."* Open to any requester. **Tier B — pseudonymous**: tier A plus the domain-scoped zktag; screen says *"this site can recognise you again — here only."* Open to any requester, because the pseudonym is `HMAC(secret, domain)` and a site can only ever compute its own (FR2) — B's safety is arithmetic, not judgment. **Tier C — attributed**: booleans over identifying fields (name-matches, nationality-equals, …); screen lists each in plain words: *"this site is checking who you are."* **Gated: accepted only from a challenge issuer whose key the app build pins at tier C** (D20). A tier-C challenge from an unpinned key is **refused, not downgraded** — a silent downgrade would let a requester probe. The verbs a requester may ask are a **published, versioned vocabulary we write** (like FR11) baked into the app: a list of question *types*, never a registry of *askers* (NO-GO #3). The operator's configuration surface is that vocabulary with verbs switched on or off — **verbs an operator may *ask*, never data anyone *captures*: nothing is retained by anyone at any tier (NO-GO #1).** Rationale: field *count* is the wrong knob — two verbs can be fully anonymous or a full identification; what varies is whether the answer identifies the holder, so that is the axis. KYC and document-signing flows live in tier C and are **separate products borrowing the core (§4)**, not modes of this one. Supersedes the "mode A / mode B" wording where the two conflict; D13's rules for A and B are unchanged |
+| D20 | *(2026-08-29, shape only — mechanics deferred)* **Challenges are signed by their issuer; the issuer's public key is its identity.** Resolves the principle of Q20 without a registry: a requester (or an authority acting for many requesters, e.g. a government for every site legally bound to check age) generates a keypair once, signs each challenge, and gives the public key to the app builds it wants to accept it. An app build pins issuer keys **with a tier ceiling** (`trustedChallengeIssuers: [{ pubkey, maxTier }]`) — the same local-trust shape as FR10, pointed at challenges instead of clients. Uniqueness needs no allocation: a keypair is a name nobody hands out. The challenge object carries `nonce, tier, verbs, threshold, max_scan_age, issued_at, expires_at, key_id, sig`; the app verifies `sig` before reading the chip, the verifier re-checks it on return. **Signature, not encryption** — the point is that anyone holding the public key can check origin. The *response* shape stays fixed regardless of which issuer asked (FR6). Supersedes the split-nonce sketch (a shared secret format achieving the same rejection with weaker guarantees). Unsigned challenges: accepted at tiers A and B (nothing to protect that the tier does not already protect), refused at C |
+| D21 | *(2026-08-29, evidence-backed — M0 Findings 4, 9)* **Always read, conditionally mint; chip authenticity is the requester's constraint, reported in tiers B/C only.** The app reads whatever the document offers — BAC or PACE, with or without AA/CA — with no mode selection up front. Minting a zktag is the gate, and the **verifier** enforces the policy, not the app alone (a modified app could mint regardless): the tier-B/C payload carries `chip_auth: passed | absent`, and the requester configures whether it accepts a document that cannot prove it is the original (M0 showed the US passport cannot; the NL identity card can). This is D14's `acceptedDocuments` trade-off made concrete and unintuitive. **Tier A never emits `chip_auth`** — it has nothing to impersonate and the flag would partition anonymous holders into document classes (FR6/FR9). A tier-A payload is byte-identical whether or not minting could have happened |
+
 **Resolved and closed** (kept as one-liners; full reasoning is in the version history and session stashes): **Q2** — Apple entitlement moot for M0. **Q5** — Android is primary (D2). **Q6** — iOS deferred (D2). **Q9** — phone→agent cert handoff ships all three paths (QR ~400–550 bytes in one static QR with no fountain coding; LAN POST; user-moved file, which leaks the zktag to whatever routes it and must be documented rather than blocked). The cert carries the agent's *public* key and is signed by the phone, so integrity is free and the channel needs neither confidentiality nor authentication. No zkagent-run server in any path.
 
 ## 11. Open questions (resolve at the milestone that hits them, on evidence)
@@ -246,14 +265,27 @@ The rule this table enforces (AGENT_RULES): the test must be able to fail, and a
   Do not design this before rung 1 ships. When it is taken up, the question is whether a coarse bucket
   ("fresher than 24h": yes/no) can serve the bank case without reintroducing linkability.
 
-- **Q20 (parked — owner raised 2026-08-29, not designed) — operator identity in a borrowable core.**
-  If anyone may wrap the library, anyone may generate a challenge, so what distinguishes one operator
-  from another inside a nonce? The owner floated a fixed field (country ISO code, or a 5-digit id) and
-  named the hard part himself: **what makes it unique without a registry to allocate it** — and a
-  registry is forbidden by NO-GO #3. Note the existing machinery this must be reconciled with before
-  anything new is invented: FR2 already binds the zktag to the **verified service domain** computed
-  client-side, and FR10's trust list already identifies *clients* by package name + signing-cert
-  digest. The open part is operator identity, which neither covers. Do not design before rung 1 ships.
+- **Q20 (resolved in principle by D20; mechanics at M1) — operator identity in a borrowable core.**
+  Answered without a registry: the issuer's signing key *is* its identity, pinned per app build with a
+  tier ceiling. What M1 must still fix: key format and signature suite (ed25519 is the default
+  assumption), challenge encoding, expiry precedence between `expires_at` and the nonce store's TTL,
+  and how a white-label build ships its pinned keys. Reconcile with FR2 (domain binding) and FR10
+  (client trust list) in code, not prose.
+
+- **Q21 (deferred — rung-2-shaped, do not design before rung 1 ships) — how an authority admits a
+  requester to tier C.** A government that signs challenges for every site bound to check age has two
+  ways to let a bank ask tier-C questions: sign that bank's challenges itself (a live signing service
+  — the government's infrastructure, not ours, but a runtime dependency for the bank), or issue the
+  bank a key with a certificate saying "may ask tier C" (delegation — the exact machinery of rung 2,
+  FR5). The second is cleaner and is the one D18 forbids designing now. v1 ships only the direct case:
+  requester = issuer, or issuer signs each challenge itself.
+
+- **Q22 (before tier C is built) — the tier-C verb vocabulary.** Which identifying predicates exist at
+  all, each as an exact boolean against a single requester-supplied value, one attempt per challenge.
+  **No similarity scores, ever** — a percentage is a continuous channel that binary-searches the real
+  value in a handful of re-asks (Q11's attack with far more entropy). Candidates so far: `name_matches`,
+  `nationality_equals`, `document_type_equals`, `fresh_under(N)` (the last is Q19's one-bit answer and
+  may belong in tier A). Decide against the first real tier-C adopter, not on speculation.
 
 ## 12. Grounding (why this isn't a dart in the dark)
 
@@ -292,5 +324,6 @@ The dominant risk is not a break in the chain — it is that no one installs the
 | v1.1 | 2026-07-26 | M0 de-platformed — cheapest working NFC path, not iPhone-gated. Q2 moot; Q6 added |
 | v1.2 | 2026-08-02 | D2 flipped to Android-first; `tag` → `zktag` throughout (RFC 9421 collision); FR8 added; Q7, Q8 added; Q5/Q6 resolved |
 | v1.3 | 2026-08-03 | D10 (secret expiry), D11 (configurable threshold, one bit); Q9 resolved; Q8 narrowed to inline cert; §13 adoption risk; Q11–Q14; risk items 6–7; ICAO-scope non-goal rewritten |
+| **v1.6** | **2026-08-29** | **Post-M0 disclosure model recorded as shape, mechanics deferred.** New §1.1 glossary separating *challenge nonce* / *secret* / *zktag*, which the project's own notes had been conflating under "nonce". D19 three tiers (A anonymous/default/open; B pseudonymous/open because domain-scoped; C attributed/gated by pinned issuer keys, refused-not-downgraded from unpinned keys); the operator surface is a published verb vocabulary with verbs switched on/off — *asked*, never *captured*. D20 signed challenges; issuer key = identity, pinned per build with a tier ceiling; resolves Q20 in principle. D21 always-read/conditionally-mint with `chip_auth` reported in B/C only, verifier-enforced (M0 Findings 4, 9). Predicates non-goal narrowed to tiers A/B. New Q21 (authority→requester admission, rung-2-shaped, deferred) and Q22 (tier-C verb list, no similarity scores). **Nothing here is built; M1 is next and reopens these against code** |
 | **v1.5** | **2026-08-28** | **M0 row rewritten so the spike can fail**: planted negatives (DG1 byte flip, CSCA removed ⇒ `ok:false`) mandatory; documents named (US passport + NL ID card); access protocol negotiated, never per-country; MRZ typed, never stored; DG1 + SOD only, DG14/DG15 probed; per-field zktag candidates so D9 is decided on a table; BSI all-country master list pinned, certs-parsed = certs-declared assertion; PII-free evidence rule; evidence path moved to `docs/logs/` after the docs reorg; Pixel/Samsung wording aligned with D2. New §6.1 go/no-go table. Risk #2 names PACE and the two documents |
 | **v1.4** | **2026-08-07** | **Restructured into rungs (§4). D12 package name `chiproof`. D13 two disclosure modes — mode A anonymous is now the default and the age leg carries no pseudonym. D14 greedy `acceptedDocuments` (k is a mode-B cost only). D15 FR6 narrowed rather than retired. D16/FR11 published derivation spec. D17/FR10 adopter-held trust list. D10 revised to a configurable ceiling with one-bit freshness negotiation. New FR9 unlinkability budget + M1b probe + Q15 (attestation as covert identifier — blocks the mode-A claim). New NO-GO #11. Cross-document unification made an explicit non-goal; D9 narrowed accordingly. Q1 folded into Q14; Q2/Q5/Q6/Q9 closed out of §11. EU Age Verification Blueprint checked and cited in §12. Legal posture fixed as demonstration-not-certification (Q17). New Q18 — passive authentication does not prove the chip is the original, so a clone could mint the same zktag; M0 must report AA/CA support. Companion design doc added at `docs/product/zkagent-design.md`** |

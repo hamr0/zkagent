@@ -5,6 +5,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **PRD v1.6 — the post-M0 disclosure model, recorded as shape with mechanics deferred.**
+  Also a new **§1.1 glossary** separating three objects the project's own notes had been
+  calling "nonce": the *challenge nonce* (requester's single-use random number, all tiers,
+  cannot recognise anyone — reuse is rejected, so replay protection and unlinkability are
+  the same mechanism), the *secret* (chip-derived, phone-resident, never transmitted,
+  never minted in tier A), and the *zktag* (the domain-scoped pseudonym, tiers B/C only,
+  recognisable at one domain). One line: the nonce proves the request is fresh; the zktag
+  proves the person is the same. Tier A wants the first and refuses the second.
+  Three decisions of *shape*, taken so the stages that follow can be planned against them,
+  and explicitly reopened at M1/M2 against code rather than prose. **D19 — three tiers**:
+  A anonymous (one boolean, the default, open to any requester); B pseudonymous (A plus
+  the domain-scoped zktag, open because a site can only compute its own pseudonym — safety
+  by arithmetic, not judgment); C attributed (identifying booleans such as name-matches,
+  gated to challenge issuers whose key the app build pins at tier C, and *refused* rather
+  than downgraded from anyone else). The holder sees the tier's plain-language wording
+  before every tap. The operator's surface is a **published verb vocabulary** with verbs
+  switched on or off — a list of question *types* we write, never a registry of *askers*
+  — and the PRD now says *asked*, not *captured*, because nothing is retained by anyone.
+  Field count was rejected as the knob: two verbs can be fully anonymous or a full
+  identification. **D20 — signed challenges**: the issuer's public key is its identity,
+  pinned per build with a tier ceiling; resolves Q20 without a registry and supersedes the
+  split-nonce sketch. **D21 — always read, conditionally mint**: no mode selection up
+  front; `chip_auth: passed | absent` travels in tiers B/C only and the *verifier* enforces
+  the requester's acceptance policy (M0 showed the US passport cannot prove it is the
+  original and the NL card can). Tier A never carries the flag. New **Q21** (how an
+  authority admits a bank to tier C — delegation, rung-2-shaped, deferred by D18) and
+  **Q22** (the tier-C verb list; exact booleans only, no similarity scores). The
+  predicates non-goal is narrowed to tiers A/B rather than retired.
+
 - **M0 RUN — the riskiest assumption tested against real documents, and partially
   retired.** First evidence in this project; everything before this was design.
   Four valid runs on a Pixel 6a (stock Android 17): the owner's US passport twice
