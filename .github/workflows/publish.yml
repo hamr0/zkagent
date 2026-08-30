@@ -1,4 +1,4 @@
-# Canonical npm publish workflow — copy to `.github/workflows/publish.yaml`.
+# Canonical npm publish workflow — copy to `.github/workflows/publish.yml`.
 # Adapted for chiproof (packages/chiproof) from hamr0/PUBLISH_TEMPLATE.yml —
 # only the working-directory and this header comment changed; the rest is
 # the template verbatim.
