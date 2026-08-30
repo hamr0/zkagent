@@ -5,16 +5,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
-- **`chiproof@0.1.1`** — Types: `verify()` returns `Verdict`; `issueChallenge()`
-  typed (options + `Challenge`) — 0.1.0's `.d.ts` declared both as `object`,
-  breaking every TypeScript adopter. No runtime change. Added a shared
-  `IssueChallengeOptions` typedef (`src/types.js`) and wired both
-  `challenge.js`'s `issueChallenge` and `createVerifier(...).issueChallenge`
-  to it and to the existing `Challenge` typedef, replacing the widened
-  inline `object` annotations. The adopter gate (`ci.yml`/`publish.yml`) now
-  also asserts `challenge.nonce: string` reads and rejects
-  `issueChallenge({tier: 'Z', ...})` via `@ts-expect-error`, so either bug
-  regressing fails the build.
 - **`chiproof` M1 verifier core (buckets B1–B4) implemented and tested — 116/116
   passing, zero runtime deps.** Spec: `docs/product/m1-verifier-core-spec.md`.
   B1: the `ok`/`allowed` verdict invariant (`src/verdict.js`) structurally
@@ -419,6 +409,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
     rejected for v1 as it collides with NO-GO #1/#3.
   - New **Q9** (M4): phone→agent cert handoff UX (QR / paste / localhost
     POST). Added to the M4 deliverable and checkpoint.
+
+## [0.2.0] — 2026-08-30
+
+- **`chiproof@0.2.0`** — Types: `verify()` returns `Verdict`; `issueChallenge()`
+  typed (options + `Challenge`) — 0.1.0's `.d.ts` declared both as `object`,
+  breaking every TypeScript adopter. No runtime change. Added a shared
+  `IssueChallengeOptions` typedef (`src/types.js`) and wired both
+  `challenge.js`'s `issueChallenge` and `createVerifier(...).issueChallenge`
+  to it and to the existing `Challenge` typedef, replacing the widened
+  inline `object` annotations. The adopter gate (`ci.yml`/`publish.yml`) now
+  also asserts `challenge.nonce: string` reads and rejects
+  `issueChallenge({tier: 'Z', ...})` via `@ts-expect-error`, so either bug
+  regressing fails the build.
 
 ## [0.0.0] — 2026-07-26
 
