@@ -1,7 +1,7 @@
 # Canonical npm publish workflow — copy to `.github/workflows/publish.yml`.
 # Adapted for chiproof (packages/chiproof) from hamr0/PUBLISH_TEMPLATE.yml —
-# only the working-directory and this header comment changed; the rest is
-# the template verbatim.
+# only the working-directory block, this header comment, and the PER-REPO
+# quickstart changed; the rest is the template verbatim.
 #
 # npm trusted publishing via OIDC (no NPM_TOKEN), idempotent (skips a version
 # already on the registry), and it asserts the END STATE rather than trusting
@@ -14,7 +14,8 @@
 #
 # Before the first run: configure the trusted publisher at npmjs.com
 # (Package settings → Trusted Publisher → GitHub Actions: your repo + this
-# workflow file). `prepublishOnly` builds the .d.ts into the tarball at publish.
+# workflow file). chiproof's `prepack` builds the .d.ts into the tarball at
+# publish (and at `npm pack`, which the adopter gate below relies on).
 name: Publish to npm
 
 on:
@@ -80,6 +81,10 @@ jobs:
       - name: Test
         run: npm test --if-present
       - name: Skip if this version is already on npm
+        # BEFORE the pack-and-install gate below, not after: re-dispatching a publish
+        # for a version already on the registry is the idempotency case this step
+        # exists for, and it should cost a `npm view`, not a tarball build plus a
+        # TypeScript install. Everything downstream is gated on its output.
         id: check
         run: |
           NAME=$(node -p "require('./package.json').name")
@@ -91,6 +96,70 @@ jobs:
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: Build types
+        # `npm pack` does not run `prepublishOnly`, so without this the adopter
+        # check below would pack a tarball with no `.d.ts`; repos that use
+        # `prepack` instead get it automatically and this is a no-op.
+        if: steps.check.outputs.skip == 'false'
+        run: npm run build:types --if-present
+      - name: Types are usable BY AN ADOPTER, not just internally
+        # `tsc --noEmit` in Typecheck above checks the SOURCE; it cannot see the
+        # generated .d.ts resolved from inside node_modules, which is the one
+        # thing adopters consume. This packs, installs the tarball into a clean
+        # consumer project, and compiles a quickstart against it — the only
+        # workflow that puts bytes on the registry is the one place this check
+        # cannot be skipped.
+        #
+        # Untyped repos (no `types` field, no `types/` dir) short-circuit below —
+        # there's nothing for an adopter to type-check.
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          if [ ! -d types ] && [ -z "$(node -p "require('./package.json').types || ''")" ]; then
+            echo "::notice::no types shipped — skipping adopter type check"
+            exit 0
+          fi
+          NAME=$(node -p "require('./package.json').name")
+          mkdir -p /tmp/pkg /tmp/consumer
+          npm pack --pack-destination /tmp/pkg
+          cd /tmp/consumer
+          cat > package.json <<'JSON'
+          { "name": "consumer", "private": true, "type": "module" }
+          JSON
+          cat > tsconfig.json <<'JSON'
+          { "compilerOptions": { "strict": true, "module": "nodenext",
+            "moduleResolution": "nodenext", "target": "es2022",
+            "noEmit": true, "types": ["node"] } }
+          JSON
+          # ── PER-REPO: chiproof's own minimal usage (chiproof.context.md
+          # "Minimal usage"), kept in sync with the identical block in
+          # ci.yml's adopter-gate step — update both together. ──
+          cat > app.ts <<'TS'
+          import { createVerifier, InMemoryNonceStore } from 'chiproof';
+          import { randomBytes } from 'node:crypto';
+
+          const verifier = createVerifier({
+            scopeDomain: 'example.com',
+            challengeSecret: randomBytes(32),
+            tiers: { max: 'B' },
+            stores: { nonce: new InMemoryNonceStore({ quiet: true }) },
+            allowInMemoryStore: true,
+          });
+
+          const challenge = verifier.issueChallenge({ tier: 'B', ttlMs: 60_000 });
+
+          const verdict = await verifier.verify({
+            spec: 'zkagent/1',
+            tier: 'B',
+            claim: { over_threshold: true, threshold: 18 },
+            challenge,
+            zktag: 'deadbeef',
+          });
+          if (verdict.ok !== true) throw new Error(String(verdict.reason));
+          console.log(verdict.allowed);
+          TS
+          # ── end PER-REPO ──
+          npm install --no-audit --no-fund /tmp/pkg/*.tgz typescript @types/node
+          ./node_modules/.bin/tsc
       - name: Publish
         if: steps.check.outputs.skip == 'false'
         run: |
