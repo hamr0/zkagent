@@ -4,8 +4,12 @@
   "description": "Verifier SDK for attested, windowed disclosure from ICAO 9303 chip documents. Part of the zkagent project. M1 buckets B1-B4 implemented and tested; no real-hardware M0 evidence backs it yet.",
   "type": "module",
   "main": "src/index.js",
+  "types": "./types/index.d.ts",
   "exports": {
-    ".": "./src/index.js"
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    }
   },
   "license": "Apache-2.0",
   "author": "hamr0",
@@ -29,14 +33,22 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "typecheck": "tsc --noEmit",
+    "build:types": "tsc",
+    "prepublishOnly": "npm run build:types"
   },
   "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "typescript": "^7.0.2"
+  },
   "files": [
     "README.md",
     "chiproof.context.md",
     "LICENSE",
     "NOTICE",
-    "src/"
+    "src/",
+    "types/"
   ]
 }

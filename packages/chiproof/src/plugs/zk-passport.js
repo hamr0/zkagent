@@ -76,10 +76,10 @@ function invalid(reason) { return { ok: true, valid: false, reason }; }
 
 /**
  * @param {{
- *   bbPath: string,
- *   vks: {dsc: string|string[], id_data: string|string[], integrity: string|string[], age: string|string[]},
- *   threshold: number, timeoutMs?: number, tmpDir?: string,
- * }} opts
+ *   bbPath?: string,
+ *   vks?: {dsc: string|string[], id_data: string|string[], integrity: string|string[], age: string|string[]},
+ *   threshold?: number, timeoutMs?: number, tmpDir?: string,
+ * }} [opts]
  */
 export function zkPassport({ bbPath, vks, threshold, timeoutMs = 60_000, tmpDir = tmpdir() } = {}) {
   if (!(typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0)) {

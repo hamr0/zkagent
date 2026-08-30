@@ -42,16 +42,7 @@ function isPlainObject(v) {
  * second replica (mirrors 8een's `startGate` fail-closed construction-time
  * checks, `src/gate.js:372-404`).
  *
- * @param {{
- *   stores: {nonce: import('./challenge.js').NonceStore},
- *   challengeSecret: Buffer|Uint8Array|string,
- *   threshold?: number, tiers?: {max: 'A'|'B'|'C'},
- *   trustedChallengeIssuers?: {pubkey: unknown, key_id: string, maxTier: 'A'|'B'|'C'}[],
- *   trustedClients?: {name?: string, package: string, certDigest: string, specVersion?: string}[],
- *   evidence?: {require?: string[], accept?: string[], plugs?: Record<string, object>, maxItems?: number, maxItemBytes?: number},
- *   scopeDomain: string, masterlistRoot?: string,
- *   allowInMemoryStore?: boolean,
- * }} config
+ * @param {import('./types.js').VerifierConfig} config
  * @returns {{issueChallenge: (opts: object) => object,
  *   verify: (presentation: unknown, ctx?: {now?: number, clientIdentity?: object}) => Promise<object>}}
  */
@@ -131,6 +122,11 @@ export function createVerifier(config) {
   });
 
   return Object.freeze({
+    /**
+     * @param {{tier?: 'A'|'B'|'C', verbs?: string[], threshold?: number,
+     *   max_scan_age?: number|null, ttlMs?: number,
+     *   issuer?: {privateKey: unknown, key_id: string}|null, now?: number}} [opts]
+     */
     issueChallenge: (opts = {}) => {
       // Ruling 2026-08-30: the verifier serves ONE threshold. A caller asking
       // for another is a config error -- fail loud, never mint a challenge
@@ -138,7 +134,13 @@ export function createVerifier(config) {
       if (opts.threshold !== undefined && opts.threshold !== settled.threshold) {
         throw new TypeError(`issueChallenge: threshold ${opts.threshold} differs from config.threshold ${settled.threshold}`);
       }
-      return issueChallengeImpl({ ...opts, threshold: settled.threshold, challengeSecret: settled.challengeSecret });
+      // opts.tier/opts.ttlMs are optional in THIS wrapper's type only because the
+      // default `{}` must type-check; issueChallengeImpl still requires and
+      // validates them at runtime (throws loud if either is missing), so the
+      // cast below documents that hand-off rather than widening a real check.
+      return issueChallengeImpl(/** @type {Parameters<typeof issueChallengeImpl>[0]} */ ({
+        ...opts, threshold: settled.threshold, challengeSecret: settled.challengeSecret,
+      }));
     },
     verify: (presentation, ctx) => verify(settled, presentation, ctx),
   });
@@ -246,7 +248,7 @@ async function verifyInner(settled, presentation, ctx) {
     masterlistRoot: settled.masterlistRoot, trustedClients: settled.trustedClients, now, maxScanAge,
   });
   const routed = await routeEvidence(settled.slot, evidence ?? [], tier, plugCtx);
-  if (routed.ok !== undefined) return routed; // a verdict: refused or could not check
+  if ('ok' in routed) return routed; // a verdict: refused or could not check
 
   const reason = settled.slot.require.length === 0 ? 'no-evidence-required' : 'evidence-verified';
   const extra = routed.warnings.length > 0 ? { warnings: routed.warnings } : {};

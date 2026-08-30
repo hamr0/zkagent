@@ -25,7 +25,7 @@ export function receiptMessage(claim, nonce, scopeDomain) {
 }
 
 /**
- * @param {{keys: {key_id: string, pubkey: unknown}[]}} opts adopter-supplied signer keys
+ * @param {{keys?: {key_id: string, pubkey: unknown}[]}} [opts] adopter-supplied signer keys
  */
 export function signedReceipt({ keys } = {}) {
   if (!Array.isArray(keys) || keys.length === 0) {

@@ -64,8 +64,14 @@ function hmac(secret, payload) {
   return createHmac('sha256', secret).update(payload).digest();
 }
 
-/** The sealed fields, in canonical form; throws on uncanonicalizable input. */
-function sealedFields({ tier, verbs, threshold, max_scan_age: maxScanAge, expires_at: expiresAt }) {
+/**
+ * The sealed fields, in canonical form; throws on uncanonicalizable input.
+ * @param {object} fields
+ */
+function sealedFields(fields) {
+  const {
+    tier, verbs, threshold, max_scan_age: maxScanAge, expires_at: expiresAt,
+  } = /** @type {Record<string, unknown>} */ (fields);
   return Buffer.from(canonicalize({
     tier, verbs, threshold, max_scan_age: maxScanAge, expires_at: expiresAt,
   }), 'utf8');
@@ -86,7 +92,7 @@ function mintNonce(secret, issuedAt, fields) {
  * a classification out.
  *
  * @param {unknown} nonce
- * @param {Buffer|Uint8Array|string} secret
+ * @param {Buffer|Uint8Array|string|undefined} secret
  * @param {object} fields the presented challenge (its sealed fields are read)
  * @returns {{recognized: boolean, issuedAt?: number}}
  */
@@ -202,9 +208,9 @@ export function issueChallenge({
  * pinned issuer? Never throws.
  *
  * @param {unknown} challenge
- * @param {{now?: number, challengeSecret: Buffer|Uint8Array|string,
+ * @param {{now?: number, challengeSecret?: Buffer|Uint8Array|string,
  *   trustedChallengeIssuers?: {pubkey: unknown, key_id: string, maxTier: 'A'|'B'|'C'}[],
- *   skewMs?: number}} opts
+ *   skewMs?: number}} [opts]
  *   `skewMs` (default 5 min) is how far `issued_at` may sit in the future before
  *   it is refused rather than merely "not yet" — a clock-skew allowance, not a
  *   grant of trust.
@@ -216,7 +222,9 @@ export function verifyChallenge(challenge, {
   if (!challenge || typeof challenge !== 'object') {
     return { ok: true, valid: false, reason: 'challenge_malformed' };
   }
-  const { nonce, tier, issued_at: issuedAt, expires_at: expiresAt, key_id: keyId, sig } = challenge;
+  const {
+    nonce, tier, issued_at: issuedAt, expires_at: expiresAt, key_id: keyId, sig,
+  } = /** @type {Record<string, unknown>} */ (challenge);
 
   if (tierRank(tier) === undefined) {
     return { ok: true, valid: false, reason: 'challenge_malformed' };
@@ -275,15 +283,13 @@ export function verifyChallenge(challenge, {
 /**
  * Spend a challenge's nonce exactly once, through the adopter's atomic store.
  * Mirrors 8een's `applySingleUse` (src/challenge.js:166-199): the ONE piece of
- * state this module needs lives in the adopter's `NonceStore`, never here.
- *
- * @typedef {{setIfAbsent(key: string, ttlMs: number): Promise<boolean>}} NonceStore
- *   An atomic "SET NX PX"-shaped store (e.g. Redis `SET key NX PX ttl`).
- *   `setIfAbsent` returns `true` on first use (fresh) and `false` if the key was
- *   already present (a replay).
+ * state this module needs lives in the adopter's `NonceStore` (types.js),
+ * never here. An atomic "SET NX PX"-shaped store (e.g. Redis `SET key NX PX
+ * ttl`): `setIfAbsent` returns `true` on first use (fresh) and `false` if the
+ * key was already present (a replay).
  *
  * @param {{nonce?: unknown, expires_at?: unknown}} challenge
- * @param {NonceStore} store
+ * @param {import('./types.js').NonceStore} store
  * @param {{now?: number}} [opts]
  * @returns {Promise<{ok: boolean, valid: boolean|null, reason: string}>}
  */

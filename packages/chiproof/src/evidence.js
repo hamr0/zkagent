@@ -86,7 +86,7 @@ export function itemKey(item) {
  * @param {{registry: EvidenceRegistry, require: string[], accept: string[], maxItems: number, maxItemBytes: number}} slot
  * @param {unknown[]} items  presentation.evidence (already known to be an array)
  * @param {'A'|'B'|'C'} tier presented tier
- * @param {object} ctx       plug ctx per §4: { nonce, claim, tier, scopeDomain, masterlistRoot, trustedClients, now }
+ * @param {import('./types.js').PlugCtx} ctx  plug ctx per §4
  */
 export async function routeEvidence(slot, items, tier, ctx) {
   const presentedRank = tierRank(tier);

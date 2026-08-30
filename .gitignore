@@ -21,6 +21,9 @@ build/
 .env.*
 !.env.example
 
+# Generated .d.ts (LIBRARY_CONVENTIONS §2: built on publish, never committed)
+/packages/chiproof/types/
+
 # Editor / OS
 .idea/
 .vscode/
