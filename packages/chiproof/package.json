@@ -1,7 +1,12 @@
 {
   "name": "chiproof",
   "version": "0.0.0",
-  "description": "Name reservation — not usable yet. Verifier SDK for attested, windowed disclosure from ICAO 9303 chip documents. Part of the zkagent project.",
+  "description": "Verifier SDK for attested, windowed disclosure from ICAO 9303 chip documents. Part of the zkagent project. Pre-M1: only the verdict/challenge core (bucket B1) exists so far.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
   "license": "Apache-2.0",
   "author": "hamr0",
   "repository": {
@@ -23,7 +28,12 @@
   "engines": {
     "node": ">=20"
   },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {},
   "files": [
-    "README.md"
+    "README.md",
+    "src/"
   ]
 }
