@@ -115,6 +115,8 @@ Several existing projects reportedly already build (b) over passport chips: **zk
 
 Only two things a site can ever actually trust: **the code that produced the answer** (which leads to a central voucher) or **the math of the answer itself** (which leads to ZK circuits). There is no third option that avoids both.
 
+Component-level facts behind the math-grade row are in [zk-due-diligence.md](zk-due-diligence.md) (2026-08-30).
+
 ---
 
 ## 8. Play Integrity in simple terms
@@ -158,6 +160,8 @@ The two Android routes have opposite failure modes: Play Integrity is inclusive 
 
 ## 10. Where this leaves Q23, and the decision taken 2026-08-30
 
+Decision taken 2026-08-30: see §14.
+
 The owner's actual goal, stated in §1, is the math-grade row of §7's table. Decision taken 2026-08-30:
 
 **Primary spike: ZK-passport feasibility.** Survey the candidate libraries named in §6 → capture the raw DG1+SOD and the SOD's actual signature algorithms off the owner's US passport and NL identity card → attempt a desktop-side proof on the owner's Linux machine → only then measure on-phone proving time.
@@ -175,6 +179,8 @@ The owner's actual goal, stated in §1, is the math-grade row of §7's table. De
 
 Any one of these failing is a **finding**, to be recorded honestly, not a setback to be argued around — and if it fails, honor-grade (§7, column 1) remains the fallback, exactly as it already is in the PRD.
 
+**Update 2026-08-30 (late)**: Play Integrity passed the cross-site bar on the Pixel 6a; the ZK composition verified on desktop for both documents (~16 s, 546 MB, 59 KB); no phone proving number yet (no Android bb binary is published; WASM is ~2.2× native); due diligence recorded separately. Q23 decision still open.
+
 ---
 
 ## 11. Claims we may make today
@@ -186,3 +192,96 @@ Stated precisely, so nothing here gets rounded up:
 - **Same-site recognition exists only in tier B, and only by the site's own explicit request** (D13, D19).
 
 Claiming "zero-knowledge" for any of this today is an overclaim, and the design document already says so plainly (`zkagent-design.md` §5, "Is this zero-knowledge? No"): it does not become true until the math-grade road (§6(b), §10) actually ships and is measured.
+
+---
+
+## 12. Three layers — who builds what
+
+Any ZK-passport system splits into three layers, and only one of them is ours to build:
+
+| Layer | What it is | Examples | Do we build it? |
+|---|---|---|---|
+| **1. Engine** | Proof machinery — turns a computation into a proof, and checks a proof (e.g. `bb verify`) | longfellow-zk (Google), Barretenberg/Noir (Aztec) | **Never** — years of cryptography |
+| **2. Circuits** | The specific computation written for the engine: check RSA signatures, hash DG1, compare birthdate | zkPassport's Noir circuits, Rarimo's | **Not by default** — a few hundred lines, but every line must be right or the proof lies silently; whoever writes it needs an audit |
+| **3. Product verifier** | Normal code: issue the nonce, call the engine's verify, check scope/threshold/trust list, return `{ok, allowed}` | 8een's zk8een, our `chiproof` | **Yes — this is ours** |
+
+"Vanilla is the hole in the wall" (this project's dependency-hierarchy rule) applies to layers 1–2 only. Layer 3 does no math — it calls layer 1 the same way a browser calls a TLS library.
+
+8een is the template: longfellow-zk is layers 1+2 for 8een's use case; 8een itself is layer 3.
+
+What "the math works" means, precisely: **soundness** (nobody can make a receipt for a false statement) plus **zero-knowledge** (the receipt leaks nothing). The engine has years of research behind those two properties. The circuit is where real bugs live — an under-constrained circuit proves false things and nobody notices. Tonight's DG1-flip passing the signature-only circuit is exactly that shape, by design.
+
+---
+
+## 13. The names, sorted
+
+**Engines** (layer 1):
+
+- **longfellow-zk** (Google, IETF draft) — mDoc/mDL, JWT, VC. What 8een uses. Does **not** read passports.
+- **Noir + Barretenberg** (Aztec) — general-purpose toolkit. zkPassport's circuits are written in it.
+- **Circom + Groth16** — older toolkit. Used by Rarimo and Self.
+
+**Passport-specific ZK projects** (the math-grade road, layers 1+2+3 built by others):
+
+- **zkPassport** — Noir, Apache-2.0, chain-free verification possible; circuits open, phone app closed; acquired by Aztec Labs 2026-05-27; this is what the spike ran.
+- **Rarimo** — Circom, MIT, Halborn 2024 audit, own-chain registry.
+- **Self/OpenPassport** — Circom; Celo + Google TEE; ruled out.
+- **Anon Aadhaar** — India's Aadhaar QR, not a passport; method only.
+
+**Plain readers** (no ZK, no privacy — they show everything):
+
+- **JMRTD** — the chip library inside our M0 app.
+- **tananaev/passport-reader** — the app M0 forked.
+
+**One-line relation**: 8een = longfellow-zk + a verifier. zkagent on the math road = zkPassport circuits + a verifier. Same shape, different credential and engine.
+
+**Are we doing what they do?** On the math road, the core idea is theirs, already built — tonight's spike ran their circuits. What would be ours is what is already 8een's role: the boring, adoptable web verifier (plain Node, no chain, no token, adopter-held trust, honest claims, the tier model). Whether these projects already fill that gap with their own SDK is a market question — unchecked.
+
+---
+
+## 14. What due diligence found and the decision (D23, 2026-08-30)
+
+Summarised from [zk-due-diligence.md](zk-due-diligence.md) — read that for the full detail:
+
+- Every passport-capable engine/circuit set is pre-1.0 or unaudited.
+- Noir/Barretenberg disclosed a forged-proof soundness bug in 2026-03 (fixed v4.1.2), and a second critical bug in the v5 alpha in 2026-07.
+- No standalone UltraHonk core audit was found.
+- **zkPassport**: real users, no published audit, ordinary bug fixes including the outer/aggregation circuit, closed app, and an optional OPRF nullifier with undisclosed operators.
+- **Rarimo**: audited in 2024 but materially changed since, including an under-constrained-circuit fix and a 2026-07 RSA/SHA-1 fix; token/chain-native.
+- Writing our own circuits: an estimated 6–12 engineer-weeks (unsourced) on experimental, unaudited RSA/SHA libraries.
+- No non-crypto organisation has shipped ZK-over-passport.
+- The EU framework scopes ZK to wallet-issued credentials, not raw chip data.
+
+**The decision**: v1 stays voucher-grade (Play Integrity). D1 stands. ZK becomes **Track Z** — a named second track with written gates, none of which are met yet:
+
+1. Engine at a stable release with a published core audit.
+2. Independent audit of the exact four circuits used.
+3. Measured phone proving time under a PRD-set UX ceiling.
+4. A chain-free nullifier with known operators, or none at all.
+5. An open-source on-device prover.
+
+**What carries over unchanged when Track Z lands**: tiers (D19), signed challenges (D20), the verifier core, the trust list — only the voucher swaps out for a proof.
+
+**v1 claims, stated precisely**: no identification; nothing stable across sites; same-site recognition only in tier B, and only by request; Google decodes every check; de-Googled devices are excluded (Q24); the words "zero-knowledge" are not used for v1.
+
+**Phone proving number**: not obtained. No Android `bb` binary is published, only a static library; WASM measured roughly 2.2x native speed and 1.2x memory on desktop. The NDK harness to actually measure phone proving time is Track Z's first task.
+
+---
+
+## 15. Could longfellow be adapted instead? (asked 2026-08-30, being checked)
+
+**Convert passport to mdoc**: no. An mdoc is a credential signed by an issuer. A converted one needs a *new* signature from someone — either the phone (nobody trusts its key, which is back to attestation) or a conversion service (which sees passports and signs credentials — that service **is** an issuer, central, exactly the eIDAS-style adversary NO-GO #3 rules out).
+
+**Adapt longfellow's circuits to ICAO structures** (ASN.1 SOD instead of CBOR MSO, RSA-2048/SHA-256 instead of ECDSA P-256, DG1 hash, date compare): possible in principle. This is layer-2 work on a better-reviewed engine (Google-authored, three external reviews, IETF draft) — harder to write, since there's no circuit DSL, only C++ against the framework — and our circuits would still need their own audit regardless.
+
+**Checked 2026-08-30** (source-tree read of google/longfellow-zk, 2,689 paths): **no RSA circuit exists anywhere** (C++ or Rust); the JWT path is ES256-only; no ASN.1/DER parser; no big-integer modular exponentiation (the Rust `bignum` helper is a ~35-line bit converter); no SHA-1. Reusable: SHA-256 (`lib/circuits/sha/flatsha256_circuit.h`) and the circuit-authoring framework. Adapting longfellow to passports means writing RSA-2048/4096 verification and DER parsing from scratch in hand-written C++ against the sumcheck framework, then either upstreaming through three Google CODEOWNERS or maintaining a fork — the largest layer-2 project on the table, and our circuits would still need their own audit. Useful pattern to copy on any engine: longfellow keeps the issuer public key *outside* the circuit as a public input (`mdoc_signature.h`), so DSC→masterlist trust can be checked by plain code rather than proven in-circuit. Precedent for community credential circuits exists (an SD-JWT VC PR, ECDSA-based); passports/ICAO/RSA have never been discussed there. Status: Track Z's realistic engine remains Barretenberg (RSA circuits exist and ran tonight); longfellow is a watch item, reopened only if Google adds RSA.
+
+---
+
+## 16. Where everything lives
+
+- **Evidence**: `docs/logs/M1-POC-EVIDENCE.md` (attestation chains), `docs/logs/M1-Q23-EVIDENCE.md` (Play Integrity + ZK composition).
+- **Facts**: `docs/product/zk-due-diligence.md`.
+- **Decisions**: PRD D22, D23, Q23 (resolved), Q24.
+- **Spikes**: `spikes/m1-attest`, `spikes/m1-integrity`, `spikes/m1-zk` (`phone/` for the proving attempt).
+- **Commits**: `85d684a` (M1 POC), `c3ee545` (Q23 spikes).
