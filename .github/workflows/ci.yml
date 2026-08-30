@@ -70,19 +70,17 @@ jobs:
           const verifier = createVerifier({
             scopeDomain: 'example.com',
             challengeSecret: randomBytes(32),
-            tiers: { max: 'B' },
             stores: { nonce: new InMemoryNonceStore({ quiet: true }) },
             allowInMemoryStore: true,
           });
 
-          const challenge = verifier.issueChallenge({ tier: 'B', ttlMs: 60_000 });
+          const challenge = verifier.issueChallenge({ tier: 'A', ttlMs: 60_000 });
 
           const verdict = await verifier.verify({
             spec: 'zkagent/1',
-            tier: 'B',
+            tier: 'A',
             claim: { over_threshold: true, threshold: 18 },
             challenge,
-            zktag: 'deadbeef',
           });
           if (verdict.ok !== true) throw new Error(String(verdict.reason));
           console.log(verdict.allowed);
