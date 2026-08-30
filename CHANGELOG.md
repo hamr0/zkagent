@@ -5,9 +5,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
-- `zkagent@0.0.1` placeholder staged under packages/zkagent-placeholder —
-  corrects the 0.0.0 MIT mislicense to Apache-2.0 (NO-GO #8); published via
-  publish.yml's new package input.
 - **`chiproof` M1 verifier core (buckets B1–B4) implemented and tested — 116/116
   passing, zero runtime deps.** Spec: `docs/product/m1-verifier-core-spec.md`.
   B1: the `ok`/`allowed` verdict invariant (`src/verdict.js`) structurally
