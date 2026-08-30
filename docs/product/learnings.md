@@ -256,6 +256,16 @@ than resolved here.
   that package is blocked until it is licensed. → source: `packages/chiproof/NOTICE`;
   `packages/chiproof/src/plugs/zk-passport.js` header comment.
 
+- **2026-08-30 — a ZK proof's circuit variant is a cross-site bucket that no wire-format change
+  can hide.** M1b (`logs/M1B-EVIDENCE.md` §4–§5) found every salted commitment, nullifier and
+  subscope fresh per `zk-passport/1` presentation, but `dsc.vk_sha256`/`id_data.vk_sha256` — the
+  DSC circuit's TBS-length/key-size/hash class — are stable per document and differ NL vs US.
+  Leak-closure spikes confirmed dropping the field doesn't help: with more than one pinned key the
+  plug fails closed (`zk_unknown_circuit`) rather than hiding the class, and a verifier trying
+  pinned keys against the proof recovers it deterministically in ~50–90 ms; the raw proof bytes
+  themselves carried no separate NL/US fingerprint. → source: `logs/M1B-EVIDENCE.md`;
+  `product/zkagent-prd.md` D26.
+
 ## 4. Protocol and design
 
 - **2026-08-03 — RFC 9421 was cited five times in the repo as an assumption and had never been
