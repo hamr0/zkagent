@@ -1,0 +1,22 @@
+zkagent
+Copyright 2026 hamr
+
+Licensed under the Apache License 2.0 (see LICENSE).
+
+Third-party and ported code:
+
+  1. 8een (https://github.com/hamr0/8een, Apache-2.0, same author) — the
+     challenge nonce, single-use spend, verdict, and in-memory store patterns
+     are ported into packages/chiproof (challenge.js, verdict.js,
+     stores/memory.js).
+
+  2. zkPassport circuits (https://github.com/zkpassport/circuits,
+     Apache-2.0) — packages/chiproof/src/plugs/zk-passport-params.json is
+     derived by executing their age circuit's Poseidon2 parameter
+     commitment. The `service_scope`/`service_subscope` field rule used by
+     packages/chiproof/src/plugs/zk-passport.js is defined by this project
+     (FR12 registry, `zk-passport/1`) and is deliberately interoperable with
+     the field derivation used by zkPassport's tooling, established by
+     checking our derivation against the public inputs of real proofs
+     (spikes/m1-zk). No code from `@zkpassport/utils` is included; that
+     package declares no license.
