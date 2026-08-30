@@ -145,6 +145,10 @@ jobs:
           });
 
           const challenge = verifier.issueChallenge({ tier: 'A', ttlMs: 60_000 });
+          const nonce: string = challenge.nonce;
+
+          // @ts-expect-error tier must be 'A'|'B'|'C'
+          verifier.issueChallenge({ tier: 'Z', ttlMs: 60_000 });
 
           const verdict = await verifier.verify({
             spec: 'zkagent/1',
@@ -153,7 +157,7 @@ jobs:
             challenge,
           });
           if (verdict.ok !== true) throw new Error(String(verdict.reason));
-          console.log(verdict.allowed);
+          console.log(verdict.allowed, nonce);
           TS
           # ── end PER-REPO ──
           npm install --no-audit --no-fund /tmp/pkg/*.tgz typescript @types/node
