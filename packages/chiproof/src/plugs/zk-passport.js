@@ -38,8 +38,12 @@
  * Registry rule `zk-passport/1`: subscopeFromNonce(nonce) = the first 31 bytes
  * of sha256(utf8 nonce), big-endian, as a Field (< 2^248, so always below the
  * BN254 modulus). scopeField(domain) is the same construction over the domain
- * string — which is exactly `getScopeHash()` in `@zkpassport/utils` 0.37.4,
- * reproduced here rather than imported (zero deps).
+ * string. The `service_scope`/`service_subscope` field rule is defined by
+ * this project (FR12 registry, `zk-passport/1`) and is deliberately
+ * interoperable with the field derivation used by zkPassport's tooling,
+ * established by checking our derivation against the public inputs of real
+ * proofs (spikes/m1-zk). No code from `@zkpassport/utils` is included; that
+ * package declares no license.
  */
 import { createHash } from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
