@@ -340,3 +340,101 @@ test('verdict.evidence: [] in bare mode; only checked types listed when several 
 test('createVerifier requires scopeDomain', () => {
   assert.throws(() => makeVerifier({}, { scopeDomain: undefined }), /scopeDomain/);
 });
+
+// ---------------------------------------------------------------------------
+// F4 bounds: enforced before any plug runs (spy counts verify() calls).
+// ---------------------------------------------------------------------------
+
+function spyPlug() {
+  const calls = [];
+  return {
+    calls,
+    plug: { binds: { nonce: true, claim: true, scope: true }, linkability: 'none', tierCeiling: 'C',
+      verify(it) { calls.push(it); return { ok: true, valid: true, reason: 'spy_ok' }; } },
+  };
+}
+
+test('F4 duplicate: the same type/version twice is evidence_duplicate and no plug runs; once passes', async () => {
+  const { calls, plug } = spyPlug();
+  const v = makeVerifier({ accept: ['spy/1'], plugs: { 'spy/1': plug } });
+  const c1 = v.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  const dup = await v.verify(presentationFor(c1, { evidence: [item('spy'), item('spy')] }), { now: T0 });
+  assert.equal(dup.allowed, false);
+  assert.equal(dup.reason, 'evidence_duplicate');
+  assert.equal(calls.length, 0, 'no plug may run on a refused presentation');
+
+  const c2 = v.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  const single = await v.verify(presentationFor(c2, { evidence: [item('spy')] }), { now: T0 });
+  assert.equal(single.allowed, true);
+  assert.equal(calls.length, 1);
+});
+
+test('F4 maxItems: default 4 -- five items refused before any plug runs, four pass; configurable to 1', async () => {
+  const { calls, plug } = spyPlug();
+  const v = makeVerifier({ accept: ['spy/1'], plugs: { 'spy/1': plug } });
+  const five = ['a', 'b', 'c', 'd', 'e'].map((t) => item(t));
+  const c1 = v.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  const tooMany = await v.verify(presentationFor(c1, { evidence: [...five.slice(0, 4), item('spy')] }), { now: T0 });
+  assert.equal(tooMany.reason, 'evidence_too_many');
+  assert.equal(calls.length, 0);
+
+  const c2 = v.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  const four = await v.verify(presentationFor(c2, { evidence: [...five.slice(0, 3), item('spy')] }), { now: T0 });
+  assert.equal(four.allowed, true);
+  assert.equal(calls.length, 1);
+
+  const strict = makeVerifier({ accept: ['spy/1'], plugs: { 'spy/1': spyPlug().plug }, maxItems: 1 });
+  const c3 = strict.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  assert.equal((await strict.verify(presentationFor(c3, { evidence: [item('x'), item('spy')] }), { now: T0 })).reason, 'evidence_too_many');
+  const c4 = strict.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  assert.equal((await strict.verify(presentationFor(c4, { evidence: [item('spy')] }), { now: T0 })).allowed, true);
+});
+
+test('F4 maxItemBytes: an oversized item is evidence_too_large before any plug runs; within the cap passes', async () => {
+  const { calls, plug } = spyPlug();
+  const v = makeVerifier({ accept: ['spy/1'], plugs: { 'spy/1': plug }, maxItemBytes: 200 });
+  const c1 = v.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  const big = await v.verify(presentationFor(c1, { evidence: [item('spy', 1, { blob: 'x'.repeat(300) })] }), { now: T0 });
+  assert.equal(big.reason, 'evidence_too_large');
+  assert.equal(calls.length, 0);
+
+  const c2 = v.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  const small = await v.verify(presentationFor(c2, { evidence: [item('spy', 1, { blob: 'x'.repeat(50) })] }), { now: T0 });
+  assert.equal(small.allowed, true);
+  assert.equal(calls.length, 1);
+});
+
+test('F4 config: maxItems / maxItemBytes must be integers >= 1', () => {
+  assert.throws(() => makeVerifier({ maxItems: 0 }), TypeError);
+  assert.throws(() => makeVerifier({ maxItems: 1.5 }), TypeError);
+  assert.throws(() => makeVerifier({ maxItemBytes: -1 }), TypeError);
+  assert.doesNotThrow(() => makeVerifier({ maxItems: 1, maxItemBytes: 1 }));
+});
+
+// F2: recognised-but-unlisted items are still subject to linkability/ceiling.
+test('F2: a registered but unlisted device-class item is refused at tier A, ignored (and allowed) at tier B', async () => {
+  const v = makeVerifier({ plugs: { 'dev/1': deviceClass } }); // registered, in neither require nor accept
+  const cA = v.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  const atA = await v.verify(presentationFor(cA, { evidence: [item('dev')] }), { now: T0 });
+  assert.equal(atA.reason, 'evidence_forbidden_at_tier_a');
+
+  const cB = v.issueChallenge({ tier: 'B', ttlMs: 60_000, now: T0 });
+  const atB = await v.verify(presentationFor(cB, { evidence: [item('dev')] }), { now: T0 });
+  assert.equal(atB.allowed, true);
+  assert.deepEqual(atB.evidence, [], 'unlisted means not verified and not claimed');
+});
+
+// F1: plug warnings ride through onto the verdict without changing it.
+test('F1: plug warnings are passed through as verdict.warnings; absent when none', async () => {
+  const warner = { binds: { nonce: true, claim: true, scope: true }, linkability: 'none', tierCeiling: 'C',
+    verify() { return { ok: true, valid: true, reason: 'ok', warnings: ['tmpdir_cleanup_failed'] }; } };
+  const v = makeVerifier({ require: ['w/1'], plugs: { 'w/1': warner } });
+  const c = v.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  const out = await v.verify(presentationFor(c, { evidence: [item('w')] }), { now: T0 });
+  assert.equal(out.allowed, true);
+  assert.deepEqual(out.warnings, ['tmpdir_cleanup_failed']);
+
+  const quiet = makeVerifier({ require: ['adv/1'], plugs: { 'adv/1': alwaysValid() } });
+  const c2 = quiet.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  assert.equal('warnings' in await quiet.verify(presentationFor(c2, { evidence: [item('adv')] }), { now: T0 }), false);
+});

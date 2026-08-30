@@ -180,3 +180,61 @@ test('max_scan_age: a tiny allowance refuses the re-proved scan as zk_scan_too_o
   const generous = await p.verify(item(A.docs.nl.stages), ctxFor('nl', { maxScanAge: 365 * 24 * 3600 * 1000 }));
   assert.equal(generous.valid, true);
 });
+
+// ---------------------------------------------------------------------------
+// F3 / F1: bb failure classification and temp-dir cleanup, with fake bb
+// scripts (each prints 5.0.0 for --version so registration passes).
+// ---------------------------------------------------------------------------
+
+function fakeBb(dir, body) {
+  const path = join(dir, 'bb');
+  writeFileSync(path, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 5.0.0; exit 0; fi\n${body}\n`);
+  chmodSync(path, 0o755);
+  return path;
+}
+
+test('F3: a bb that exceeds timeoutMs (killed by signal) is ok:false zk_bb_unavailable, not a no', { skip }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'chiproof-fakebb-'));
+  try {
+    const p = plug({ bbPath: fakeBb(dir, 'sleep 5; exit 0'), timeoutMs: 200 });
+    const r = await p.verify(item(A.docs.nl.stages), ctxFor('nl'));
+    assert.equal(r.ok, false);
+    assert.equal(r.valid, null);
+    assert.equal(r.reason, 'zk_bb_unavailable');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('F3: a bb that exits 1 with its own stderr is valid:false zk_proof_invalid with the detail captured', { skip }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'chiproof-fakebb-'));
+  try {
+    const p = plug({ bbPath: fakeBb(dir, 'echo "Proof verification failed" >&2; exit 1') });
+    const r = await p.verify(item(A.docs.nl.stages), ctxFor('nl'));
+    assert.equal(r.ok, true);
+    assert.equal(r.valid, false);
+    assert.equal(r.reason, 'zk_proof_invalid');
+    assert.equal(r.stage, 'dsc', 'first failing stage in STAGES order, whatever settled first');
+    assert.match(r.detail, /verification failed/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('F3: registration rejects a non-positive timeoutMs', () => {
+  assert.throws(() => zkPassport({ bbPath: BB_PATH, vks: {}, threshold: 18, timeoutMs: 0 }), /timeoutMs/);
+});
+
+test('F1: when the temp dir cannot be removed the verdict stands and warnings:[tmpdir_cleanup_failed] is set (deterministic: fake bb makes the parent read-only)', { skip: skip || process.getuid?.() === 0 }, async () => {
+  const base = mkdtempSync(join(tmpdir(), 'chiproof-tmpbase-'));
+  const fake = mkdtempSync(join(tmpdir(), 'chiproof-fakebb-'));
+  try {
+    // While "verifying", the fake bb strips write permission from the base
+    // dir, so unlinking the plug's mkdtemp child inside it must fail (EACCES).
+    const p = plug({ bbPath: fakeBb(fake, `chmod 555 "${base}"; exit 0`), tmpDir: base });
+    const r = await p.verify(item(A.docs.nl.stages), ctxFor('nl'));
+    assert.equal(r.ok, true);
+    assert.equal(r.valid, true);
+    assert.deepEqual(r.warnings, ['tmpdir_cleanup_failed']);
+  } finally {
+    chmodSync(base, 0o755);
+    rmSync(base, { recursive: true, force: true });
+    rmSync(fake, { recursive: true, force: true });
+  }
+});

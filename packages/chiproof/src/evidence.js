@@ -17,6 +17,7 @@
  * `ok:false` — a broken plug is not evidence about a person.
  */
 import { cannotCheck, realNo } from './verdict.js';
+import { canonicalize } from './canonical.js';
 
 const LINKABILITY = new Set(['none', 'signer', 'device']);
 const TIER_ORDER = Object.freeze({ A: 0, B: 1, C: 2 });
@@ -76,12 +77,13 @@ export function itemKey(item) {
 }
 
 /**
- * Route presented evidence through the registry. Returns `{ verified }` (the
- * registry keys actually checked, in presentation order) when every applicable
+ * Route presented evidence through the registry. Returns `{ verified, warnings }`
+ * (the registry keys actually checked, in presentation order, and any plug
+ * warnings) when every applicable
  * item verified and every required type was present; otherwise a verdict built
  * through the verdict.js factories.
  *
- * @param {{registry: EvidenceRegistry, require: string[], accept: string[]}} slot
+ * @param {{registry: EvidenceRegistry, require: string[], accept: string[], maxItems: number, maxItemBytes: number}} slot
  * @param {unknown[]} items  presentation.evidence (already known to be an array)
  * @param {'A'|'B'|'C'} tier presented tier
  * @param {object} ctx       plug ctx per §4: { nonce, claim, tier, scopeDomain, masterlistRoot, trustedClients, now }
@@ -90,12 +92,22 @@ export async function routeEvidence(slot, items, tier, ctx) {
   const presentedRank = tierRank(tier);
   const checked = new Set(slot.require.concat(slot.accept));
   const seen = new Set();
+  const keys = new Set();
   const toVerify = [];
+
+  // Bounds (F4): the slot limits its own untrusted input BEFORE any plug runs,
+  // so a presentation cannot buy N plug verifications for the price of one.
+  if (items.length > slot.maxItems) return realNo('evidence_too_many');
 
   for (const item of items) {
     if (!isPlainObject(item)) return realNo('evidence_item_malformed');
     const key = itemKey(item);
     if (key === null) return realNo('evidence_item_malformed');
+    let size;
+    try { size = Buffer.byteLength(canonicalize(item), 'utf8'); } catch { return realNo('evidence_item_malformed'); }
+    if (size > slot.maxItemBytes) return realNo('evidence_too_large');
+    if (keys.has(key)) return realNo('evidence_duplicate');
+    keys.add(key);
     const plug = slot.registry.get(key);
     if (!plug) continue; // unknown types are ignored (§4)
     if (tier === 'A' && plug.linkability !== 'none') return realNo('evidence_forbidden_at_tier_a');
@@ -109,6 +121,7 @@ export async function routeEvidence(slot, items, tier, ctx) {
     if (!seen.has(req)) return realNo('evidence_required_missing');
   }
 
+  const warnings = [];
   for (const [key, plug, item] of toVerify) {
     let result;
     try {
@@ -125,6 +138,9 @@ export async function routeEvidence(slot, items, tier, ctx) {
       if (typeof result.expiresAt !== 'number' || !Number.isFinite(result.expiresAt)) return cannotCheck('evidence_plug_failed');
       if (ctx.now > result.expiresAt) return realNo('evidence_expired');
     }
+    if (Array.isArray(result.warnings)) {
+      for (const w of result.warnings) if (typeof w === 'string') warnings.push(w);
+    }
   }
-  return { verified: toVerify.map(([key]) => key) };
+  return { verified: toVerify.map(([key]) => key), warnings };
 }

@@ -43,8 +43,7 @@
  */
 import { createHash } from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdtemp, rm, writeFile, readFileSync } from 'node:fs';
-import { promises as fsp } from 'node:fs';
+import { readFileSync, promises as fsp } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -75,10 +74,14 @@ function invalid(reason) { return { ok: true, valid: false, reason }; }
  * @param {{
  *   bbPath: string,
  *   vks: {dsc: string|string[], id_data: string|string[], integrity: string|string[], age: string|string[]},
- *   threshold: number,
+ *   threshold: number, timeoutMs?: number, tmpDir?: string,
  * }} opts
  */
-export function zkPassport({ bbPath, vks, threshold } = {}) {
+export function zkPassport({ bbPath, vks, threshold, timeoutMs = 60_000, tmpDir = tmpdir() } = {}) {
+  if (!(typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0)) {
+    throw new TypeError('zk-passport/1: timeoutMs must be a positive number');
+  }
+  if (typeof tmpDir !== 'string' || tmpDir.length === 0) throw new TypeError('zk-passport/1: tmpDir must be a path');
   if (typeof bbPath !== 'string' || bbPath.length === 0) {
     throw new TypeError('zk-passport/1: registration needs an explicit bbPath (bb is never searched on PATH)');
   }
@@ -164,34 +167,48 @@ export function zkPassport({ bbPath, vks, threshold } = {}) {
         return invalid('zk_scan_too_old');
       }
 
-      // --- the proofs themselves ---------------------------------------------
+      // --- the proofs themselves: four bb runs in parallel, reported in
+      // STAGES order so the first failing stage is deterministic ------------
       let dir;
+      const warnings = [];
       try {
-        dir = await fsp.mkdtemp(join(tmpdir(), 'chiproof-zk-'));
-        for (const st of STAGES) {
-          const proofPath = join(dir, `${st}.proof`);
-          const piPath = join(dir, `${st}.public_inputs`);
-          await fsp.writeFile(proofPath, d[st].proof);
-          await fsp.writeFile(piPath, d[st].pi);
-          try {
-            await execFileP(bbPath, ['verify', '-k', d[st].vk, '-p', proofPath, '-i', piPath], { timeout: 60_000 });
-          } catch (e) {
-            // A non-zero exit is bb's verdict (a real no); anything else --
-            // ENOENT, a signal, a timeout -- is the verifier being broken.
-            if (typeof e.code === 'number' && e.code > 0 && !e.killed) {
-              const detail = String(e.stderr ?? '').split('\n').map((l) => l.trim())
-                .find((l) => /fail|error|invalid/i.test(l))?.slice(0, 200);
-              return { ok: true, valid: false, reason: 'zk_proof_invalid', stage: st, detail };
-            }
-            return { ok: false, valid: null, reason: 'zk_bb_unavailable' };
-          }
-        }
+        dir = await fsp.mkdtemp(join(tmpDir, 'chiproof-zk-'));
       } catch {
         return { ok: false, valid: null, reason: 'zk_bb_unavailable' };
-      } finally {
-        if (dir) await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
       }
-      return { ok: true, valid: true, reason: 'zk_verified' };
+      let outcomes;
+      try {
+        outcomes = await Promise.all(STAGES.map(async (st) => {
+          const proofPath = join(dir, `${st}.proof`);
+          const piPath = join(dir, `${st}.public_inputs`);
+          try {
+            await fsp.writeFile(proofPath, d[st].proof);
+            await fsp.writeFile(piPath, d[st].pi);
+            await execFileP(bbPath, ['verify', '-k', d[st].vk, '-p', proofPath, '-i', piPath], { timeout: timeoutMs });
+            return { st, ok: true };
+          } catch (e) {
+            // Only a clean non-zero exit is bb's own verdict (a real no). A
+            // signal, a kill (timeout), a spawn failure (string code such as
+            // ENOENT) or a filesystem error is the verifier being broken.
+            const cleanExit = typeof e?.code === 'number' && e.code > 0 && !e.killed && !e.signal;
+            if (!cleanExit) return { st, ok: false, unavailable: true };
+            const detail = String(e.stderr ?? '').split('\n').map((l) => l.trim())
+              .find((l) => /fail|error|invalid/i.test(l))?.slice(0, 200);
+            return { st, ok: false, invalid: true, detail };
+          }
+        }));
+      } finally {
+        try {
+          await fsp.rm(dir, { recursive: true, force: true, maxRetries: 3 });
+        } catch {
+          warnings.push('tmpdir_cleanup_failed');
+        }
+      }
+      for (const o of outcomes) { // STAGES order
+        if (o.unavailable) return { ok: false, valid: null, reason: 'zk_bb_unavailable' };
+        if (o.invalid) return { ok: true, valid: false, reason: 'zk_proof_invalid', stage: o.st, detail: o.detail, ...(warnings.length ? { warnings } : {}) };
+      }
+      return { ok: true, valid: true, reason: 'zk_verified', ...(warnings.length ? { warnings } : {}) };
     },
   });
 }

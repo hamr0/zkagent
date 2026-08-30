@@ -48,7 +48,7 @@ function isPlainObject(v) {
  *   threshold?: number, tiers?: {max: 'A'|'B'|'C'},
  *   trustedChallengeIssuers?: {pubkey: unknown, key_id: string, maxTier: 'A'|'B'|'C'}[],
  *   trustedClients?: {name?: string, package: string, certDigest: string, specVersion?: string}[],
- *   evidence?: {require?: string[], accept?: string[], plugs?: Record<string, object>},
+ *   evidence?: {require?: string[], accept?: string[], plugs?: Record<string, object>, maxItems?: number, maxItemBytes?: number},
  *   scopeDomain: string, masterlistRoot?: string,
  *   allowInMemoryStore?: boolean,
  * }} config
@@ -115,7 +115,15 @@ export function createVerifier(config) {
     }
     return Object.freeze([...list]);
   };
-  const slot = Object.freeze({ registry, require: listOf('require'), accept: listOf('accept') });
+  const bound = (name, dflt) => {
+    const v = ev[name] === undefined ? dflt : ev[name];
+    if (!Number.isInteger(v) || v < 1) throw new TypeError(`createVerifier: config.evidence.${name} must be an integer >= 1, got ${v}`);
+    return v;
+  };
+  const slot = Object.freeze({
+    registry, require: listOf('require'), accept: listOf('accept'),
+    maxItems: bound('maxItems', 4), maxItemBytes: bound('maxItemBytes', 262_144),
+  });
 
   const settled = Object.freeze({
     challengeSecret: config.challengeSecret, threshold, maxTier, trustedChallengeIssuers, trustedClients, nonceStore,
@@ -241,7 +249,8 @@ async function verifyInner(settled, presentation, ctx) {
   if (routed.ok !== undefined) return routed; // a verdict: refused or could not check
 
   const reason = settled.slot.require.length === 0 ? 'no-evidence-required' : 'evidence-verified';
+  const extra = routed.warnings.length > 0 ? { warnings: routed.warnings } : {};
   return tier === 'A'
-    ? yes({ tier, reason, evidence: routed.verified })
-    : yes({ tier, zktag, reason, evidence: routed.verified });
+    ? yes({ tier, reason, evidence: routed.verified, ...extra })
+    : yes({ tier, zktag, reason, evidence: routed.verified, ...extra });
 }

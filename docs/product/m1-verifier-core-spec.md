@@ -44,11 +44,12 @@ createVerifier(config) → { issueChallenge(opts), verify(presentation, ctx) }
 `verify()` returns:
 
 ```
-{ ok, allowed, reason, tier?, zktag?, evidence? }
+{ ok, allowed, reason, tier?, zktag?, evidence?, warnings? }
 ```
 
 `tier`/`zktag`/`evidence` only on `allowed:true`; `evidence` lists the
-`type/version` keys actually verified (`[]` in bare mode).
+`type/version` keys actually verified (`[]` in bare mode). `warnings?` carries
+non-fatal plug notes (e.g. `tmpdir_cleanup_failed`) without changing the verdict.
 
 **The §3 invariant applies**: `ok:false ⇒ allowed:null`, never `false`.
 
@@ -102,7 +103,7 @@ item's expiry.
 }
 ```
 
-**Verdict:** `{ ok, allowed, reason, tier?, zktag?, evidence? }` (§2). `tier`/`zktag`/`evidence` only on `allowed:true`.
+**Verdict:** `{ ok, allowed, reason, tier?, zktag?, evidence?, warnings? }` (§2). `tier`/`zktag`/`evidence` only on `allowed:true`.
 
 ## 4. Evidence slot (D24)
 
@@ -128,8 +129,20 @@ verifyEvidence(item, ctx) → { ok, valid, reason }
 - `require` evidence types must be present and valid or the presentation is
   refused.
 - `accept` evidence types are checked if present.
-- Unknown evidence types are ignored.
+- Unknown evidence types are ignored — *unknown* means not registered; a
+  registered type that is in neither `require` nor `accept` is still
+  *recognised*, so its linkability class and tier ceiling are enforced (a
+  device-class item at tier A leaks by its mere presence) even though it is
+  not verified or listed in `evidence`.
 - Tier A refuses any evidence type other than `'none'`.
+
+**Bounds** (the slot limits its own untrusted input before any plug runs):
+- duplicate `type/version` keys in `presentation.evidence` →
+  `evidence_duplicate`;
+- more than `config.evidence.maxItems` items (integer ≥ 1, default 4) →
+  `evidence_too_many`;
+- an item whose canonical JSON exceeds `config.evidence.maxItemBytes`
+  (default 262144) → `evidence_too_large`.
 
 **Fault isolation:** a throwing plug is caught and mapped to `ok:false`
 (never `allowed:false`) — the §3 invariant extended to the evidence slot: a
