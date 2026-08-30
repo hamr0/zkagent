@@ -129,6 +129,11 @@ abstract class MainActivity : AppCompatActivity() {
             Thread { M1AttestProbe.runAndReport() }.start()
         }
 
+        // M1 POC spike trigger — throwaway, see M1IntegrityProbe.kt.
+        findViewById<View>(R.id.button_m1_integrity_probe).setOnClickListener {
+            Thread { M1IntegrityProbe.runAndReport(applicationContext) }.start()
+        }
+
         passportNumberView.setText(preferences.getString(KEY_PASSPORT_NUMBER, null))
         expirationDateView.setText(preferences.getString(KEY_EXPIRATION_DATE, null))
         birthDateView.setText(preferences.getString(KEY_BIRTH_DATE, null))
@@ -290,12 +295,19 @@ abstract class MainActivity : AppCompatActivity() {
                 accessProtocol = if (paceSucceeded) "PACE" else "BAC"
 
                 val dg1In = service.getInputStream(PassportService.EF_DG1)
-                dg1File = DG1File(dg1In)
+                val dg1Encoded = IOUtils.toByteArray(dg1In)
+                dg1File = DG1File(ByteArrayInputStream(dg1Encoded))
                 Log.i(TAG, "M0 stage: DG1 read")
                 val sodIn = service.getInputStream(PassportService.EF_SOD)
-                sodFile = SODFile(sodIn)
+                val sodEncoded = IOUtils.toByteArray(sodIn)
+                sodFile = SODFile(ByteArrayInputStream(sodEncoded))
                 Log.i(TAG, "M0 stage: SOD read")
                 timeline.mark("dg1_and_sod_read")
+
+                // M1 POC spike fixture capture — throwaway, see M1SodProbe.kt.
+                // Raw DG1/SOD bytes carry PII (MRZ) and are written only to the
+                // app's private external files dir; never logged, never in git.
+                M1SodProbe.saveFixturesAndReport(applicationContext, dg1Encoded, sodEncoded, dg1File, sodFile)
 
                 doChipAuth(service)
                 timeline.mark("chip_auth_probed")

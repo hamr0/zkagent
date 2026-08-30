@@ -1,0 +1,14 @@
+{
+  "name": "m1-zk-run",
+  "private": true,
+  "version": "0.0.0",
+  "type": "commonjs",
+  "dependencies": {
+    "@zkpassport/utils": "0.37.4",
+    "@zkpassport/poseidon2": "^0.6.1",
+    "@noir-lang/noir_js": "1.0.0-beta.22",
+    "@aztec/bb.js": "5.0.0",
+    "@peculiar/asn1-schema": "*",
+    "@peculiar/asn1-x509": "*"
+  }
+}

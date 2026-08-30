@@ -37,3 +37,8 @@ captures/
 *.dg14
 *.dg15
 spikes/m1-attest/fixtures/real/
+spikes/m1-integrity/fixtures/real/
+spikes/m1-zk/fixtures/real/
+spikes/m1-zk/vendor/
+spikes/m1-zk/out/
+spikes/m1-zk/run/node_modules/

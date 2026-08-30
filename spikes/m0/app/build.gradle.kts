@@ -1,9 +1,21 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
 }
+
+// M1 integrity POC: cloud project number stays out of source, read from a
+// gitignored local.properties key at build time instead.
+val localProperties = Properties().apply {
+    val localPropsFile = rootProject.file("local.properties")
+    if (localPropsFile.exists()) {
+        localPropsFile.inputStream().use { load(it) }
+    }
+}
+val m1IntegrityCloudProjectNumber: String =
+    localProperties.getProperty("m1.integrity.cloudProjectNumber", "")
 
 android {
     namespace = "com.tananaev.passportreader"
@@ -15,6 +27,16 @@ android {
         targetSdk = 36
         versionCode = 23
         versionName = "3.4"
+
+        buildConfigField(
+            "String",
+            "M1_INTEGRITY_CLOUD_PROJECT_NUMBER",
+            "\"$m1IntegrityCloudProjectNumber\"",
+        )
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {
@@ -73,4 +95,5 @@ dependencies {
     implementation(libs.jnbis)
     implementation(libs.bcpkix.jdk15on) // do not update
     implementation(libs.commons.io)
+    implementation("com.google.android.play:integrity:1.6.0")
 }
