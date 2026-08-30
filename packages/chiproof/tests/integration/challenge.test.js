@@ -136,11 +136,18 @@ test('extra: a signed challenge tampered with after signing fails signature veri
     tier: 'C', threshold: 18, ttlMs: 60_000, challengeSecret: SECRET, now: 1000,
     issuer: { privateKey, key_id: 'issuer-1' },
   });
-  const tampered = { ...challenge, threshold: 21 };
+  const issuers = [{ pubkey: publicKey, key_id: 'issuer-1', maxTier: 'C' }];
+  // A field edit is caught by the D20 seal before the signature is even read...
+  const edited = verifyChallenge({ ...challenge, threshold: 21 }, { now: 1000, challengeSecret: SECRET, trustedChallengeIssuers: issuers });
+  assert.equal(edited.reason, 'nonce_forged');
+  // ...so corrupt the signature itself to exercise the signature path.
+  const sig = Buffer.from(challenge.sig, 'base64');
+  sig[0] ^= 0x01;
+  const tampered = { ...challenge, sig: sig.toString('base64') };
   const result = verifyChallenge(tampered, {
     now: 1000,
     challengeSecret: SECRET,
-    trustedChallengeIssuers: [{ pubkey: publicKey, key_id: 'issuer-1', maxTier: 'C' }],
+    trustedChallengeIssuers: issuers,
   });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'signature_invalid');
@@ -159,4 +166,47 @@ test('extra: every malformed input to verifyChallenge/spendNonce is a real no, n
     assert.equal(sResult.ok, true);
     assert.equal(sResult.valid, false);
   }
+});
+
+// ---------------------------------------------------------------------------
+// D20 seal amendment (owner-approved 2026-08-30): the HMAC covers every
+// challenge field, so editing any one after minting is `nonce_forged`.
+// ---------------------------------------------------------------------------
+
+const SEAL_EDITS = [
+  ['tier', (c) => ({ ...c, tier: c.tier === 'A' ? 'B' : 'A' })],
+  ['threshold', (c) => ({ ...c, threshold: c.threshold + 3 })],
+  ['max_scan_age', (c) => ({ ...c, max_scan_age: (c.max_scan_age ?? 0) + 60_000 })],
+  ['expires_at', (c) => ({ ...c, expires_at: c.expires_at + 3_600_000 })],
+  ['verbs', (c) => ({ ...c, verbs: [...c.verbs, 'nationality-equals'] })],
+];
+
+for (const [field, edit] of SEAL_EDITS) {
+  test(`seal: editing ${field} after minting is nonce_forged; the unedited challenge is valid`, () => {
+    const challenge = issueChallenge({
+      tier: 'B', verbs: ['age'], threshold: 18, max_scan_age: 300_000, ttlMs: 60_000, challengeSecret: SECRET, now: 1000,
+    });
+    const untouched = verifyChallenge(challenge, { now: 1000, challengeSecret: SECRET });
+    assert.equal(untouched.valid, true, 'non-vacuity: the minted challenge verifies as is');
+
+    const edited = edit(challenge);
+    assert.notDeepEqual(edited[field], challenge[field], 'the edit must actually change the field');
+    const result = verifyChallenge(edited, { now: 1000, challengeSecret: SECRET });
+    assert.equal(result.ok, true);
+    assert.equal(result.valid, false);
+    assert.equal(result.reason, 'nonce_forged');
+  });
+}
+
+test('seal: a signed challenge keeps its shape and still verifies after the amendment', () => {
+  const issuer = generateKeyPairSync('ed25519');
+  const challenge = issueChallenge({
+    tier: 'C', threshold: 18, ttlMs: 60_000, challengeSecret: SECRET, now: 1000,
+    issuer: { privateKey: issuer.privateKey, key_id: 'iss' },
+  });
+  assert.deepEqual(Object.keys(challenge).sort(), ['expires_at', 'issued_at', 'key_id', 'max_scan_age', 'nonce', 'sig', 'threshold', 'tier', 'verbs']);
+  const result = verifyChallenge(challenge, {
+    now: 1000, challengeSecret: SECRET, trustedChallengeIssuers: [{ pubkey: issuer.publicKey, key_id: 'iss', maxTier: 'C' }],
+  });
+  assert.equal(result.valid, true);
 });

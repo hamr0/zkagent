@@ -4,9 +4,13 @@
  *
  * Nonce pattern ported from 8een (https://github.com/hamr0/8een `src/challenge.js`,
  * lines 34-100 `issueChallenge`/`inspectChallenge` and 166-199 `applySingleUse`,
- * Apache-2.0): the nonce is self-authenticating — `random || issued_at ||
- * HMAC(secret, random||issued_at)` — so "did we mint this, and is it internally
- * consistent?" is a recomputation, not a lookup. A forged or tampered nonce is
+ * Apache-2.0), with the D20 seal amendment (owner-approved 2026-08-30): the
+ * nonce is self-authenticating — `random || issued_at || HMAC(secret,
+ * random || issued_at || canonical({tier, verbs, threshold, max_scan_age,
+ * expires_at}))` — so "did we mint this, and is it internally consistent?" is
+ * a recomputation over the PRESENTED fields, not a lookup. An unsigned tier
+ * A/B challenge is therefore tamper-evident, not merely recognisable: editing
+ * any field after minting breaks the tag. A forged or tampered nonce is
  * rejected by `verifyChallenge` without ever touching the nonce store. The ONE
  * piece of state this module cannot avoid — "has this nonce been spent?" — lives
  * in the adopter's store (`spendNonce`, mirroring 8een's `applySingleUse`), never
@@ -60,25 +64,33 @@ function hmac(secret, payload) {
   return createHmac('sha256', secret).update(payload).digest();
 }
 
-function mintNonce(secret, issuedAt) {
+/** The sealed fields, in canonical form; throws on uncanonicalizable input. */
+function sealedFields({ tier, verbs, threshold, max_scan_age: maxScanAge, expires_at: expiresAt }) {
+  return Buffer.from(canonicalize({
+    tier, verbs, threshold, max_scan_age: maxScanAge, expires_at: expiresAt,
+  }), 'utf8');
+}
+
+function mintNonce(secret, issuedAt, fields) {
   const random = randomBytes(RANDOM_LEN);
   const issuedAtBuf = Buffer.alloc(ISSUED_AT_LEN);
   issuedAtBuf.writeBigUInt64BE(BigInt(issuedAt));
   const payload = Buffer.concat([random, issuedAtBuf]);
-  const tag = hmac(secret, payload);
+  const tag = hmac(secret, Buffer.concat([payload, sealedFields(fields)]));
   return Buffer.concat([payload, tag]).toString('base64url');
 }
 
 /**
- * Recompute whether `nonce` is one we minted with `secret`, and read back the
- * `issued_at` it encodes. Never throws — untrusted input in, a classification
- * out.
+ * Recompute whether `nonce` is one we minted with `secret` OVER THESE FIELDS,
+ * and read back the `issued_at` it encodes. Never throws — untrusted input in,
+ * a classification out.
  *
  * @param {unknown} nonce
  * @param {Buffer|Uint8Array|string} secret
+ * @param {object} fields the presented challenge (its sealed fields are read)
  * @returns {{recognized: boolean, issuedAt?: number}}
  */
-function inspectNonce(nonce, secret) {
+function inspectNonce(nonce, secret, fields) {
   try {
     assertSecret(secret);
     if (typeof nonce !== 'string' || nonce.length === 0) return { recognized: false };
@@ -86,7 +98,7 @@ function inspectNonce(nonce, secret) {
     if (buf.length !== NONCE_BYTES_LEN) return { recognized: false };
     const payload = buf.subarray(0, PAYLOAD_LEN);
     const tag = buf.subarray(PAYLOAD_LEN);
-    const expect = hmac(secret, payload);
+    const expect = hmac(secret, Buffer.concat([payload, sealedFields(fields)]));
     if (tag.length !== expect.length || !timingSafeEqual(tag, expect)) return { recognized: false };
     const issuedAt = Number(payload.readBigUInt64BE(RANDOM_LEN));
     return { recognized: true, issuedAt };
@@ -159,7 +171,6 @@ export function issueChallenge({
 
   /** @type {any} */
   const challenge = {
-    nonce: mintNonce(challengeSecret, issuedAt),
     tier,
     verbs: Array.isArray(verbs) ? verbs : [],
     threshold,
@@ -167,6 +178,8 @@ export function issueChallenge({
     issued_at: issuedAt,
     expires_at: expiresAt,
   };
+  // Seal AFTER the fields are final: the tag covers every one of them.
+  challenge.nonce = mintNonce(challengeSecret, issuedAt, challenge);
 
   if (issuer) {
     const { privateKey, key_id: keyId } = issuer;
@@ -216,11 +229,12 @@ export function verifyChallenge(challenge, {
     return { ok: false, valid: null, reason: 'clock_unavailable' };
   }
 
-  // The nonce must be ours, and its encoded issued_at must match the field the
-  // caller is presenting -- catching a challenge edited after minting. This runs
-  // BEFORE any store is touched (there is none here) and before expiry/signature
-  // checks, so a forged nonce is refused as cheaply as possible.
-  const nonceCheck = inspectNonce(nonce, challengeSecret);
+  // The nonce must be ours over the PRESENTED fields (tier, verbs, threshold,
+  // max_scan_age, expires_at), and its encoded issued_at must match the field
+  // the caller is presenting -- any edit after minting is `nonce_forged`. This
+  // runs BEFORE any store is touched (there is none here) and before
+  // expiry/signature checks, so a forged nonce is refused as cheaply as possible.
+  const nonceCheck = inspectNonce(nonce, challengeSecret, challenge);
   if (!nonceCheck.recognized || nonceCheck.issuedAt !== issuedAt) {
     return { ok: true, valid: false, reason: 'nonce_forged' };
   }

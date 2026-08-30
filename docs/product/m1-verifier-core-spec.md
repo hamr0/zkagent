@@ -151,7 +151,11 @@ Small, each works alone, each ends in a checkpoint.
   `ok:false` + `allowed:false` at the type level (mirrors 8een
   `src/verdict.js:80–92`, the `answered()` / `unanswerable()` pair).
 - `challenge.js` ported from 8een: HMAC self-authenticating nonce (8een
-  `src/challenge.js:34–100`, `issueChallenge`/`inspectChallenge`), single-use
+  `src/challenge.js:34–100`, `issueChallenge`/`inspectChallenge`) — amended so
+  the HMAC seals **all** challenge fields (`tier, verbs, threshold,
+  max_scan_age, expires_at` alongside `random ‖ issued_at`); `verifyChallenge`
+  recomputes it over the presented fields, so any edit is `nonce_forged` —
+  single-use
   spend via an adapter with an atomic `SET NX PX` shape (8een
   `src/challenge.js:166–199`, `applySingleUse`), an in-memory adapter for
   tests only that refuses to boot in production without a real store (8een
@@ -304,3 +308,6 @@ All TBDs from v0.1 are resolved. No open TBDs remain for M1.
   See §5, B1.
 - **Challenge HMAC secret (signed 2026-08-30):** lives at `config.challengeSecret`;
   `createVerifier` refuses to boot without it.
+- **D20 seal (owner-approved 2026-08-30):** the nonce HMAC covers every
+  challenge field; unsigned challenges are tamper-evident, not just
+  recognisable.
