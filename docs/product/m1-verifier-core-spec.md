@@ -44,8 +44,10 @@ createVerifier(config) → { issueChallenge(opts), verify(presentation, ctx) }
 `verify()` returns:
 
 ```
-{ ok, allowed, reason, tier, zktag? }
+{ ok, allowed, reason, tier?, zktag? }
 ```
+
+`tier`/`zktag` only on `allowed:true`.
 
 **The §3 invariant applies**: `ok:false ⇒ allowed:null`, never `false`.
 
@@ -56,7 +58,7 @@ createVerifier(config) → { issueChallenge(opts), verify(presentation, ctx) }
   threshold = 18,
   tiers: { max: 'A' | 'B' | 'C' },
   issuer: { privateKey?, publicKeys: [] },
-  trustedChallengeIssuers: [{ pubkey, maxTier }],
+  trustedChallengeIssuers: [{ pubkey, key_id, maxTier }],
   trustedClients: [{ name, package, certDigest, specVersion }],
   acceptedDocuments,
   evidence: { require: [], accept: [], plugs: {} },
@@ -97,7 +99,7 @@ item's expiry.
 }
 ```
 
-**Verdict:** `{ ok, allowed, reason, tier, zktag? }` (§2).
+**Verdict:** `{ ok, allowed, reason, tier?, zktag? }` (§2). `tier`/`zktag` only on `allowed:true`.
 
 ## 4. Evidence slot (D24)
 

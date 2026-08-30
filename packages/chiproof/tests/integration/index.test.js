@@ -78,12 +78,12 @@ test('boot (b): allowInMemoryStore:true boots outside tests and issueChallenge()
     assert.equal(challenge.threshold, 18);
     assert.equal(challenge.issued_at, T0);
 
-    const sameSecret = verifyChallenge(challenge, { now: T0, secret: SECRET });
+    const sameSecret = verifyChallenge(challenge, { now: T0, challengeSecret: SECRET });
     assert.equal(sameSecret.ok, true);
     assert.equal(sameSecret.valid, true, 'the verifier must recognise the nonce it minted');
 
     // The test can fail: a different secret must NOT recognise the nonce.
-    const otherSecret = verifyChallenge(challenge, { now: T0, secret: randomBytes(32) });
+    const otherSecret = verifyChallenge(challenge, { now: T0, challengeSecret: randomBytes(32) });
     assert.equal(otherSecret.valid, false);
     assert.equal(otherSecret.reason, 'nonce_forged');
   });

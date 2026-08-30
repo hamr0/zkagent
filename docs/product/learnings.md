@@ -224,6 +224,26 @@ than resolved here.
   exact circuits used; a measured phone-proving time under a PRD-set UX ceiling; a chain-free
   nullifier with known operators or none; an open-source on-device prover) — none met yet. → source:
   `product/zkagent-prd.md` D23; `product/zk-due-diligence.md` (plain-language risk summary).
+- **2026-08-30 (B3 checkpoint) — zkPassport age circuit cannot be nonce-bound while keeping a
+  stable nullifier.**
+  - The age circuit (`vendor/zkpassport-circuits/.../compare/age/standard/src/main.nr`) exposes
+    exactly four public inputs — `comm_in`, `current_date`, `service_scope`, `service_subscope` —
+    and returns `param_commitment`, `nullifier_type`, `nullifier`, `oprf_pk_hash`.
+  - The three earlier stages expose only `comm_in`/`comm_out`. There is no nonce input anywhere in
+    the composition.
+  - `service_subscope` is the only free public slot and it feeds `nullify()`: carry a nonce there
+    and the nullifier changes per request (no stable zktag); leave it fixed and the proof is
+    replayable within the scope until `current_date` rolls over.
+  - Threshold appears only as `Poseidon2(min_age, max_age)` (`param_commitment`); the scope
+    string→Field mapping lives in `@zkpassport/utils`.
+  - Consequence: with this circuit family a proof can be challenge-bound OR a stable pseudonym, not
+    both.
+  - Measured: `bb verify` 5.0.0 on the real NL composition ≈0.035 s total (8–11 ms per stage); a
+    flipped proof byte is rejected at deserialisation ("bad proof serde"), a flipped public-input
+    byte at the cryptographic step.
+  - Status: `zk-passport/1` plug NOT written pending owner decision (proposed: ship it tier-A-only
+    with nonce-hash in subscope; defer tier B/C ZK to Track Z as Q26). → source: `packages/chiproof`
+    (B3 coder report 2026-08-30); `spikes/m1-zk/README.md` "Full composition results".
 
 ## 4. Protocol and design
 
@@ -283,6 +303,32 @@ than resolved here.
   that person's data — letting it reach the verifier at all would be a tier-A leak. The verifier
   instead trusts the attested/evidenced client (FR10) to have done that check correctly. → source:
   `.claude/stash/m1-poc-attestation-q23.md`; §6.2 below.
+- **2026-08-30 — Mode B flow, bare vs with evidence — what attestation adds and where.**
+  - Setup: site holds `challengeSecret` (env), a nonce store, `threshold: 18`, `evidence.require: []`
+    (bare) or `["<type>/1"]`.
+  - Bare mode: (1) site→phone challenge `{nonce, tier:"B", threshold:18, expires_at}`; (2) phone
+    NFC-reads the passport and verifies the chip signature (SOD→CSCA) on the phone; (3) phone
+    computes age≥18 and derives `zktag = H(passport-stable-bits, site-scope)`; (4) phone→site
+    `{claim:{over_threshold:true, threshold:18}, challenge, zktag}`; (5) site checks spec, challenge
+    HMAC, expiry, nonce spent once, tier ≤ requested, threshold triple-equality (claim = challenge =
+    config), zktag present; (6) `allowed:true`, site remembers zktag; (7) next visit same passport →
+    same zktag, other sites see a different one. What the site trusts in step 5: that steps 2–3
+    happened — it has no evidence; anyone can send step 4 for a fresh challenge. Captcha-grade, by
+    design (D24).
+  - With evidence: steps 1–4 identical plus `evidence:[{type, version, data}]` whose data binds
+    nonce + claim + scope; step 5 then runs each required plug: `ok:false` → `allowed:null`;
+    `valid:false` → `allowed:false`; all valid → `allowed:true`.
+  - Table — type / proves / where trust moves: none / nothing / the sender; `key-attestation/1` /
+    the answer came from this signed app on this locked device / app build + Google hardware root,
+    device-linkable so tiers B/C only; `signed-receipt/1` / a party the site trusts signed
+    hash(claim)‖nonce‖scope (e.g. adopter's own Play Integrity decode) / that signer; `zk-passport/1`
+    / the math: a gov-signed passport with age≥18 exists for this nonce / nobody — offline-verifiable,
+    trust only circuit+engine (Track Z).
+  - Where attestation is not: never in zktag derivation (custody, not identity — MEMORY rule); never
+    in tier A if it carries a device identifier.
+  - One line: bare trusts the sender; attestation trusts the signer; ZK trusts the math; the
+    nonce/zktag/claim shapes are identical — only `evidence[]` differs.
+  → source: `docs/product/m1-verifier-core-spec.md` §4; PRD D24.
 
 ## 5. Process lessons
 

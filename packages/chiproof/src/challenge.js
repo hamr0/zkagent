@@ -124,9 +124,9 @@ function verifySignature(publicKey, challengeWithoutSig, sigB64) {
  *   tier: 'A'|'B'|'C', verbs?: string[], threshold: number,
  *   max_scan_age?: number|null, ttlMs: number,
  *   issuer?: {privateKey: unknown, key_id: string}|null,
- *   secret: Buffer|Uint8Array|string, now?: number,
+ *   challengeSecret: Buffer|Uint8Array|string, now?: number,
  * }} opts
- *   `secret` is the HMAC key for the self-authenticating nonce — stable across
+ *   `challengeSecret` is the HMAC key for the self-authenticating nonce — stable across
  *   restarts and shared across every replica that later calls `verifyChallenge`
  *   (a per-process secret would reject a sibling's nonces). Not listed among the
  *   challenge's own fields in the M1 spec's one-line signature, but required to
@@ -138,7 +138,7 @@ function verifySignature(publicKey, challengeWithoutSig, sigB64) {
  *   key_id?: string, sig?: string}}
  */
 export function issueChallenge({
-  tier, verbs = [], threshold, max_scan_age = null, ttlMs, issuer = null, secret, now = Date.now(),
+  tier, verbs = [], threshold, max_scan_age = null, ttlMs, issuer = null, challengeSecret, now = Date.now(),
 }) {
   if (tierRank(tier) === undefined) {
     throw new TypeError(`issueChallenge: tier must be 'A', 'B', or 'C', got ${JSON.stringify(tier)}`);
@@ -152,14 +152,14 @@ export function issueChallenge({
   if (typeof now !== 'number' || !Number.isFinite(now)) {
     throw new TypeError(`issueChallenge: now must be a finite number, got ${now}`);
   }
-  assertSecret(secret);
+  assertSecret(challengeSecret);
 
   const issuedAt = Math.floor(now);
   const expiresAt = issuedAt + Math.floor(ttlMs);
 
   /** @type {any} */
   const challenge = {
-    nonce: mintNonce(secret, issuedAt),
+    nonce: mintNonce(challengeSecret, issuedAt),
     tier,
     verbs: Array.isArray(verbs) ? verbs : [],
     threshold,
@@ -189,7 +189,7 @@ export function issueChallenge({
  * pinned issuer? Never throws.
  *
  * @param {unknown} challenge
- * @param {{now?: number, secret: Buffer|Uint8Array|string,
+ * @param {{now?: number, challengeSecret: Buffer|Uint8Array|string,
  *   trustedChallengeIssuers?: {pubkey: unknown, key_id: string, maxTier: 'A'|'B'|'C'}[],
  *   skewMs?: number}} opts
  *   `skewMs` (default 5 min) is how far `issued_at` may sit in the future before
@@ -198,7 +198,7 @@ export function issueChallenge({
  * @returns {{ok: boolean, valid: boolean|null, reason: string}}
  */
 export function verifyChallenge(challenge, {
-  now = Date.now(), secret, trustedChallengeIssuers = [], skewMs = 300_000,
+  now = Date.now(), challengeSecret, trustedChallengeIssuers = [], skewMs = 300_000,
 } = {}) {
   if (!challenge || typeof challenge !== 'object') {
     return { ok: true, valid: false, reason: 'challenge_malformed' };
@@ -220,7 +220,7 @@ export function verifyChallenge(challenge, {
   // caller is presenting -- catching a challenge edited after minting. This runs
   // BEFORE any store is touched (there is none here) and before expiry/signature
   // checks, so a forged nonce is refused as cheaply as possible.
-  const nonceCheck = inspectNonce(nonce, secret);
+  const nonceCheck = inspectNonce(nonce, challengeSecret);
   if (!nonceCheck.recognized || nonceCheck.issuedAt !== issuedAt) {
     return { ok: true, valid: false, reason: 'nonce_forged' };
   }

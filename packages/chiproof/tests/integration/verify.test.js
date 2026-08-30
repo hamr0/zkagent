@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, generateKeyPairSync } from 'node:crypto';
-import { createVerifier } from '../../src/index.js';
+import { createVerifier, issueChallenge } from '../../src/index.js';
 import { InMemoryNonceStore } from '../../src/stores/memory.js';
 
 // All key material is generated at runtime -- nothing in the tree, no PII.
@@ -65,7 +65,7 @@ test('happy: unsigned tier A presentation is allowed, verdict carries tier and n
   const c = v.issueChallenge(challengeOpts('A'));
   const out = await v.verify(presentationFor(c), { now: T0 });
   assertInvariant(out);
-  assert.deepEqual(out, { ok: true, allowed: true, reason: 'allowed', tier: 'A' });
+  assert.deepEqual(out, { ok: true, allowed: true, reason: 'no-evidence-required', tier: 'A' });
 });
 
 test('happy: signed tier C presentation with a zktag is allowed and echoes the zktag', async () => {
@@ -73,7 +73,7 @@ test('happy: signed tier C presentation with a zktag is allowed and echoes the z
   const c = v.issueChallenge(challengeOpts('C', { issuer: { privateKey: issuerC.privateKey, key_id: 'issuer-c' } }));
   const p = presentationFor(c);
   const out = await v.verify(p, { now: T0 });
-  assert.deepEqual(out, { ok: true, allowed: true, reason: 'allowed', tier: 'C', zktag: p.zktag });
+  assert.deepEqual(out, { ok: true, allowed: true, reason: 'no-evidence-required', tier: 'C', zktag: p.zktag });
 });
 
 // ---------------------------------------------------------------------------
@@ -150,7 +150,10 @@ test('MATRIX 8: a claim for threshold 21 against an 18 challenge is refused; a c
 
 test('MATRIX 8b: a challenge minted for threshold 0 is refused even with a matching claim -- config.threshold caps a leaked secret', async () => {
   const v = makeVerifier();
-  const c = v.issueChallenge(challengeOpts('A', { threshold: 0 }));
+  // The verifier's own issueChallenge refuses a foreign threshold outright (ruling 4)...
+  assert.throws(() => v.issueChallenge(challengeOpts('A', { threshold: 0 })), TypeError);
+  // ...so mint one the way a leaked-secret attacker would, with the raw function.
+  const c = issueChallenge({ ...challengeOpts('A', { threshold: 0 }), challengeSecret: SECRET });
   const out = await v.verify(presentationFor(c, { claim: { over_threshold: true, threshold: 0 } }), { now: T0 });
   assert.equal(out.allowed, false);
   assert.equal(out.reason, 'threshold_mismatch');

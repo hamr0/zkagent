@@ -1,23 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * chiproof public surface (M1 buckets B1 + B2).
+ * chiproof public surface (M1 buckets B1 + B2 + B3).
  *
  * `createVerifier(config)` validates config loudly at boot and returns
  * `{ issueChallenge, verify }`. `verify()` is the B2 core: presentation shape,
  * challenge liveness + single use, tier negotiation, threshold match (D11),
- * zktag / chip_auth presence rules, FR10 trust list. Evidence plugs (B3) are not
- * wired yet — see the marked hook in `verify()`.
+ * zktag / chip_auth presence rules, FR10 trust list, then the evidence slot (B3,
+ * `evidence.js`) with plugs registered from `config.evidence.plugs`.
  */
 export { cannotCheck, realNo, yes } from './verdict.js';
 export { canonicalize, sha256 } from './canonical.js';
 export { issueChallenge, verifyChallenge, spendNonce } from './challenge.js';
 export { InMemoryNonceStore } from './stores/memory.js';
+export { EvidenceRegistry, assertPlug, routeEvidence } from './evidence.js';
+export { signedReceipt, receiptMessage } from './plugs/signed-receipt.js';
 
 import { cannotCheck, realNo, yes } from './verdict.js';
 import {
   issueChallenge as issueChallengeImpl, verifyChallenge, spendNonce,
 } from './challenge.js';
 import { InMemoryNonceStore } from './stores/memory.js';
+import { EvidenceRegistry, routeEvidence } from './evidence.js';
 
 const SPEC = 'zkagent/1';
 const TIER_ORDER = Object.freeze({ A: 0, B: 1, C: 2 });
@@ -44,6 +47,8 @@ function isPlainObject(v) {
  *   threshold?: number, tiers?: {max: 'A'|'B'|'C'},
  *   trustedChallengeIssuers?: {pubkey: unknown, key_id: string, maxTier: 'A'|'B'|'C'}[],
  *   trustedClients?: {name?: string, package: string, certDigest: string, specVersion?: string}[],
+ *   evidence?: {require?: string[], accept?: string[], plugs?: Record<string, object>},
+ *   scopeDomain?: string, masterlistRoot?: string,
  *   allowInMemoryStore?: boolean,
  * }} config
  * @returns {{issueChallenge: (opts: object) => object,
@@ -91,12 +96,38 @@ export function createVerifier(config) {
     throw new TypeError('createVerifier: config.trustedClients must be an array');
   }
 
+  // --- evidence slot (§4): plugs registered at boot, lists must name them ---
+  const ev = config.evidence ?? {};
+  if (!isPlainObject(ev)) throw new TypeError('createVerifier: config.evidence must be an object');
+  const registry = new EvidenceRegistry();
+  const plugs = ev.plugs ?? {};
+  if (!isPlainObject(plugs)) throw new TypeError('createVerifier: config.evidence.plugs must be an object');
+  for (const [type, plug] of Object.entries(plugs)) registry.registerPlug(type, plug); // throws on a bad plug
+  const listOf = (name) => {
+    const list = ev[name] ?? [];
+    if (!Array.isArray(list)) throw new TypeError(`createVerifier: config.evidence.${name} must be an array`);
+    for (const t of list) {
+      if (!registry.has(t)) throw new TypeError(`createVerifier: config.evidence.${name} names "${t}" but no such plug is registered`);
+    }
+    return Object.freeze([...list]);
+  };
+  const slot = Object.freeze({ registry, require: listOf('require'), accept: listOf('accept') });
+
   const settled = Object.freeze({
     challengeSecret: config.challengeSecret, threshold, maxTier, trustedChallengeIssuers, trustedClients, nonceStore,
+    slot, scopeDomain: config.scopeDomain, masterlistRoot: config.masterlistRoot,
   });
 
   return Object.freeze({
-    issueChallenge: (opts) => issueChallengeImpl({ ...opts, secret: settled.challengeSecret }),
+    issueChallenge: (opts = {}) => {
+      // Ruling 2026-08-30: the verifier serves ONE threshold. A caller asking
+      // for another is a config error -- fail loud, never mint a challenge
+      // verify() would then refuse.
+      if (opts.threshold !== undefined && opts.threshold !== settled.threshold) {
+        throw new TypeError(`issueChallenge: threshold ${opts.threshold} differs from config.threshold ${settled.threshold}`);
+      }
+      return issueChallengeImpl({ ...opts, threshold: settled.threshold, challengeSecret: settled.challengeSecret });
+    },
     verify: (presentation, ctx) => verify(settled, presentation, ctx),
   });
 }
@@ -104,7 +135,7 @@ export function createVerifier(config) {
 /**
  * The B2 check pipeline, in this order (each step refuses before the next runs):
  * spec → shape → challenge (ours + live + signature) → spend nonce → tier →
- * threshold → zktag / chip_auth → trust list → [B3 evidence hook] → yes.
+ * threshold → zktag / chip_auth → trust list → evidence slot → yes.
  *
  * Never throws. Every verdict is built through the verdict.js factories, so
  * the §3 invariant (`ok:false ⇒ allowed:null`) cannot be violated from here.
@@ -146,7 +177,7 @@ async function verifyInner(settled, presentation, ctx) {
 
   // --- challenge: ours, live, signed where required -----------------------
   const ch = verifyChallenge(challenge, {
-    now, secret: settled.challengeSecret, trustedChallengeIssuers: settled.trustedChallengeIssuers,
+    now, challengeSecret: settled.challengeSecret, trustedChallengeIssuers: settled.trustedChallengeIssuers,
   });
   if (!ch.ok) return cannotCheck(ch.reason);
   if (!ch.valid) return realNo(ch.reason);
@@ -193,12 +224,16 @@ async function verifyInner(settled, presentation, ctx) {
     if (!match) return realNo('client_untrusted');
   }
 
-  // --- B3 HOOK: evidence plugs run here -----------------------------------
-  // `evidence` (already known to be an array, or absent) is otherwise ignored
-  // in B2. B3 wires `config.evidence.{require,accept,plugs}` in at this point,
-  // and may populate `ctx.clientIdentity` from evidence that carries it.
+  // --- evidence slot (§4, D24) --------------------------------------------
+  const plugCtx = Object.freeze({
+    nonce: challenge.nonce, claim, tier, scopeDomain: settled.scopeDomain,
+    masterlistRoot: settled.masterlistRoot, trustedClients: settled.trustedClients, now,
+  });
+  const refused = await routeEvidence(settled.slot, evidence ?? [], tier, plugCtx);
+  if (refused) return refused;
 
+  const reason = settled.slot.require.length === 0 ? 'no-evidence-required' : 'evidence-verified';
   return tier === 'A'
-    ? yes({ tier, reason: 'allowed' })
-    : yes({ tier, zktag, reason: 'allowed' });
+    ? yes({ tier, reason })
+    : yes({ tier, zktag, reason });
 }
