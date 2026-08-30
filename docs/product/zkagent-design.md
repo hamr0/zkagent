@@ -285,9 +285,6 @@ const verifier = new Verifier({
       certDigest: 'sha256:CC:DD:…', specVersion: 'zkagent-derivation/1' },
   ],
 
-  // ── the government trust root ────────────────────────────────
-  masterlist: './csca-masterlist.pem',
-
   // ── freshness (pseudonymous mode) ────────────────────────────
   maxScanAgeDays: 30,             // answered as one bit, never as a number of days
 

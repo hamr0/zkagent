@@ -124,6 +124,11 @@ abstract class MainActivity : AppCompatActivity() {
         mainLayout = findViewById(R.id.main_layout)
         loadingLayout = findViewById(R.id.loading_layout)
 
+        // M1 POC spike trigger — throwaway, see M1AttestProbe.kt.
+        findViewById<View>(R.id.button_m1_attest_probe).setOnClickListener {
+            Thread { M1AttestProbe.runAndReport() }.start()
+        }
+
         passportNumberView.setText(preferences.getString(KEY_PASSPORT_NUMBER, null))
         expirationDateView.setText(preferences.getString(KEY_EXPIRATION_DATE, null))
         birthDateView.setText(preferences.getString(KEY_BIRTH_DATE, null))

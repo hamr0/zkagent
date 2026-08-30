@@ -117,6 +117,14 @@
 
                 </com.google.android.material.textfield.TextInputLayout>
 
+                <!-- M1 POC spike trigger — see M1AttestProbe.kt. Throwaway. -->
+                <Button
+                    android:id="@+id/button_m1_attest_probe"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/activity_vertical_margin"
+                    android:text="M1 attest probe" />
+
             </LinearLayout>
 
         </ScrollView>
