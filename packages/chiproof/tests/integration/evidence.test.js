@@ -15,12 +15,14 @@ const T0 = 1_800_000_000_000;
 const signer = generateKeyPairSync('ed25519');
 const stranger = generateKeyPairSync('ed25519');
 const RECEIPT = 'signed-receipt/1';
+const SCOPE = 'example.test';
 
 function makeVerifier(evidence, overrides = {}) {
   return createVerifier({
     stores: { nonce: new InMemoryNonceStore({ quiet: true }) },
     allowInMemoryStore: true,
     challengeSecret: SECRET,
+    scopeDomain: 'example.test',
     threshold: 18,
     tiers: { max: 'C' },
     evidence,
@@ -43,8 +45,8 @@ function presentationFor(challenge, extra = {}) {
 }
 
 /** A receipt signed by `privateKey` over the given claim and nonce. */
-function receipt(claim, nonce, privateKey = signer.privateKey, keyId = 'k1') {
-  const sig = edSign(null, receiptMessage(claim, nonce), privateKey).toString('base64');
+function receipt(claim, nonce, privateKey = signer.privateKey, keyId = 'k1', scope = SCOPE) {
+  const sig = edSign(null, receiptMessage(claim, nonce, scope), privateKey).toString('base64');
   return { type: 'signed-receipt', version: 1, data: { key_id: keyId, sig } };
 }
 
@@ -295,4 +297,34 @@ test('ruling 4: createVerifier().issueChallenge pins threshold to config.thresho
   assert.equal(v.issueChallenge({ tier: 'A', ttlMs: 1000, now: T0 }).threshold, 18);
   assert.equal(v.issueChallenge({ tier: 'A', ttlMs: 1000, now: T0, threshold: 18 }).threshold, 18);
   assert.throws(() => v.issueChallenge({ tier: 'A', ttlMs: 1000, now: T0, threshold: 21 }), TypeError);
+});
+
+test('signed-receipt binds scope: a receipt over another scopeDomain is refused; over ours it passes', async () => {
+  const v = makeVerifier({ require: [RECEIPT], plugs: { [RECEIPT]: receiptPlug() } });
+  const c1 = v.issueChallenge({ tier: 'B', ttlMs: 60_000, now: T0 });
+  const p1 = presentationFor(c1);
+  p1.evidence = [receipt(p1.claim, c1.nonce, signer.privateKey, 'k1', 'other.example')];
+  const bad = await v.verify(p1, { now: T0 });
+  assert.equal(bad.reason, 'receipt_signature_invalid');
+
+  const c2 = v.issueChallenge({ tier: 'B', ttlMs: 60_000, now: T0 });
+  const p2 = presentationFor(c2);
+  p2.evidence = [receipt(p2.claim, c2.nonce)];
+  const good = await v.verify(p2, { now: T0 });
+  assert.equal(good.allowed, true);
+  assert.deepEqual(good.evidence, [RECEIPT], 'the verdict lists the evidence actually verified');
+});
+
+test('verdict.evidence: [] in bare mode; only checked types listed when several are presented', async () => {
+  const v = makeVerifier({ accept: [RECEIPT], plugs: { [RECEIPT]: receiptPlug(), 'adv/1': alwaysValid() } });
+  const c = v.issueChallenge({ tier: 'B', ttlMs: 60_000, now: T0 });
+  const p = presentationFor(c);
+  p.evidence = [item('mystery'), item('adv'), receipt(p.claim, c.nonce)];
+  const out = await v.verify(p, { now: T0 });
+  assert.equal(out.allowed, true);
+  assert.deepEqual(out.evidence, [RECEIPT], 'unknown and unlisted-but-registered types are not claimed as verified');
+});
+
+test('createVerifier requires scopeDomain', () => {
+  assert.throws(() => makeVerifier({}, { scopeDomain: undefined }), /scopeDomain/);
 });

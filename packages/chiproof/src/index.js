@@ -14,6 +14,7 @@ export { issueChallenge, verifyChallenge, spendNonce } from './challenge.js';
 export { InMemoryNonceStore } from './stores/memory.js';
 export { EvidenceRegistry, assertPlug, routeEvidence } from './evidence.js';
 export { signedReceipt, receiptMessage } from './plugs/signed-receipt.js';
+export { zkPassport, subscopeFromNonce, scopeField, paramCommitment } from './plugs/zk-passport.js';
 
 import { cannotCheck, realNo, yes } from './verdict.js';
 import {
@@ -48,7 +49,7 @@ function isPlainObject(v) {
  *   trustedChallengeIssuers?: {pubkey: unknown, key_id: string, maxTier: 'A'|'B'|'C'}[],
  *   trustedClients?: {name?: string, package: string, certDigest: string, specVersion?: string}[],
  *   evidence?: {require?: string[], accept?: string[], plugs?: Record<string, object>},
- *   scopeDomain?: string, masterlistRoot?: string,
+ *   scopeDomain: string, masterlistRoot?: string,
  *   allowInMemoryStore?: boolean,
  * }} config
  * @returns {{issueChallenge: (opts: object) => object,
@@ -90,6 +91,9 @@ export function createVerifier(config) {
   const trustedChallengeIssuers = config.trustedChallengeIssuers ?? [];
   if (!Array.isArray(trustedChallengeIssuers)) {
     throw new TypeError('createVerifier: config.trustedChallengeIssuers must be an array');
+  }
+  if (typeof config.scopeDomain !== 'string' || config.scopeDomain.length === 0) {
+    throw new TypeError('createVerifier: config.scopeDomain (this verifier\'s own scope, bound into evidence) is required');
   }
   const trustedClients = config.trustedClients ?? [];
   if (!Array.isArray(trustedClients)) {
@@ -229,11 +233,11 @@ async function verifyInner(settled, presentation, ctx) {
     nonce: challenge.nonce, claim, tier, scopeDomain: settled.scopeDomain,
     masterlistRoot: settled.masterlistRoot, trustedClients: settled.trustedClients, now,
   });
-  const refused = await routeEvidence(settled.slot, evidence ?? [], tier, plugCtx);
-  if (refused) return refused;
+  const routed = await routeEvidence(settled.slot, evidence ?? [], tier, plugCtx);
+  if (routed.ok !== undefined) return routed; // a verdict: refused or could not check
 
   const reason = settled.slot.require.length === 0 ? 'no-evidence-required' : 'evidence-verified';
   return tier === 'A'
-    ? yes({ tier, reason })
-    : yes({ tier, zktag, reason });
+    ? yes({ tier, reason, evidence: routed.verified })
+    : yes({ tier, zktag, reason, evidence: routed.verified });
 }

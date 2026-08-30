@@ -44,10 +44,11 @@ createVerifier(config) → { issueChallenge(opts), verify(presentation, ctx) }
 `verify()` returns:
 
 ```
-{ ok, allowed, reason, tier?, zktag? }
+{ ok, allowed, reason, tier?, zktag?, evidence? }
 ```
 
-`tier`/`zktag` only on `allowed:true`.
+`tier`/`zktag`/`evidence` only on `allowed:true`; `evidence` lists the
+`type/version` keys actually verified (`[]` in bare mode).
 
 **The §3 invariant applies**: `ok:false ⇒ allowed:null`, never `false`.
 
@@ -64,6 +65,8 @@ createVerifier(config) → { issueChallenge(opts), verify(presentation, ctx) }
   evidence: { require: [], accept: [], plugs: {} },
   stores: { nonce: adopterSupplied },
   challengeSecret,   // HMAC key for self-authenticating nonces; shared across replicas, from env
+  scopeDomain,       // this verifier's own scope; bound into receipts and the zk service_scope field
+  masterlistRoot?,   // optional; passed to plugs via ctx
 }
 ```
 
@@ -99,7 +102,7 @@ item's expiry.
 }
 ```
 
-**Verdict:** `{ ok, allowed, reason, tier?, zktag? }` (§2). `tier`/`zktag` only on `allowed:true`.
+**Verdict:** `{ ok, allowed, reason, tier?, zktag?, evidence? }` (§2). `tier`/`zktag`/`evidence` only on `allowed:true`.
 
 ## 4. Evidence slot (D24)
 
@@ -198,7 +201,7 @@ non-vacuity test.
   4 sets of public inputs, a vk per circuit, 59,072 bytes total per document —
   `spikes/m1-zk/README.md`, "Full composition results", 2026-08-30).
   - **Verification method — shell out to `bb verify` (signed 2026-08-30):**
-    M1 shells out to a pinned `bb verify` (5.0.0) binary on `PATH`, checked
+    M1 shells out to a pinned `bb verify` (5.0.0) binary at an explicit `bbPath` passed at registration (never searched on `PATH`), version pinned 5.0.0, checked
     for presence at plug registration (not at proof-verification time). This
     keeps core zero-deps (NO-GO #2/#9); `@aztec/bb.js` WASM may become a
     separate, optional plug later but is not part of M1.
@@ -282,7 +285,7 @@ the two).
 All TBDs from v0.1 are resolved. No open TBDs remain for M1.
 
 - **`zk-passport/1` verification method (signed 2026-08-30):** shell out to a
-  pinned `bb verify` (5.0.0) binary on `PATH`, presence checked at plug
+  pinned `bb verify` (5.0.0) binary at an explicit `bbPath` passed at registration (never searched on `PATH`), version pinned 5.0.0, presence checked at plug
   registration. Core stays zero-deps; `@aztec/bb.js` WASM may become a
   separate plug later. See §5, B3.
 - **Canonical JSON rule for signing (signed 2026-08-30):** sha256 of

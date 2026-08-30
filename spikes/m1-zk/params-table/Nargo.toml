@@ -1,0 +1,8 @@
+[package]
+name = "zk_passport_params"
+type = "bin"
+authors = ["zkagent"]
+compiler_version = ">=1.0.0"
+
+[dependencies]
+compare_age = { path = "../vendor/zkpassport-circuits/src/noir/lib/compare/age" }

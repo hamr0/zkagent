@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * `signed-receipt/1` (M1 spec §5 B3): an Ed25519 signature by a pinned key over
- * `sha256(canonical(claim) ‖ nonceBytes)`.
+ * `sha256(sha256(canonical(claim)) ‖ nonceBytes ‖ utf8(scopeDomain))` (ruling 2026-08-30).
  *
  *   item.data = { key_id, sig }   (sig base64)
  *
- * Bindings: `claim` is hashed into the message directly; `nonce` is the
- * challenge nonce's raw bytes (base64url-decoded) appended to that hash, so a
- * receipt minted for one challenge fails for every other one. `scope` is bound
- * transitively: the nonce is minted by ONE verifier under ONE challengeSecret,
- * so a receipt over that nonce cannot be presented to a verifier of another
- * scope (see the B3 report — this reading is flagged for owner confirmation).
+ * Bindings: `claim` is hashed into the message; `nonce` is the challenge
+ * nonce's raw bytes (base64url-decoded); `scope` is the verifier's own
+ * `scopeDomain` as UTF-8 — so a receipt minted for one challenge, one claim
+ * and one scope fails for every other combination, explicitly.
  *
  * Linkability 'signer': the key_id says WHICH signer vouched, which links
  * presentations across sessions — never allowed at tier A.
@@ -19,9 +17,11 @@ import { createHash, verify as edVerify } from 'node:crypto';
 import { canonicalize } from '../canonical.js';
 
 /** The exact bytes a signer must sign. Exported so a client can produce them. */
-export function receiptMessage(claim, nonce) {
+export function receiptMessage(claim, nonce, scopeDomain) {
   const claimHash = createHash('sha256').update(canonicalize(claim), 'utf8').digest();
-  return createHash('sha256').update(Buffer.concat([claimHash, Buffer.from(nonce, 'base64url')])).digest();
+  return createHash('sha256')
+    .update(Buffer.concat([claimHash, Buffer.from(nonce, 'base64url'), Buffer.from(scopeDomain, 'utf8')]))
+    .digest();
 }
 
 /**
@@ -53,9 +53,12 @@ export function signedReceipt({ keys } = {}) {
       }
       const pubkey = byId.get(keyId);
       if (!pubkey) return { ok: true, valid: false, reason: 'receipt_unknown_key' };
+      if (typeof ctx?.scopeDomain !== 'string' || ctx.scopeDomain.length === 0) {
+        return { ok: false, valid: null, reason: 'scope_domain_unconfigured' };
+      }
       let good;
       try {
-        good = edVerify(null, receiptMessage(ctx.claim, ctx.nonce), pubkey, Buffer.from(sig, 'base64'));
+        good = edVerify(null, receiptMessage(ctx.claim, ctx.nonce, ctx.scopeDomain), pubkey, Buffer.from(sig, 'base64'));
       } catch {
         return { ok: true, valid: false, reason: 'receipt_malformed' };
       }

@@ -23,6 +23,7 @@ function makeVerifier(overrides = {}) {
     stores: { nonce: new InMemoryNonceStore({ quiet: true }) },
     allowInMemoryStore: true,
     challengeSecret: SECRET,
+    scopeDomain: 'example.test',
     threshold: 18,
     tiers: { max: 'C' },
     trustedChallengeIssuers: TRUSTED_ISSUERS,
@@ -65,7 +66,7 @@ test('happy: unsigned tier A presentation is allowed, verdict carries tier and n
   const c = v.issueChallenge(challengeOpts('A'));
   const out = await v.verify(presentationFor(c), { now: T0 });
   assertInvariant(out);
-  assert.deepEqual(out, { ok: true, allowed: true, reason: 'no-evidence-required', tier: 'A' });
+  assert.deepEqual(out, { ok: true, allowed: true, reason: 'no-evidence-required', tier: 'A', evidence: [] });
 });
 
 test('happy: signed tier C presentation with a zktag is allowed and echoes the zktag', async () => {
@@ -73,7 +74,7 @@ test('happy: signed tier C presentation with a zktag is allowed and echoes the z
   const c = v.issueChallenge(challengeOpts('C', { issuer: { privateKey: issuerC.privateKey, key_id: 'issuer-c' } }));
   const p = presentationFor(c);
   const out = await v.verify(p, { now: T0 });
-  assert.deepEqual(out, { ok: true, allowed: true, reason: 'no-evidence-required', tier: 'C', zktag: p.zktag });
+  assert.deepEqual(out, { ok: true, allowed: true, reason: 'no-evidence-required', tier: 'C', zktag: p.zktag, evidence: [] });
 });
 
 // ---------------------------------------------------------------------------

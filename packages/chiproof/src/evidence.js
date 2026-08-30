@@ -76,9 +76,10 @@ export function itemKey(item) {
 }
 
 /**
- * Route presented evidence through the registry. Returns `null` when every
- * applicable item verified and every required type was present; otherwise a
- * verdict built through the verdict.js factories.
+ * Route presented evidence through the registry. Returns `{ verified }` (the
+ * registry keys actually checked, in presentation order) when every applicable
+ * item verified and every required type was present; otherwise a verdict built
+ * through the verdict.js factories.
  *
  * @param {{registry: EvidenceRegistry, require: string[], accept: string[]}} slot
  * @param {unknown[]} items  presentation.evidence (already known to be an array)
@@ -125,5 +126,5 @@ export async function routeEvidence(slot, items, tier, ctx) {
       if (ctx.now > result.expiresAt) return realNo('evidence_expired');
     }
   }
-  return null;
+  return { verified: toVerify.map(([key]) => key) };
 }

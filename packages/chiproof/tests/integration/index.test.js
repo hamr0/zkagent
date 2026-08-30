@@ -34,7 +34,7 @@ function realShapedStore() {
 test('boot (a): InMemoryNonceStore is refused when NODE_ENV is unset and no override is given', () => {
   withNodeEnv(undefined, () => {
     assert.throws(
-      () => createVerifier({ stores: { nonce: new InMemoryNonceStore({ quiet: true }) }, challengeSecret: SECRET }),
+      () => createVerifier({ stores: { nonce: new InMemoryNonceStore({ quiet: true }) }, challengeSecret: SECRET, scopeDomain: 'example.test' }),
       TypeError,
     );
   });
@@ -43,7 +43,7 @@ test('boot (a): InMemoryNonceStore is refused when NODE_ENV is unset and no over
 test('boot (a): InMemoryNonceStore is refused under NODE_ENV=production without an override', () => {
   withNodeEnv('production', () => {
     assert.throws(
-      () => createVerifier({ stores: { nonce: new InMemoryNonceStore({ quiet: true }) }, challengeSecret: SECRET }),
+      () => createVerifier({ stores: { nonce: new InMemoryNonceStore({ quiet: true }) }, challengeSecret: SECRET, scopeDomain: 'example.test' }),
       TypeError,
     );
   });
@@ -54,7 +54,7 @@ test('boot (a): InMemoryNonceStore is refused under NODE_ENV=production without 
 test('boot (a, control): InMemoryNonceStore boots under NODE_ENV=test with no override', () => {
   withNodeEnv('test', () => {
     assert.doesNotThrow(
-      () => createVerifier({ stores: { nonce: new InMemoryNonceStore({ quiet: true }) }, challengeSecret: SECRET }),
+      () => createVerifier({ stores: { nonce: new InMemoryNonceStore({ quiet: true }) }, challengeSecret: SECRET, scopeDomain: 'example.test' }),
     );
   });
 });
@@ -67,7 +67,7 @@ test('boot (b): allowInMemoryStore:true boots outside tests and issueChallenge()
     assert.doesNotThrow(() => {
       verifier = createVerifier({
         stores: { nonce: new InMemoryNonceStore({ quiet: true }) },
-        challengeSecret: SECRET,
+        challengeSecret: SECRET, scopeDomain: 'example.test',
         allowInMemoryStore: true,
       });
     });
@@ -78,7 +78,7 @@ test('boot (b): allowInMemoryStore:true boots outside tests and issueChallenge()
     assert.equal(challenge.threshold, 18);
     assert.equal(challenge.issued_at, T0);
 
-    const sameSecret = verifyChallenge(challenge, { now: T0, challengeSecret: SECRET });
+    const sameSecret = verifyChallenge(challenge, { now: T0, challengeSecret: SECRET, scopeDomain: 'example.test' });
     assert.equal(sameSecret.ok, true);
     assert.equal(sameSecret.valid, true, 'the verifier must recognise the nonce it minted');
 
@@ -92,17 +92,17 @@ test('boot (b): allowInMemoryStore:true boots outside tests and issueChallenge()
 // (c) missing stores.nonce -> throws.
 test('boot (c): a missing stores.nonce is refused, not silently allowed through', () => {
   withNodeEnv('test', () => {
-    assert.throws(() => createVerifier({ challengeSecret: SECRET }), TypeError);
-    assert.throws(() => createVerifier({ stores: {}, challengeSecret: SECRET }), TypeError);
+    assert.throws(() => createVerifier({ challengeSecret: SECRET, scopeDomain: 'example.test' }), TypeError);
+    assert.throws(() => createVerifier({ stores: {}, challengeSecret: SECRET, scopeDomain: 'example.test' }), TypeError);
   });
 });
 
 // (d) store without a setIfAbsent function -> throws.
 test('boot (d): a store without a setIfAbsent function is refused', () => {
   withNodeEnv('test', () => {
-    assert.throws(() => createVerifier({ stores: { nonce: {} }, challengeSecret: SECRET }), TypeError);
+    assert.throws(() => createVerifier({ stores: { nonce: {} }, challengeSecret: SECRET, scopeDomain: 'example.test' }), TypeError);
     assert.throws(
-      () => createVerifier({ stores: { nonce: { setIfAbsent: 'not-a-function' } }, challengeSecret: SECRET }),
+      () => createVerifier({ stores: { nonce: { setIfAbsent: 'not-a-function' } }, challengeSecret: SECRET, scopeDomain: 'example.test' }),
       TypeError,
     );
   });
@@ -113,7 +113,7 @@ test('boot (e): a missing config.challengeSecret is refused even with a valid re
   withNodeEnv('production', () => {
     assert.throws(() => createVerifier({ stores: { nonce: realShapedStore() } }), TypeError);
     // Control: the same store with a secret boots in any NODE_ENV, no override needed.
-    assert.doesNotThrow(() => createVerifier({ stores: { nonce: realShapedStore() }, challengeSecret: SECRET }));
+    assert.doesNotThrow(() => createVerifier({ stores: { nonce: realShapedStore() }, challengeSecret: SECRET, scopeDomain: 'example.test' }));
   });
 });
 
