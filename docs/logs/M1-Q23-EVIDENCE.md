@@ -9,14 +9,15 @@ appear nowhere in this doc.
 
 ## 1. Why this run
 
-Q23 (`docs/product/zk-challenges.md` §10), following D22 (2026-08-30): tier A's requirement was
+Q23 (`docs/product/learnings.md` §4, D22–D23 entries), following D22 (2026-08-30): tier A's requirement was
 narrowed from same-site unlinkability to a single hard line — **nothing in the payload may be
 stable across sites**. Two candidate routes for meeting that line were each measured on real
 documents this session: Spike A, voucher-grade (Play Integrity, "Google vouches for the app");
-Spike B, math-grade (a ZK proof over the passport itself, no attestation, §6(b) of
-zk-challenges.md).
+Spike B, math-grade (a ZK proof over the passport itself, no attestation, §6.5 of
+docs/product/learnings.md).
 
-Pre-registered success criteria, copied verbatim from zk-challenges.md §10 (written before this
+Pre-registered success criteria, copied verbatim from docs/product/learnings.md §4 (D22-era
+Q23 framing) (written before this
 run, "so the result can't be rounded up after the fact"):
 
 1. The chosen library actually covers the SOD signature algorithms present on the owner's real
@@ -51,7 +52,7 @@ are reproduced as-is; nothing else from these files is used):
 | SOD byte length | 2236 | 2683 |
 
 **Finding**: both documents' document-signer (DS) certificates are **RSA-2048 / SHA-256**. The
-survey behind zk-challenges.md's assumption that the NL document uses ECDSA was wrong for the SOD
+survey behind an earlier assumption (`docs/product/learnings.md` §1, ECDSA-correction entry) that the NL document uses ECDSA was wrong for the SOD
 signing key — the NL ID card does carry an ECDSA key (P-256), but only for **Active
 Authentication (AA)**, a separate chip-challenge mechanism, not for signing the SOD. Both DS keys
 that actually sign the SOD are plain RSA-2048/SHA-256, on both documents. Criterion 1 (algorithm
@@ -108,7 +109,7 @@ digest) or a bounded enum (`appRecognitionVerdict`, `deviceRecognitionVerdict`,
 `appLicensingVerdict`) — none of it is a per-device identifier. The per-device opt-in fields
 (`deviceAttributes`, `recentDeviceActivity`, `deviceRecall`, `environmentDetails`) were absent
 from every verdict (checked by key presence, not just a top-level scan), consistent with those
-opt-ins being off for this Cloud project. This is exactly the shape Q23/§8 of zk-challenges.md
+opt-ins being off for this Cloud project. This is exactly the shape Q23/§6.7 of `docs/product/learnings.md`
 predicted for the voucher-grade route: the site sees app-identity + coarse verdicts, not the
 device.
 
@@ -117,7 +118,7 @@ long as the per-device opt-in fields (`deviceAttributes`, `recentDeviceActivity`
 stay unrequested — a verifier that later asks Google for those would reopen the linkability
 question this spike just closed. Google decodes every single check (a verifier→Google round trip
 for `decodeIntegrityToken`); that latency was not measured here (the ~10 ms figure already on
-record in zk-challenges.md §8 is Google's own documentation number, not something this spike
+record in `docs/product/learnings.md` §6.7 is Google's own documentation number, not something this spike
 timed). De-Googled devices are untested and fail by construction (Play Integrity requires Google
 Play services). A larger, more varied sample — different devices, longer time gaps, real distinct
 sites — would be needed before generalizing "no device-unique field" beyond this one
@@ -325,7 +326,7 @@ blockchain or RPC.
   so PSS and ECDSA remain untested against real data.
 - Play Integrity behaviour on any device, build, or session other than the one measured in §3.
 - `decodeIntegrityToken` round-trip latency (verifier → Google) — not timed this session.
-- Anything about iOS (App Attest remains an explicit non-goal, unverified per zk-challenges.md §9).
+- Anything about iOS (App Attest remains an explicit non-goal, unverified per `docs/product/learnings.md` §6.8).
 
 ## 7. Method findings
 
@@ -339,5 +340,5 @@ What only real data revealed, not design review or synthetic fixtures:
   the `tokenPayloadExternal` wrapping — surfaced only once a real device capture and a real Google
   API response existed; both were invisible against hand-made JSON fixtures.
 - **The NL document's SOD-signing key is RSA-2048, not ECDSA** (§2) — correcting an assumption
-  carried in zk-challenges.md's survey of candidate libraries; the NL card's ECDSA key exists but
+  carried in `docs/product/learnings.md` §6.5's survey of candidate libraries; the NL card's ECDSA key exists but
   signs Active Authentication challenges, not the SOD.

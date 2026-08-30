@@ -1,6 +1,6 @@
 # zk due diligence — engines, circuits, precedent (2026-08-30)
 
-**Preface**: This report was requested to assess candidate components — proving engines, circuit libraries, and prior art — for a chain-free, phone-proving, age-from-passport product (the math-grade road named in `zk-challenges.md` §6(b) and §10). It was produced by a research agent on 2026-08-30. It contains findings only: what each component is, what has been audited, what bugs are known, who backs it, and what lock-in it carries. **Nothing in this document is a recommendation.** The decision of what, if anything, to adopt is reserved for the owner.
+**Preface**: This report was requested to assess candidate components — proving engines, circuit libraries, and prior art — for a chain-free, phone-proving, age-from-passport product (the math-grade road named in `docs/product/learnings.md` §6.5 and §4, the D22–D24 entries). It was produced by a research agent on 2026-08-30. It contains findings only: what each component is, what has been audited, what bugs are known, who backs it, and what lock-in it carries. **Nothing in this document is a recommendation.** The decision of what, if anything, to adopt is reserved for the owner.
 
 ---
 

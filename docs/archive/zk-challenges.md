@@ -1,5 +1,10 @@
 # zk-challenges — why zkagent isn't zero-knowledge yet, what that costs, and the roads out
 
+> **Archived 2026-08-30 — merged into `docs/product/learnings.md`.** Its dated findings/measurements
+> are now entries in that document's §§2–4; its explanatory narrative (not a dated finding) is
+> preserved, deduplicated, in that document's §6. This file is kept for historical reference only
+> and is no longer updated.
+
 **Date**: 2026-08-30
 **Companion to**: `docs/product/zkagent-design.md` and `docs/product/zkagent-prd.md` (PRD v1.8). Where those two disagree with anything here, they win — this is a standing answer to one recurring question, not a new commitment.
 
