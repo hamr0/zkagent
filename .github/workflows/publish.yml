@@ -16,10 +16,24 @@
 # (Package settings → Trusted Publisher → GitHub Actions: your repo + this
 # workflow file). chiproof's `prepack` builds the .d.ts into the tarball at
 # publish (and at `npm pack`, which the adopter gate below relies on).
+#
+# The package directory is a workflow_dispatch input (default packages/chiproof)
+# so this one workflow file publishes any package in this repo; the npm
+# trusted publisher for EACH published package must separately be bound to
+# this repo + this workflow file (publish.yml) on npmjs.com.
 name: Publish to npm
 
 on:
   workflow_dispatch:        # manual "Run workflow" button — publish when you want
+    inputs:
+      package:
+        description: "package directory to publish"
+        type: choice
+        options:
+          - "packages/chiproof"
+          - "packages/zkagent-placeholder"
+        default: "packages/chiproof"
+        required: true
 
 permissions:
   contents: read
@@ -31,7 +45,7 @@ concurrency:                # never let two publish runs race
 
 defaults:
   run:
-    working-directory: packages/chiproof
+    working-directory: ${{ inputs.package || 'packages/chiproof' }}
 
 jobs:
   publish:
