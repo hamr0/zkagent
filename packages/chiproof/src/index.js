@@ -44,7 +44,7 @@ function isPlainObject(v) {
  *
  * @param {import('./types.js').VerifierConfig} config
  * @returns {{issueChallenge: (opts: object) => object,
- *   verify: (presentation: unknown, ctx?: {now?: number, clientIdentity?: object}) => Promise<object>}}
+ *   verify: (presentation: unknown, ctx?: {now?: number, clientIdentity?: object}) => Promise<import('./types.js').Verdict>}}
  */
 export function createVerifier(config) {
   if (!isPlainObject(config)) {
