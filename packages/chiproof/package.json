@@ -1,7 +1,7 @@
 {
   "name": "chiproof",
   "version": "0.0.0",
-  "description": "Verifier SDK for attested, windowed disclosure from ICAO 9303 chip documents. Part of the zkagent project. Pre-M1: only the verdict/challenge core (bucket B1) exists so far.",
+  "description": "Verifier SDK for attested, windowed disclosure from ICAO 9303 chip documents. Part of the zkagent project. M1 buckets B1-B4 implemented and tested; no real-hardware M0 evidence backs it yet.",
   "type": "module",
   "main": "src/index.js",
   "exports": {

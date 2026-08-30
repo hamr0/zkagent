@@ -5,6 +5,64 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **`chiproof` M1 verifier core (buckets B1–B4) implemented and tested — 116/116
+  passing, zero runtime deps.** Spec: `docs/product/m1-verifier-core-spec.md`.
+  B1: the `ok`/`allowed` verdict invariant (`src/verdict.js`) structurally
+  forbids `{ok:false, allowed:false}`; canonical JSON + sha256 for signing
+  (`src/canonical.js`, JCS-like, floats rejected); a self-authenticating HMAC
+  challenge/nonce with optional Ed25519 issuer signing (`src/challenge.js`,
+  D20), ported from 8een. B2: `createVerifier(config).verify(presentation,
+  ctx)` (`src/index.js`) checks spec, shape, challenge liveness and single
+  use, tier negotiation (refuse, never downgrade), threshold match (D11),
+  zktag/`chip_auth` presence rules (D21) and the FR10 trust list; fails loud
+  at boot on a missing/weak `challengeSecret` or an `InMemoryNonceStore`
+  outside tests. B3: the evidence slot (`src/evidence.js`, D24/FR12) — a plug
+  registry with boot-time binding/linkability/tier-ceiling checks, `require`/
+  `accept` routing, and fault isolation (`ok:false` on any throw) — plus two
+  shipped plugs: `signed-receipt/1` (Ed25519 over `hash(claim)‖nonce‖scope`)
+  and `zk-passport/1` (D25, the four-stage zkPassport UltraHonk composition,
+  verified by shelling out to a pinned `bb` 5.0.0 binary, never on `PATH`).
+  B4: end-to-end tests against real NL/US zkPassport proofs from
+  `spikes/m1-zk/`, skipping cleanly when the artefacts or `bb` are absent.
+  Applied a round of code-review findings before merge: evidence bounds
+  checked before any plug runs, the four `bb verify` calls run in parallel,
+  `bb`'s exit classified (clean non-zero = a real no; signal/timeout/spawn
+  failure = the verifier being broken, `ok:false`), and tmpdir cleanup
+  failures surfaced as warnings rather than swallowed.
+- **D19–D25 (owner decisions, 2026-08-29/30) settle the M1 verifier design**,
+  recorded in the PRD (v1.7 → v1.11) and `docs/product/learnings.md`:
+  - **M1 POC (2026-08-29)** on the Pixel 6a confirmed risk #8: the raw
+    Android key-attestation chain carries a stable per-device intermediate
+    on both StrongBox and TEE paths (plus stable verified-boot fields), so
+    tier A cannot carry it raw — opening **Q23**.
+  - **D22** relaxes tier A's promise from same-site to cross-site
+    unlinkability only (a site a holder returns to already links visits by
+    other means; nothing in the payload may be stable *across* sites).
+  - **D23** resolves Q23 for v1: **voucher-grade attestation (Play
+    Integrity)**, D1 stands, and ZK-over-the-passport becomes a named,
+    gated second track ("Track Z") rather than a maybe — five explicit
+    gates (audited Barretenberg release, an audit of zkagent's own
+    circuits, measured on-phone proving time, a chain-free nullifier path,
+    an open-source on-device prover) must all hold before D1 is revisited.
+    Measured on real documents: `docs/logs/M1-Q23-EVIDENCE.md`,
+    `docs/product/zk-due-diligence.md`.
+  - **D24** supersedes D23's Play Integrity framing after finding tokens are
+    **not borrowable** (decode is tied to the app developer's own Google
+    Cloud project) and introduces the **evidence slot**: the core ships with
+    it empty (bare mode, captcha-grade, knowingly), adopters choose what
+    fills it, plugs are published/versioned (FR12), and every plug must bind
+    nonce + claim + scope or registration refuses it.
+  - **D25** ships `zk-passport/1` as the evidence slot's genericity proof,
+    **tier A only**: the zkPassport age circuit has no nonce input, so the
+    challenge nonce rides in `service_subscope` — which also feeds the
+    nullifier, making it per-request (unlinkable, but unusable as a stable
+    tier-B/C zktag). Tier B/C ZK evidence is deferred to Track Z as **Q26**.
+    Measured: `bb verify` 5.0.0 ≈0.035s for the four-stage composition on a
+    real NL document.
+  - **D20 seal amendment**: the nonce HMAC now covers every challenge field
+    (tier, verbs, threshold, max_scan_age, expires_at), so an unsigned
+    tier-A/B challenge is tamper-evident — editing any field after minting
+    breaks the tag — without touching the nonce store.
 - **PRD v1.6 — the post-M0 disclosure model, recorded as shape with mechanics deferred.**
   Also a new **§1.1 glossary** separating three objects the project's own notes had been
   calling "nonce": the *challenge nonce* (requester's single-use random number, all tiers,
