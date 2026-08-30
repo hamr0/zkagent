@@ -44,7 +44,7 @@ Tests are split per [`AGENT_RULES.md`](../../.claude/remember/AGENT_RULES.md): `
 
 ## What this is not
 
-- Not a zero-knowledge proof. The verifier checks a hardware attestation that trustworthy code computed an answer; it does not check a proof it could verify itself. The accurate description is *attested windowed disclosure*. See the design doc.
+- Not a zero-knowledge proof by itself: bare mode is captcha-grade. The `zk-passport/1` evidence plug verifies a third-party zero-knowledge proof, validation-grade, tier A only — see chiproof.context.md. *(amended 2026-08-30, D24/D25)* Absent that plug, the verifier checks a hardware attestation that trustworthy code computed an answer; it does not check a proof it could verify itself. The accurate description is *attested windowed disclosure*. See the design doc.
 - Not an identity provider, wallet, issuer, or certificate authority.
 - Not certified under any regulatory scheme, and not claiming to satisfy any legal age-verification requirement anywhere.
 

@@ -8,7 +8,7 @@
 
 **One-liner**: Read the chip in a government-issued document, verify the government's own signature on it, and answer exactly one question about the holder — *over 18?* or *seen here before?* — disclosing nothing else, storing nothing anywhere, with no issuer, CA, wallet or server of ours in the path.
 
-**Claim discipline (standing, applies to every sentence anyone writes about this project)**: the project name may be aspirational; the *claims* may not. v1 is attested selective disclosure, not zero-knowledge. Nothing shipped, published, committed or spoken may describe v1 as a zero-knowledge proof (NO-GO #5, NO-GO #7). See §2.1 for the plain statement of why.
+**Claim discipline (standing, applies to every sentence anyone writes about this project)**: the project name may be aspirational; the *claims* may not. v1 is attested selective disclosure, not zero-knowledge. Nothing shipped, published, committed or spoken may describe v1 *as a product* as a zero-knowledge proof (NO-GO #5, NO-GO #7) *(amended 2026-08-30, D24/D25)*: the sole exception is naming `zk-passport/1`'s own content — one evidence type in the FR12 registry, validation-grade, tier A only — where "zero-knowledge proof" describes what that evidence type carries, never the product, the app, or the tag. See §2.1 for the plain statement of why.
 
 ---
 
@@ -83,7 +83,7 @@ A zero-knowledge proof lets the verifier check the mathematics itself; the proof
 | ZK | "Here is a proof. Check it yourself." |
 | zkagent | "Here is an answer. A hardware vendor attests that unmodified code computed it." |
 
-The verifier never checks a proof — it checks an attestation that unmodified code ran, then believes the number that code produced. Break the attestation and the claim collapses; with ZK, breaking attestation buys you nothing because the mathematics still has to hold. The *privacy outcome* in mode A is comparable (one bit crosses the wire). The *trust model* is not. D1 and NO-GO #7 forbid ZK circuits in v1 — not built, not vendored, not scaffolded.
+The verifier never checks a proof — it checks an attestation that unmodified code ran, then believes the number that code produced. Break the attestation and the claim collapses; with ZK, breaking attestation buys you nothing because the mathematics still has to hold. The *privacy outcome* in mode A is comparable (one bit crosses the wire). The *trust model* is not. D1 and NO-GO #7 forbid ZK circuits *of ours* in v1 — not built, not vendored, not scaffolded *(amended 2026-08-30, D24/D25)*: third-party ZK proofs may enter only as evidence (D24/D25) — the `zk-passport/1` plug in the FR12 registry, validation-grade, tier A only, verifying zkPassport/Barretenberg circuits that are not ours, with Track Z's gates governing any security claim about them.
 
 **Uniqueness is not a ZK property and never was.** ZK gives selective disclosure with proof. Uniqueness comes from the credential being scarce — one passport per person. The two pull against each other: a ZK age proof is unlinkable by construction, which makes it *useless* for "have I seen this person before." 8een cannot do uniqueness, by construction. zkagent can. That is the strongest argument for zkagent existing as a separate project at all.
 
@@ -211,7 +211,7 @@ The rule this table enforces (AGENT_RULES): the test must be able to fail, and a
 | 4 | **No unmasking capability** — not escrowed, not quorum-gated, not "for emergencies." Max penalty = exclusion | A capability that exists can be compelled. Owner decision, final |
 | 5 | **Never claim "one human = one zktag"** — always "at most k (k = documents held, ~1–3)". Never claim more than captcha-grade. Never describe v1 as replay-safe, sybil-proof or zero-knowledge beyond what a measurement showed | Overclaim is the death of a trust product; 8een's evidence-doc discipline applies |
 | 6 | **No web-NFC scanner** — the scan is native, period | Platform wall (NDEF-only browsers), not a preference |
-| 7 | **No ZK circuits in v1** — not built, not vendored, not scaffolded "for later" | D1. Captcha-grade bar; every line must have a purpose today |
+| 7 | **No ZK circuits of ours in v1, and v1 is never described as zero-knowledge; third-party ZK proofs may enter only as an evidence plug (D24), validation-grade, tier A only (D25), with Track Z's gates governing any security claim** *(amended 2026-08-30, D24/D25)* | D1. Captcha-grade bar; every line must have a purpose today |
 | 8 | **No npm publish until the package is standalone-usable** — placeholder reservation only; publishing is a deliberate manual owner step | zk8een binary-distribution lesson, verbatim |
 | 9 | **No secrets/test keys in the tree** — runtime-generated, temp dirs only | AGENT_RULES + 8een PRD §10 |
 | 10 | **No feature enters a milestone unless it's in this PRD first.** New idea → PRD change → owner sign-off → build. Mid-milestone additions are refused by default, including owner-tempting ones ("while we're in there…") | The scope gate. This project's conversation history generates ideas faster than any team could build them; the PRD is the filter, not the collector |
@@ -372,7 +372,7 @@ The dominant risk is not a break in the chain — it is that no one installs the
 
 | Version | Date | Change |
 |---|---|---|
-| v1.11 (draft) | 2026-08-30 (late) | D25 zk-passport/1 tier-A-only (no nonce input in the circuit); Q26; M2 row to D24 evidence-set language; FR12 annotation; D20 seal amendment |
+| v1.11 (draft) | 2026-08-30 (late) | D25 zk-passport/1 tier-A-only (no nonce input in the circuit); Q26; M2 row to D24 evidence-set language; FR12 annotation; D20 seal amendment; ZK wording harmonised with D24/D25 (NO-GO #7 reworded) |
 | v1.10 (draft) | 2026-08-30 (late) | D24 evidence slot; D1 amended; D23 superseded (Play Integrity non-borrowable); FR12 registry; M1 row → spec; Q25 |
 | v1.9 (draft) | 2026-08-30 | D23 resolves Q23 (voucher-grade v1, gated ZK track); Q24 added; risks 4/7/8 and D2 annotated; M1 row updated |
 | v1.8 (draft) | 2026-08-30 | D22 relaxes tier-A same-site unlinkability to a non-goal; Q23 re-framed to "nothing stable across sites"; Play Integrity spike queued; ZK-passport route recorded as set-aside |
