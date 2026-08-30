@@ -964,3 +964,7 @@ circuit compile/execute/prove/verify, ran fully offline.
 - `npm audit fix` for the 3 advisories flagged at `npm install` — still not
   addressed.
 - Nothing was committed this session, per instruction.
+
+## Re-proving the age stage under a chiproof nonce (`run/reprove-age-nonce.mjs`)
+
+`node run/reprove-age-nonce.mjs [nl us]` (from `spikes/m1-zk`; `NARGO`/`BB` env override `~/opt` paths) re-proves `compare/age` for each real document with `service_subscope = subscopeFromNonce(fresh chiproof nonce)`, writing only to gitignored `out/<doc>/age-nonce-<short>/` and `out/age-nonce-index.json` (which holds a runtime-generated test `challengeSecret`). `packages/chiproof` zk-passport/e2e tests read those paths and skip when absent.

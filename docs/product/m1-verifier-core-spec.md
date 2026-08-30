@@ -115,7 +115,8 @@ verifyEvidence(item, ctx) → { ok, valid, reason }
 `ctx` shape:
 
 ```
-{ nonce, claim, tier, scopeDomain, masterlistRoot?, trustedClients, now }
+{ nonce, claim, tier, scopeDomain, masterlistRoot?, trustedClients, now,
+  maxScanAge }   // ms, from challenge.max_scan_age; null = unlimited
 ```
 
 **Registration-time checks** a plug must satisfy:

@@ -290,6 +290,18 @@ test('the plug receives the §4 ctx: nonce, claim, tier, now, trustedClients', a
   assert.equal(seen.now, T0);
   assert.equal(seen.scopeDomain, 'example.test');
   assert.deepEqual(seen.trustedClients, [{ package: 'p', certDigest: 'd' }]);
+  assert.equal(seen.maxScanAge, null, 'unset max_scan_age reaches the plug as null');
+
+  const c2 = v.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0, max_scan_age: 5000 });
+  await v.verify(presentationFor(c2, { evidence: [item('spy')] }), { now: T0 });
+  assert.equal(seen.maxScanAge, 5000, 'challenge.max_scan_age reaches the plug as ctx.maxScanAge');
+});
+
+test('a malformed challenge.max_scan_age is a real no', async () => {
+  const v = makeVerifier({});
+  const c = v.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  const out = await v.verify(presentationFor({ ...c, max_scan_age: 'soon' }), { now: T0 });
+  assert.equal(out.reason, 'challenge_malformed');
 });
 
 test('ruling 4: createVerifier().issueChallenge pins threshold to config.threshold', () => {

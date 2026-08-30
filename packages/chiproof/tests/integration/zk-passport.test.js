@@ -168,3 +168,15 @@ test('tier B is refused by the core before the plug runs (ceiling A)', { skip },
   assert.equal(out.reason, 'evidence_tier_exceeds_plug_ceiling');
   assert.equal(calls, 0, 'plug.verify (and therefore bb) must not have been invoked');
 });
+
+test('max_scan_age: a tiny allowance refuses the re-proved scan as zk_scan_too_old; null (unlimited) accepts it', { skip }, async () => {
+  const p = plug();
+  const tooOld = await p.verify(item(A.docs.nl.stages), ctxFor('nl', { maxScanAge: 1 }));
+  assert.equal(tooOld.valid, false);
+  assert.equal(tooOld.reason, 'zk_scan_too_old');
+
+  const unlimited = await p.verify(item(A.docs.nl.stages), ctxFor('nl', { maxScanAge: null }));
+  assert.equal(unlimited.valid, true);
+  const generous = await p.verify(item(A.docs.nl.stages), ctxFor('nl', { maxScanAge: 365 * 24 * 3600 * 1000 }));
+  assert.equal(generous.valid, true);
+});

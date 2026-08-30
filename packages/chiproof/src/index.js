@@ -178,6 +178,10 @@ async function verifyInner(settled, presentation, ctx) {
   }
   if (evidence !== undefined && !Array.isArray(evidence)) return realNo('evidence_malformed');
   if (!Number.isInteger(challenge.threshold)) return realNo('challenge_malformed');
+  const maxScanAge = challenge.max_scan_age ?? null;
+  if (maxScanAge !== null && !(typeof maxScanAge === 'number' && Number.isFinite(maxScanAge) && maxScanAge >= 0)) {
+    return realNo('challenge_malformed');
+  }
 
   // --- challenge: ours, live, signed where required -----------------------
   const ch = verifyChallenge(challenge, {
@@ -231,7 +235,7 @@ async function verifyInner(settled, presentation, ctx) {
   // --- evidence slot (§4, D24) --------------------------------------------
   const plugCtx = Object.freeze({
     nonce: challenge.nonce, claim, tier, scopeDomain: settled.scopeDomain,
-    masterlistRoot: settled.masterlistRoot, trustedClients: settled.trustedClients, now,
+    masterlistRoot: settled.masterlistRoot, trustedClients: settled.trustedClients, now, maxScanAge,
   });
   const routed = await routeEvidence(settled.slot, evidence ?? [], tier, plugCtx);
   if (routed.ok !== undefined) return routed; // a verdict: refused or could not check
