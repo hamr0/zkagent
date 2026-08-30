@@ -1,0 +1,38 @@
+# chiproof CI (LIBRARY_CONVENTIONS §5): push/PR gate.
+#
+# npm ci -> typecheck -> build:types -> test, on Node 20 and 22. No lint step
+# — tsc (checkJs + strictNullChecks) already catches the bug class that
+# matters for a small vanilla-ESM lib; adding ESLint would pull in a new
+# devDep + config surface for no gain here (AGENT_RULES dependency
+# hierarchy). Formatting is not a merge gate.
+name: chiproof CI
+
+on:
+  push:
+    paths:
+      - 'packages/chiproof/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - 'packages/chiproof/**'
+      - '.github/workflows/ci.yml'
+
+defaults:
+  run:
+    working-directory: packages/chiproof
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build:types
+      - run: npm test
