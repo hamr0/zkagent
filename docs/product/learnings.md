@@ -245,6 +245,17 @@ than resolved here.
     with nonce-hash in subscope; defer tier B/C ZK to Track Z as Q26). → source: `packages/chiproof`
     (B3 coder report 2026-08-30); `spikes/m1-zk/README.md` "Full composition results".
 
+- **2026-08-30 — `@zkpassport/utils` declares no license.** The npm package (0.37.4) has no
+  `license` field in its `package.json` and ships no `LICENSE` file; the `zkpassport-packages`
+  monorepo it comes from has no `LICENSE` at its root or under `packages/zkpassport-utils` either
+  (GitHub API `license` field null; verified 2026-08-30). The sibling `zkPassport circuits` repo
+  IS Apache-2.0 — this is specific to the `utils` package, not the project generally. Consequence:
+  `chiproof` takes no code from `@zkpassport/utils`; the `service_scope`/`service_subscope` field
+  rule is defined by this project and checked for interoperability against real proof public
+  inputs, not copied (`NOTICE` records this). Open item: raise upstream; any future dependency on
+  that package is blocked until it is licensed. → source: `packages/chiproof/NOTICE`;
+  `packages/chiproof/src/plugs/zk-passport.js` header comment.
+
 ## 4. Protocol and design
 
 - **2026-08-03 — RFC 9421 was cited five times in the repo as an assumption and had never been
