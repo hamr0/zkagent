@@ -5,6 +5,12 @@
 # matters for a small vanilla-ESM lib; adding ESLint would pull in a new
 # devDep + config surface for no gain here (AGENT_RULES dependency
 # hierarchy). Formatting is not a merge gate.
+#
+# Also runs the adopter gate (mirrors 8een's ci.yml placement, right after
+# `npm test`): `tsc --noEmit` above checks the SOURCE, not the generated
+# .d.ts as an adopter resolves it from node_modules. This packs the real
+# tarball, installs it into a throwaway consumer, and typechecks chiproof's
+# documented quickstart against it.
 name: chiproof CI
 
 on:
@@ -36,3 +42,50 @@ jobs:
       - run: npm run typecheck
       - run: npm run build:types
       - run: npm test
+      - name: Types are usable BY AN ADOPTER, not just internally
+        # `tsc --noEmit` above checks the SOURCE. It cannot see the one thing
+        # adopters actually consume: the generated .d.ts, resolved from inside
+        # node_modules. So: pack the real tarball, install it into a throwaway
+        # consumer, and typecheck the documented usage against it.
+        #
+        # Keep this quickstart IN SYNC with the PER-REPO block in
+        # publish.yml's identical step — both are chiproof.context.md
+        # "Minimal usage", update them together.
+        run: |
+          mkdir -p /tmp/pkg /tmp/consumer
+          npm pack --pack-destination /tmp/pkg
+          cd /tmp/consumer
+          cat > package.json <<'JSON'
+          { "name": "consumer", "private": true, "type": "module" }
+          JSON
+          cat > tsconfig.json <<'JSON'
+          { "compilerOptions": { "strict": true, "module": "nodenext",
+            "moduleResolution": "nodenext", "target": "es2022",
+            "noEmit": true, "types": ["node"] } }
+          JSON
+          cat > app.ts <<'TS'
+          import { createVerifier, InMemoryNonceStore } from 'chiproof';
+          import { randomBytes } from 'node:crypto';
+
+          const verifier = createVerifier({
+            scopeDomain: 'example.com',
+            challengeSecret: randomBytes(32),
+            tiers: { max: 'B' },
+            stores: { nonce: new InMemoryNonceStore({ quiet: true }) },
+            allowInMemoryStore: true,
+          });
+
+          const challenge = verifier.issueChallenge({ tier: 'B', ttlMs: 60_000 });
+
+          const verdict = await verifier.verify({
+            spec: 'zkagent/1',
+            tier: 'B',
+            claim: { over_threshold: true, threshold: 18 },
+            challenge,
+            zktag: 'deadbeef',
+          });
+          if (verdict.ok !== true) throw new Error(String(verdict.reason));
+          console.log(verdict.allowed);
+          TS
+          npm install --no-audit --no-fund /tmp/pkg/*.tgz typescript @types/node
+          ./node_modules/.bin/tsc
