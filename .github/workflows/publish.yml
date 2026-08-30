@@ -1,4 +1,4 @@
-# TEMPORARY diagnostic variant — hardcoded to packages/zkagent-placeholder to A/B test OIDC trusted-publisher matching; revert to the package-input version (b5b2321) after the test.
+# Canonical npm publish workflow — copy to `.github/workflows/publish.yml`.
 # Adapted for chiproof (packages/chiproof) from hamr0/PUBLISH_TEMPLATE.yml —
 # only the working-directory block, this header comment, and the PER-REPO
 # quickstart changed; the rest is the template verbatim.
@@ -16,10 +16,24 @@
 # (Package settings → Trusted Publisher → GitHub Actions: your repo + this
 # workflow file). chiproof's `prepack` builds the .d.ts into the tarball at
 # publish (and at `npm pack`, which the adopter gate below relies on).
+#
+# The package directory is a workflow_dispatch input (default packages/chiproof)
+# so this one workflow file publishes any package in this repo; the npm
+# trusted publisher for EACH published package must separately be bound to
+# this repo + this workflow file (publish.yml) on npmjs.com.
 name: Publish to npm
 
 on:
   workflow_dispatch:        # manual "Run workflow" button — publish when you want
+    inputs:
+      package:
+        description: "package directory to publish"
+        type: choice
+        options:
+          - "packages/chiproof"
+          - "packages/zkagent-placeholder"
+        default: "packages/chiproof"
+        required: true
 
 permissions:
   contents: read
@@ -29,13 +43,12 @@ concurrency:                # never let two publish runs race
   group: npm-publish
   cancel-in-progress: false
 
-defaults:
-  run:
-    working-directory: packages/zkagent-placeholder
-
 jobs:
   publish:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.package || 'packages/chiproof' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
