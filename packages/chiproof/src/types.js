@@ -38,6 +38,21 @@
  */
 
 /**
+ * Options accepted by `issueChallenge` (both the bare `challenge.js` export
+ * and the verifier's wrapper in `index.js`, which injects `threshold` and
+ * `challengeSecret` from its own config and so omits `challengeSecret` here).
+ *
+ * @typedef {object} IssueChallengeOptions
+ * @property {'A'|'B'|'C'} tier
+ * @property {string[]} [verbs]
+ * @property {number} threshold
+ * @property {number|null} [max_scan_age]
+ * @property {number} ttlMs
+ * @property {{privateKey: unknown, key_id: string}|null} [issuer]
+ * @property {number} [now]
+ */
+
+/**
  * A presented evidence envelope (M1 spec §4).
  *
  * @typedef {object} EvidenceItem

@@ -138,12 +138,7 @@ function verifySignature(publicKey, challengeWithoutSig, sigB64) {
 /**
  * Mint a fresh, self-authenticating challenge (D20).
  *
- * @param {{
- *   tier: 'A'|'B'|'C', verbs?: string[], threshold: number,
- *   max_scan_age?: number|null, ttlMs: number,
- *   issuer?: {privateKey: unknown, key_id: string}|null,
- *   challengeSecret: Buffer|Uint8Array|string, now?: number,
- * }} opts
+ * @param {import('./types.js').IssueChallengeOptions & {challengeSecret: Buffer|Uint8Array|string}} opts
  *   `challengeSecret` is the HMAC key for the self-authenticating nonce — stable across
  *   restarts and shared across every replica that later calls `verifyChallenge`
  *   (a per-process secret would reject a sibling's nonces). Not listed among the
@@ -151,9 +146,7 @@ function verifySignature(publicKey, challengeWithoutSig, sigB64) {
  *   mint the HMAC nonce it also specifies — added here as a config input,
  *   mirroring how `verifyChallenge` receives it. `issuer` is omitted (or `null`)
  *   for an unsigned challenge, valid at tiers A/B only (D20).
- * @returns {{nonce: string, tier: string, verbs: string[], threshold: number,
- *   max_scan_age: number|null, issued_at: number, expires_at: number,
- *   key_id?: string, sig?: string}}
+ * @returns {import('./types.js').Challenge}
  */
 export function issueChallenge({
   tier, verbs = [], threshold, max_scan_age = null, ttlMs, issuer = null, challengeSecret, now = Date.now(),

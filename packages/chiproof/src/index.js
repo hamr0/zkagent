@@ -43,7 +43,7 @@ function isPlainObject(v) {
  * checks, `src/gate.js:372-404`).
  *
  * @param {import('./types.js').VerifierConfig} config
- * @returns {{issueChallenge: (opts: object) => object,
+ * @returns {{issueChallenge: (opts?: Partial<import('./types.js').IssueChallengeOptions>) => import('./types.js').Challenge,
  *   verify: (presentation: unknown, ctx?: {now?: number, clientIdentity?: object}) => Promise<import('./types.js').Verdict>}}
  */
 export function createVerifier(config) {
@@ -123,9 +123,8 @@ export function createVerifier(config) {
 
   return Object.freeze({
     /**
-     * @param {{tier?: 'A'|'B'|'C', verbs?: string[], threshold?: number,
-     *   max_scan_age?: number|null, ttlMs?: number,
-     *   issuer?: {privateKey: unknown, key_id: string}|null, now?: number}} [opts]
+     * @param {Partial<import('./types.js').IssueChallengeOptions>} [opts]
+     * @returns {import('./types.js').Challenge}
      */
     issueChallenge: (opts = {}) => {
       // Ruling 2026-08-30: the verifier serves ONE threshold. A caller asking
