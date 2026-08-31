@@ -698,4 +698,184 @@ object SessionKey {
             null
         }
     }
+
+    // ---------------------------------------------------------------------
+    // KEY TEST button (F2 escalation, coordinator instruction 2026-08-31) —
+    // NOT wired to NFC/document flow at all. Deletes the real signing alias
+    // so the full six-row matrix always re-runs, attempts an UNATTENDED
+    // (no user-authentication binding) sign on every row that generated
+    // successfully so the crypto claim is backed by an actual signature and
+    // not just a KeyInfo readback, then separately generates the REAL
+    // preferred winner key (auth-bound, per-use where possible, exactly as
+    // ensureKey()'s fresh-generation path does) so the caller can run
+    // exactly one BiometricPrompt against it to prove the per-use path.
+    // An unattended diagnostic key's signature is NEVER evidence about the
+    // auth-bound path — every field below keeps the two separate.
+    // ---------------------------------------------------------------------
+
+    private const val KEYTEST_DIAG_ALIAS_PREFIX = "m2_keytest_diag_"
+
+    /** One row's UNATTENDED (not user-auth-bound) diagnostic sign outcome —
+     * diagnostic-only, see class doc. Never presented as evidence about the
+     * auth-bound path. */
+    data class DiagSignOutcome(
+        val ok: Boolean,
+        val exception: String? = null,
+        val provider: String? = null,
+        val sigSha256: String? = null,
+        val rawSignature: ByteArray? = null,
+        val pubKeyDer: ByteArray? = null,
+    )
+
+    data class KeyTestRow(
+        val rowId: String,
+        val label: String,
+        val strongBoxRequested: Boolean,
+        val genAttempt: Attempt,
+        /** null only when [genAttempt] itself failed (no key to sign with). */
+        val diagSign: DiagSignOutcome?,
+    )
+
+    data class KeyTestResult(
+        val rows: List<KeyTestRow>,
+        val winnerRowId: String?,
+        /** The REAL, auth-bound [ALIAS] key, freshly generated this run —
+         * null only if every row in [rows] failed to generate. */
+        val winnerKeyState: KeyState?,
+    )
+
+    /**
+     * Generates a NON-auth-bound probe key at a dedicated per-row alias
+     * (never [ALIAS] or [PROBE_ALIAS] — must not disturb the real signing
+     * key or the item-1 matrix probe) and immediately attempts an
+     * unattended sign over [TEST_MESSAGE] via [resolveByAttempt], using the
+     * correct Signature algorithm for [combo]'s kind (item 4: "Ed25519" for
+     * a1/a2/b1/b2, "SHA256withECDSA" for c/d — see [sigAlgForRow]). The
+     * probe alias is deleted again right after (raw bytes already
+     * extracted) so repeated taps never accumulate stray Keystore entries.
+     */
+    private fun signDiagnostic(ks: KeyStore, combo: Combo): DiagSignOutcome {
+        val alias = "$KEYTEST_DIAG_ALIAS_PREFIX${combo.rowId}"
+        return try {
+            deleteAlias(ks, alias)
+            val kpg = KeyPairGenerator.getInstance(kpgAlgorithmFor(combo.kind), KEYSTORE)
+            val purposes = KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+            val builder = KeyGenParameterSpec.Builder(alias, purposes)
+                .setUserAuthenticationRequired(false) // diagnostic-only: unattended sign, see class doc
+                .setIsStrongBoxBacked(combo.strongBox)
+            when (combo.kind) {
+                Kind.ED25519_EC_CURVE -> {
+                    builder.setAlgorithmParameterSpec(ECGenParameterSpec(ED25519_CURVE_NAME))
+                    builder.setDigests(KeyProperties.DIGEST_NONE)
+                }
+                Kind.EC_P256 -> {
+                    builder.setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+                    builder.setDigests(KeyProperties.DIGEST_SHA256)
+                }
+                Kind.ED25519_LITERAL -> {}
+            }
+            kpg.initialize(builder.build())
+            kpg.generateKeyPair()
+            val entry = ks.getEntry(alias, null) as KeyStore.PrivateKeyEntry
+            val alg = sigAlgForRow(combo.rowId)
+                ?: return DiagSignOutcome(false, exception = "no Signature algorithm mapped for row ${combo.rowId}")
+            val sig = resolveByAttempt(alg, entry.privateKey)
+            // resolveByAttempt breaks its provider loop right after recording
+            // the winner, so the last trace entry IS the winner when sig!=null.
+            val provider = if (sig != null) lastProviderTrace.lastOrNull()?.providerName else null
+            if (sig == null) {
+                DiagSignOutcome(false, exception = "no provider could initSign() this unattended diagnostic key")
+            } else {
+                sig.update(TEST_MESSAGE)
+                val rawSig = sig.sign()
+                val hex = MessageDigest.getInstance("SHA-256").digest(rawSig).joinToString("") { "%02x".format(it) }
+                val pubDer = ks.getCertificate(alias)?.publicKey?.encoded
+                DiagSignOutcome(true, provider = provider, sigSha256 = hex, rawSignature = rawSig, pubKeyDer = pubDer)
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "KEY TEST diagnostic sign row ${combo.rowId} FAILED", e)
+            DiagSignOutcome(false, exception = "${e.javaClass.simpleName}: ${e.message}")
+        } finally {
+            deleteAlias(ks, alias)
+        }
+    }
+
+    /**
+     * The KEY TEST button's full run (F2 escalation). Never touches the
+     * NFC/document flow or [ensureKey] itself. Order: (1) delete [ALIAS] so
+     * the complete six-row matrix always re-runs under current verification
+     * code; (2) for every row that generated OK, an unattended diagnostic
+     * sign (item 2, half A); (3) generate the REAL preferred winner key at
+     * [ALIAS], auth-bound, exactly as [ensureKey]'s fresh-generation path
+     * does, so the caller can run exactly one BiometricPrompt against it
+     * (item 2, half B — the caller does the actual prompt + sign, since
+     * that requires an Activity).
+     */
+    fun runKeyTest(context: android.content.Context): KeyTestResult {
+        val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }
+        val strongBoxFeature = context.packageManager.hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)
+
+        deleteAlias(ks, ALIAS) // item 1: force the full matrix to re-run under current code
+
+        val attempts = mutableListOf<Attempt>()
+        for (combo in plan) {
+            val attempt = tryGenerate(ks, PROBE_ALIAS, combo)
+            deleteAlias(ks, PROBE_ALIAS)
+            Log.i(
+                TAG,
+                "KEY TEST matrix ${combo.rowId} (${combo.label}): " +
+                    if (attempt.ok) {
+                        "OK level=${attempt.actualSecurityLevel} confirmed=${attempt.confirmedAndroidKeyStoreKey}" +
+                            if (attempt.softwareOrTeeFallbackSuspected) " [SUSPECTED FALLBACK]" else ""
+                    } else {
+                        "FAILED ${attempt.exception}"
+                    },
+            )
+            attempts.add(attempt)
+        }
+
+        val rows = attempts.map { attempt ->
+            val combo = plan.first { it.rowId == attempt.rowId }
+            val diag = if (attempt.ok) signDiagnostic(ks, combo) else null
+            if (diag != null) {
+                Log.i(
+                    TAG,
+                    "KEY TEST diag-sign ${combo.rowId}: " +
+                        if (diag.ok) "OK provider=${diag.provider} sha256(signature)=${diag.sigSha256}" else "FAILED ${diag.exception}",
+                )
+            }
+            KeyTestRow(attempt.rowId, attempt.label, combo.strongBox, attempt, diag)
+        }
+
+        val winnerRowId = winnerPreference.firstOrNull { rowId -> attempts.any { it.rowId == rowId && it.ok } }
+        var winnerKeyState: KeyState? = null
+        if (winnerRowId != null) {
+            val winnerCombo = plan.first { it.rowId == winnerRowId }
+            try {
+                deleteAlias(ks, ALIAS)
+                val kpg = KeyPairGenerator.getInstance(kpgAlgorithmFor(winnerCombo.kind), KEYSTORE)
+                val (builder, perUse) = specBuilder(ALIAS, winnerCombo.kind, winnerCombo.strongBox)
+                kpg.initialize(builder.build())
+                kpg.generateKeyPair()
+                val entry = ks.getEntry(ALIAS, null) as KeyStore.PrivateKeyEntry
+                val (level, inside) = securityFacts(entry.privateKey)
+                val mode = authModeLabel(entry.privateKey)
+                winnerKeyState = KeyState(
+                    attempts = attempts,
+                    winnerRowId = winnerRowId,
+                    signatureAlgorithm = sigAlgForActualKey(entry.privateKey),
+                    perUseAuth = perUse,
+                    reusedExisting = false,
+                    securityLevel = level,
+                    insideSecureHardware = inside,
+                    strongBoxFeaturePresent = strongBoxFeature,
+                    authMode = mode,
+                )
+            } catch (e: Throwable) {
+                Log.e(TAG, "KEY TEST: winner row $winnerRowId real-key generation failed", e)
+            }
+        }
+
+        return KeyTestResult(rows, winnerRowId, winnerKeyState)
+    }
 }

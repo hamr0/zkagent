@@ -107,6 +107,57 @@ entry-point gap, not a hardware gap**, and that reading is carried forward as-is
 StrongBox on this hardware by always going through the literal-`"Ed25519"` entry point (a2),
 or whether a `sig-p256/1` variant is needed instead (which would touch `chiproof`, currently
 forbidden by §6.2 item 11's non-goals). This POC did not decide between them — it used row c
+
+> **SUPERSEDED by a follow-up test (2026-08-31, same session, `logcat-keytest.txt`).** The
+> "provider-specific entry-point gap, not a hardware gap" reading above is **falsified**. A
+> dedicated KEY TEST button (no NFC, no MRZ) deleted the alias, re-ran the full six-row matrix
+> under the full verification chain, and attempted an actual sign per generated row. Result:
+>
+> ```
+> key attempt a2 verification: kpgProvider=AndroidKeyStore containsAliasAfterGen=true publicKeyAlgorithm=EC publicKeyEncodedLength=91 confirmedAndroidKeyStoreKey=true
+> key attempt b2 verification: kpgProvider=AndroidKeyStore containsAliasAfterGen=true publicKeyAlgorithm=EC publicKeyEncodedLength=91 confirmedAndroidKeyStoreKey=true
+> ```
+>
+> `publicKeyAlgorithm=EC publicKeyEncodedLength=91` is **identical** to rows c and d, which are
+> known P-256. The orchestrator verified on the host with openssl that a 91-byte
+> SubjectPublicKeyInfo of this shape is `prime256v1` / NIST P-256
+> (`openssl pkey -pubin -inform DER … -text -noout` → "Public-Key: (256 bit) / ASN1 OID:
+> prime256v1 / NIST CURVE: P-256"); a genuine Ed25519 SPKI is 44 bytes with algorithm EdDSA,
+> not EC. **Requesting the literal algorithm name `"Ed25519"` from AndroidKeyStore on this
+> device silently returns a P-256 key.** a2 and b2 were never Ed25519 keys. Signing then
+> failed exactly as expected for a mislabeled EC key:
+>
+> ```
+> Signature.Ed25519: provider 'AndroidOpenSSL' initSign FAILED InvalidKeyException: Unknown key type: android.security.keystore2.AndroidKeyStoreECPrivateKey@…
+> Signature.Ed25519: provider 'AndroidKeyStoreBCWorkaround' initSign FAILED InvalidKeyException: Keystore operation failed
+> ```
+>
+> So Ed25519 is **not available as an AndroidKeyStore key on this device by either entry
+> point, at either security level** — this is a hardware/platform gap, not a provider
+> entry-point quirk. Nuance: the harness's own line `a2 … RESOLVED (confirmed genuine
+> AndroidKeyStore key, level=STRONGBOX)` was *true as far as it went* — it confirmed the key
+> was a real Keystore key at StrongBox level — but its verification chain never checked that
+> the key was the **algorithm that had been requested**. A capability probe must assert the
+> algorithm/curve of what it got, not merely that generation succeeded and the key is
+> hardware-backed — the same class of gap as M0 Finding 5 (assert the negative actually
+> excluded something).
+>
+> What did verify (orchestrator, on the host, `openssl dgst -sha256 -verify` → `Verified OK`
+> for all three): row c (P-256/StrongBox, unattended diagnostic), row d (P-256/TEE,
+> unattended diagnostic), and row c auth-bound (the one signature made behind the owner's
+> fingerprint via `BiometricPrompt` `CryptoObject`). Only the c-authbound signature is
+> evidence about the biometric-bound path; the diagnostic keys (c, d, a2, b2) were
+> deliberately generated with `setUserAuthenticationRequired(false)` so one biometric prompt
+> sufficed for the run. Capability summary, quoted verbatim:
+>
+> ```
+> ed25519_strongbox: GENERATED yes (row a2, level=STRONGBOX) | SIGNED no (no provider could initSign() this unattended diagnostic key) | VERIFIED-OFF-DEVICE (pending host check)
+> ed25519_tee: GENERATED yes (row b2, level=TEE) | SIGNED no (no provider could initSign() this unattended diagnostic key) | VERIFIED-OFF-DEVICE (pending host check)
+> p256_strongbox: GENERATED yes (row c, level=STRONGBOX) | SIGNED yes (unattended diagnostic key, provider=AndroidKeyStoreBCWorkaround) | VERIFIED-OFF-DEVICE (pending host check)
+> p256_tee: GENERATED yes (row d, level=TEE) | SIGNED yes (unattended diagnostic key, provider=AndroidKeyStoreBCWorkaround) | VERIFIED-OFF-DEVICE (pending host check)
+> ```
+
+This POC did not decide between them — it used row c
 (EC-P256/StrongBox) only because it was the first row proven to sign end-to-end, not as a
 resolution of the escalation.
 
@@ -228,11 +279,19 @@ this file records only their hashes and the verification outcome.
 PROVIDER FINDING" above; root cause identified by `javap`, not guessed, and the naive
 "skip by name" fix was tried and disproven on-device before the attempt-based fix landed.
 
-**F2 — a1-vs-a2 Ed25519 entry-point asymmetry (open escalation, not resolved here).** EC curve
-name `"ed25519"` is rejected by StrongBox keygen; the literal algorithm string `"Ed25519"`
-succeeds at a confirmed StrongBox level (see KEY-ALGORITHM MATRIX/ESCALATION above). Recorded
-exactly as the log states it — a provider-specific entry-point gap, not a hardware gap — and
-not upgraded or resolved by this POC.
+**F2 — Ed25519 is not available as an AndroidKeyStore key on this device, by either entry
+point, at either security level (falsifies the original a1-vs-a2 reading; open owner decision
+below).** EC curve name `"ed25519"` is rejected outright by StrongBox keygen (a1: `Unsupported
+StrongBox EC: ed25519`). The literal algorithm string `"Ed25519"` (a2/b2) *appears* to
+succeed — but a dedicated follow-up KEY TEST (no NFC/MRZ; see KEY-ALGORITHM MATRIX/SUPERSEDED
+above) showed a2/b2 silently return `publicKeyAlgorithm=EC publicKeyEncodedLength=91`,
+identical to the known-P-256 rows c/d, confirmed P-256 (`prime256v1`) by openssl off-device.
+a2/b2 were never Ed25519 keys, and signing with them as Ed25519 fails with
+`InvalidKeyException: Unknown key type: android.security.keystore2.AndroidKeyStoreECPrivateKey`.
+The original "provider-specific entry-point gap, not a hardware gap" reading is **superseded**:
+this is a hardware/platform gap, not an entry-point quirk. Lesson: a capability probe must
+assert the algorithm/curve actually returned, not just that generation succeeded on a
+hardware-backed key — same class as M0 Finding 5.
 
 **F3 — platform NPE on the TEE Ed25519-by-curve-name path (b1).** `generateKeyPair()` throws
 `NullPointerException` inside
@@ -271,9 +330,20 @@ fresh as per-use now that provider resolution (resolveByAttempt) is fixed`).
 
 ## PENDING
 
-- [ ] **F2's escalation (owner decision needed)**: keep Ed25519 via the literal `"Ed25519"`
-      StrongBox entry point (a2), or accept the log's finding as reason enough to open a
-      `sig-p256/1` question for `chiproof` — currently out of scope per §6.2 item 11.
+- [ ] **F2's escalation (owner decision needed — superseded question, see F2 above).** No
+      longer "is Ed25519 available via a different entry point" — the follow-up KEY TEST
+      showed it is not available on this device at all, by any entry point, at any security
+      level. The decision is now a three-way choice, presented neutrally, owner decides:
+      1. **`sig-p256/1` chiproof plug** — hardware-backed (StrongBox/TEE), biometric-bindable
+         (proven live via row c auth-bound); requires amending §6.2 item 11 (currently forbids
+         touching `chiproof` for this) and adding a new signature-scheme plug.
+      2. **Software Ed25519** — keeps D30 unchanged as written; no StrongBox binding, no
+         biometric binding, the private key is extractable software material rather than
+         hardware-confined.
+      3. **Both, operator chooses per device capability** — the owner's stated reading
+         (2026-08-31): signing algorithm is a documented device-capability variable and the
+         operator picks by priority order at runtime. Costs: two code paths to maintain and
+         test; still needs §6.2 item 11 amended to allow the P-256 branch.
 - [ ] **Second device, untested.** This POC ran on one Pixel 6a only; whether the same
       session composition (and the same provider/key-algorithm findings) holds on a second
       device is unverified.

@@ -127,6 +127,22 @@ abstract class MainActivity : AppCompatActivity() {
             Thread { M2MasterlistProbe.runAndReport(applicationContext) }.start()
         }
 
+        // F2 escalation — no NFC/document dependency. See runKeyTest() /
+        // continueKeyTestAfterMatrix() below.
+        findViewById<View>(R.id.button_m2_key_test).setOnClickListener {
+            Thread {
+                val result = SessionKey.runKeyTest(applicationContext)
+                // item 3: export diag artifacts for every row that produced a signature.
+                for (row in result.rows) {
+                    val diag = row.diagSign ?: continue
+                    if (!diag.ok) continue
+                    diag.rawSignature?.let { writeKeyTestArtifact("sig-${row.rowId}.bin", it) }
+                    diag.pubKeyDer?.let { writeKeyTestArtifact("pubkey-${row.rowId}.der", it) }
+                }
+                runOnUiThread { continueKeyTestAfterMatrix(result) }
+            }.start()
+        }
+
         expirationDateView.setOnClickListener {
             val c = loadDate(expirationDateView)
             val dialog = DatePickerDialog.newInstance(
@@ -358,6 +374,202 @@ abstract class MainActivity : AppCompatActivity() {
             session.failureMode = "${e.javaClass.simpleName}: ${e.message}"
             finishSession(session)
         }
+    }
+
+    // -----------------------------------------------------------------
+    // KEY TEST (F2 escalation, coordinator instruction 2026-08-31) — NOT
+    // wired to the NFC/document flow above in any way. SessionKey.runKeyTest
+    // does everything that doesn't need an Activity (matrix + per-row
+    // unattended diagnostic signs + generating the real winner key); this
+    // activity only does the ONE biometric prompt + auth-bound sign the
+    // matrix code can't do on its own, then renders/logs the report.
+    // -----------------------------------------------------------------
+
+    /** Outcome of the single auth-bound sign attempt against the winner key.
+     * Kept structurally separate from [SessionKey.DiagSignOutcome] so the
+     * report can never conflate an unattended diagnostic result with real
+     * per-use-auth evidence. */
+    private data class AuthBoundOutcome(
+        val attempted: Boolean,
+        val ok: Boolean,
+        val biometricResult: String,
+        val exception: String? = null,
+        val sigSha256: String? = null,
+    )
+
+    private fun writeKeyTestArtifact(name: String, bytes: ByteArray) {
+        try {
+            java.io.File(applicationContext.filesDir, name).writeBytes(bytes)
+            Log.i(TAG, "KEY TEST: wrote $name (${bytes.size} bytes) — content never logged")
+        } catch (e: Exception) {
+            Log.w(TAG, "KEY TEST: failed writing $name: ${e.javaClass.simpleName}: ${e.message}")
+        }
+    }
+
+    private fun continueKeyTestAfterMatrix(result: SessionKey.KeyTestResult) {
+        val winnerKeyState = result.winnerKeyState
+        if (winnerKeyState == null) {
+            finalizeKeyTestReport(
+                result,
+                AuthBoundOutcome(attempted = false, ok = false, biometricResult = "not shown (no row generated a usable key — a1/b1/c/d all failed)"),
+            )
+            return
+        }
+
+        SessionKey.noteKeyState(winnerKeyState)
+        val sig = SessionKey.initSignature()
+        if (sig == null) {
+            finalizeKeyTestReport(
+                result,
+                AuthBoundOutcome(attempted = false, ok = false, biometricResult = "not shown (no usable Signature for the winner key)"),
+            )
+            return
+        }
+        val perUseMode = SessionKey.isPerUseMode()
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(getString(R.string.biometric_prompt_title))
+            .setSubtitle(getString(R.string.key_test_biometric_subtitle))
+            .setAllowedAuthenticators(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    BiometricManager.Authenticators.DEVICE_CREDENTIAL,
+            )
+            .build()
+
+        val prompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(authResult: BiometricPrompt.AuthenticationResult) {
+                    // BUG B (same reasoning as the NFC flow's biometric callback):
+                    // PER_USE hands back the CryptoObject's own already-authorized
+                    // Signature; a validity-window key's pre-prompt Signature only
+                    // ever reached PENDING_AUTH and must be re-initSign()'d now.
+                    val signingSignature = if (perUseMode) authResult.cryptoObject?.signature else SessionKey.initSignature()
+                    val outcome = if (signingSignature != null) {
+                        try {
+                            val (hex, rawSig) = SessionKey.signTestMessage(signingSignature)
+                            val rowId = result.winnerRowId ?: "unknown"
+                            writeKeyTestArtifact("sig-$rowId-authbound.bin", rawSig)
+                            SessionKey.currentPublicKeyDer()?.let { writeKeyTestArtifact("pubkey-$rowId-authbound.der", it) }
+                            AuthBoundOutcome(attempted = true, ok = true, biometricResult = "SUCCESS", sigSha256 = hex)
+                        } catch (e: Exception) {
+                            AuthBoundOutcome(attempted = true, ok = false, biometricResult = "SUCCESS", exception = "${e.javaClass.simpleName}: ${e.message}")
+                        }
+                    } else {
+                        AuthBoundOutcome(attempted = true, ok = false, biometricResult = "SUCCESS", exception = "no signing Signature available post-auth")
+                    }
+                    finalizeKeyTestReport(result, outcome)
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    finalizeKeyTestReport(
+                        result,
+                        AuthBoundOutcome(attempted = true, ok = false, biometricResult = "ERROR($errorCode): $errString"),
+                    )
+                }
+
+                override fun onAuthenticationFailed() {
+                    Log.i(TAG, "KEY TEST: biometric match failed once, prompt remains open")
+                }
+            },
+        )
+        try {
+            prompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(sig))
+        } catch (e: Exception) {
+            finalizeKeyTestReport(
+                result,
+                AuthBoundOutcome(attempted = true, ok = false, biometricResult = "LAUNCH FAILED", exception = "${e.javaClass.simpleName}: ${e.message}"),
+            )
+        }
+    }
+
+    private fun finalizeKeyTestReport(result: SessionKey.KeyTestResult, authBound: AuthBoundOutcome) {
+        val report = buildKeyTestReport(result, authBound)
+        reportView.text = report
+        Log.i(TAG, "\n===== KEY TEST REPORT (value-free, F2 escalation) =====\n$report\n===== END =====")
+    }
+
+    /** Picks the best-confirmed row among [candidateIds] (in preference order)
+     * for one capability-summary line. "Confirmed" requires generation OK,
+     * [SessionKey.Attempt.confirmedAndroidKeyStoreKey], and — for a
+     * StrongBox-requested row — that it did NOT land as a suspected
+     * software/TEE fallback. Falls back to a merely-generated-OK row if no
+     * candidate is fully confirmed, so the line still says something rather
+     * than "n/a" when generation worked but verification was ambiguous. */
+    private fun capabilityRow(name: String, candidateIds: List<String>, rows: List<SessionKey.KeyTestRow>): String {
+        fun byId(id: String) = rows.firstOrNull { it.rowId == id }
+        fun confirmed(row: SessionKey.KeyTestRow?): Boolean {
+            val a = row?.genAttempt ?: return false
+            if (!a.ok || !a.confirmedAndroidKeyStoreKey) return false
+            if (row.strongBoxRequested && a.softwareOrTeeFallbackSuspected) return false
+            return true
+        }
+        val candidates = candidateIds.map { byId(it) }
+        val chosen = candidates.firstOrNull { confirmed(it) } ?: candidates.firstOrNull { it?.genAttempt?.ok == true }
+        val generated = if (chosen != null) "yes (row ${chosen.rowId}, level=${chosen.genAttempt.actualSecurityLevel})" else "no"
+        val signed = when {
+            chosen?.diagSign?.ok == true -> "yes (unattended diagnostic key, provider=${chosen.diagSign.provider})"
+            chosen != null -> "no (${chosen.diagSign?.exception ?: "generation ok but diagnostic sign not confirmed"})"
+            else -> "n/a"
+        }
+        return "  $name: GENERATED $generated | SIGNED $signed | VERIFIED-OFF-DEVICE (pending host check)"
+    }
+
+    /** Value-free (§6.2 item 5 discipline: field names, verdicts, hashes,
+     * provider names only — never key/signature content) full report for the
+     * KEY TEST button. */
+    private fun buildKeyTestReport(result: SessionKey.KeyTestResult, authBound: AuthBoundOutcome): String {
+        val sb = StringBuilder()
+        sb.append("===== KEY TEST REPORT (F2 escalation — no document) =====\n\n")
+
+        sb.append("-- capability summary --\n")
+        sb.append(capabilityRow("ed25519_strongbox", listOf("a1", "a2"), result.rows)).append("\n")
+        sb.append(capabilityRow("ed25519_tee", listOf("b1", "b2"), result.rows)).append("\n")
+        sb.append(capabilityRow("p256_strongbox", listOf("c"), result.rows)).append("\n")
+        sb.append(capabilityRow("p256_tee", listOf("d"), result.rows)).append("\n\n")
+
+        sb.append("-- six-row matrix (fresh this run — existing alias was deleted first, item 1) --\n")
+        for (row in result.rows) {
+            val a = row.genAttempt
+            val verdict = when {
+                !a.ok -> "UNCONFIRMED (generation FAILED: ${a.exception})"
+                a.strongBoxRequested && a.softwareOrTeeFallbackSuspected ->
+                    "SUSPECTED SOFTWARE-TEE FALLBACK (StrongBox requested, landed level=${a.actualSecurityLevel})"
+                a.confirmedAndroidKeyStoreKey -> "RESOLVED (confirmed genuine AndroidKeyStore key, level=${a.actualSecurityLevel})"
+                else -> "UNCONFIRMED (generation OK but confirmedAndroidKeyStoreKey=false)"
+            }
+            sb.append("  ${row.rowId} ${row.label}: $verdict\n")
+            sb.append(
+                "    gen_facts: level=${a.actualSecurityLevel} inside_secure_hardware=${a.insideSecureHardware} " +
+                    "kpgProvider=${a.kpgProviderName} containsAliasAfterGen=${a.containsAliasAfterGen} " +
+                    "pubkeyAlg=${a.publicKeyAlgorithm} pubkeyEncodedLen=${a.publicKeyEncodedLength}\n",
+            )
+            val diag = row.diagSign
+            sb.append("    diag_sign (UNATTENDED, NOT auth-bound — diagnostic only, never evidence for the auth-bound path): ")
+            sb.append(
+                when {
+                    diag == null -> "not attempted (generation failed)\n"
+                    diag.ok -> "OK provider=${diag.provider} sha256(signature)=${diag.sigSha256}\n"
+                    else -> "FAILED ${diag.exception}\n"
+                },
+            )
+        }
+        sb.append("\nwinner (preference order a1->b1->c->d, unchanged from ensureKey): ${result.winnerRowId ?: "NONE — a1/b1/c/d all failed"}\n\n")
+
+        sb.append("-- auth-bound sign (item 2 half B — ONE biometric prompt, real per-use path) --\n")
+        sb.append("row: ${result.winnerRowId ?: "n/a"}\n")
+        sb.append("auth_bound: true (setUserAuthenticationRequired(true) at generation — this key, NOT the diagnostic keys above)\n")
+        sb.append("biometric_result: ${authBound.biometricResult}\n")
+        sb.append(
+            "sign_result: " +
+                when {
+                    authBound.ok -> "OK sha256(signature)=${authBound.sigSha256}\n"
+                    authBound.attempted -> "FAILED ${authBound.exception ?: "unknown"}\n"
+                    else -> "NOT ATTEMPTED (${authBound.biometricResult})\n"
+                },
+        )
+        return sb.toString()
     }
 
     @SuppressLint("StaticFieldLeak")

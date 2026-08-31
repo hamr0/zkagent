@@ -132,6 +132,18 @@
                     android:layout_marginBottom="@dimen/activity_vertical_margin"
                     android:text="@string/button_masterlist_probe" />
 
+                <!-- F2 escalation trigger — see SessionKey.runKeyTest() /
+                     MainActivity.continueKeyTestAfterMatrix(). Deliberately
+                     independent of the NFC/document flow: keygen, biometric
+                     and signing only, no chip tap. Exactly one biometric
+                     prompt per tap. -->
+                <Button
+                    android:id="@+id/button_m2_key_test"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/activity_vertical_margin"
+                    android:text="@string/button_m2_key_test" />
+
                 <!-- Value-free report screen (§6.2 item 5): step timeline,
                      key-algorithm/StrongBox facts, pass/fail per step, verdict,
                      sha256 of derived values — never the values themselves.
