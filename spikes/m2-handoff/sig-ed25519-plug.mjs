@@ -5,24 +5,31 @@
 // consumed as-is, nothing in the library is patched. Shape mirrors the shipped
 // `signed-receipt/1` plug, with tier ceiling 'B' per FR12/D30.
 //
-// PROPOSED byte layout (for the owner to confirm — FR12 says the exact layout
-// is an M2 implementation detail, fixed when the plug is built; this spike is
-// that first build, so this is a CANDIDATE, not a settled spec):
+// v2 BYTE LAYOUT (owner-confirmed 2026-08-31, closing the zktag-swap review
+// finding; supersedes the v1 layout below). `binds.zktag: true` (chiproof
+// 0.3.0 Gap 1) — the vouch now also ties to the PRESENTED zktag, so a relay
+// cannot rewrite `presentation.zktag` and keep a valid vouch:
 //
 //   message = sha256( utf8("sig-ed25519/1\n")            // domain separation
 //                     || sha256(canonicalize(claim))      // claim binding
 //                     || base64urlDecode(nonce)           // challenge binding
-//                     || utf8(scopeDomain) )              // scope binding
+//                     || utf8(scopeDomain)                // scope binding
+//                     || utf8(zktag) )                    // zktag binding (NEW, v2)
 //   evidence item = { type: 'sig-ed25519', version: 1, data: { key_id, sig } }
 //   sig = base64( Ed25519(privateKey, message) )
+//
+// The nonce stays base64url-DECODED (raw bytes), matching chiproof's shipped
+// `signed-receipt/1` plug (packages/chiproof/src/plugs/signed-receipt.js) and
+// the owner's 2026-08-30 ruling recorded there — NOT the utf8(nonce) encoding
+// used by the 0.3.0 test-only fixture
+// (packages/chiproof/tests/fixtures/sig-ed25519-zktag-plug.js), which is
+// inconsistent with the shipped plug. Flagged for a later chiproof cleanup;
+// not changed here (chiproof is out of scope for this spike).
 //
 // NOTE vs D30's literal wording ("nonce + scope"): the claim hash is ALSO
 // bound, because chiproof's plug contract refuses at registration any plug
 // that does not declare binds.claim === true (evidence not tied to the claim
-// is replayable across claims). Flagged for owner confirmation.
-//
-// The zktag is NOT bound: chiproof's PlugCtx does not expose the presented
-// zktag to plugs, so no plug can bind it with chiproof as-is. Flagged.
+// is replayable across claims). Flagged for owner confirmation (still open).
 
 import { createHash, verify as edVerify } from 'node:crypto';
 import { canonicalize } from 'chiproof';
@@ -30,13 +37,14 @@ import { canonicalize } from 'chiproof';
 export const SIG_ED25519_KEY = 'sig-ed25519/1';
 
 /** The exact bytes the attester must sign. Exported so the client can produce them. */
-export function sigMessage(claim, nonce, scopeDomain) {
+export function sigMessage(claim, nonce, scopeDomain, zktag) {
   const claimHash = createHash('sha256').update(canonicalize(claim), 'utf8').digest();
   return createHash('sha256')
     .update(Buffer.from('sig-ed25519/1\n', 'utf8'))
     .update(claimHash)
     .update(Buffer.from(nonce, 'base64url'))
     .update(Buffer.from(scopeDomain, 'utf8'))
+    .update(Buffer.from(zktag, 'utf8'))
     .digest();
 }
 
@@ -60,7 +68,7 @@ export function sigEd25519({ keys } = {}) {
   }
 
   return Object.freeze({
-    binds: Object.freeze({ nonce: true, claim: true, scope: true }),
+    binds: Object.freeze({ nonce: true, claim: true, scope: true, zktag: true }),
     linkability: 'signer',   // attester pubkey is stable per attester (FR12/D30)
     tierCeiling: 'B',        // orchestrator-recommended ceiling; owner may veto
     verify(item, ctx) {
@@ -77,9 +85,16 @@ export function sigEd25519({ keys } = {}) {
           // Our own config is broken — could not check, never a "no".
           return { ok: false, valid: null, reason: 'scope_domain_unconfigured' };
         }
+        if (typeof ctx?.zktag !== 'string' || ctx.zktag.length === 0) {
+          // binds.zktag:true means chiproof's router guarantees ctx.zktag is a
+          // presented string before verify() runs (tier A is refused upstream
+          // as evidence_zktag_unavailable). A broken caller is our problem,
+          // never evidence about a person — could not check, not a "no".
+          return { ok: false, valid: null, reason: 'zktag_unavailable_to_plug' };
+        }
         let good;
         try {
-          good = edVerify(null, sigMessage(ctx.claim, ctx.nonce, ctx.scopeDomain), pubkey, Buffer.from(sig, 'base64'));
+          good = edVerify(null, sigMessage(ctx.claim, ctx.nonce, ctx.scopeDomain, ctx.zktag), pubkey, Buffer.from(sig, 'base64'));
         } catch {
           return { ok: true, valid: false, reason: 'sig_malformed' };
         }

@@ -119,7 +119,7 @@ if (TIER === 'B') {
       privateKey = generateKeyPairSync('ed25519').privateKey; // NOT the pinned key
       log('3a. WRONGKEY', `signing with a freshly generated keypair under pinned key_id "${keyId}"`);
     }
-    const sig = edSign(null, sigMessage(claim, challenge.nonce, SCOPE_DOMAIN), privateKey).toString('base64');
+    const sig = edSign(null, sigMessage(claim, challenge.nonce, SCOPE_DOMAIN, presentation.zktag), privateKey).toString('base64');
     presentation.evidence = [{ type: 'sig-ed25519', version: 1, data: { key_id: keyId, sig } }];
   }
 }

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  spikes/m2-handoff — review finding fix (item 4): the app-wide
+  android:usesCleartextTraffic="true" allowed plaintext HTTP to ANY host.
+  This config scopes cleartext to exactly 127.0.0.1 — the adb-reverse dev
+  host the fake m2-handoff verifier server listens on (README "Run" section)
+  — so the app can talk to `adb reverse tcp:8787 tcp:8787` during a dev spike
+  session without opening cleartext to the whole internet.
+
+  UNBUILT / UNVERIFIED ON DEVICE: this file was added without rebuilding the
+  APK or re-running it on the Pixel 6a. See README.md "Android app" note.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

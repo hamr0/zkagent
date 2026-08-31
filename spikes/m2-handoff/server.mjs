@@ -22,9 +22,10 @@
 //    request object (JAR, RFC 9101), matching the reference verifier's default.
 //  - The DCQL block is carried in the captured *shape*; the credential actually
 //    verified is chiproof's `zkagent/1` presentation riding in `zkagent`.
-//  - TWO chiproof instances (one per mode): chiproof's `evidence.require` is
-//    global, not per-tier, so one instance cannot require `sig-ed25519/1` for
-//    mode B while keeping mode A bare — flagged upstream; chiproof consumed as-is.
+//  - (resolved 2026-08-31, chiproof 0.3.0) ONE chiproof instance, both modes:
+//    `evidence.require` now accepts a per-tier `{A?, B?, C?}` object, so a
+//    single instance keeps tier A bare while requiring `sig-ed25519/1` at
+//    tier B. The former two-instance workaround is gone; see README.md.
 
 import { createServer } from 'node:http';
 import { randomBytes, createPublicKey, createPrivateKey } from 'node:crypto';
@@ -59,27 +60,18 @@ const MAX_TTL_MS = 600_000;
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_TRANSACTIONS = 1000; // spike-grade memory cap
 
-// -------------------------------------------------------------- verifiers ---
-// One chiproof instance per mode: `evidence.require` is instance-global in
-// chiproof, so requiring sig-ed25519/1 for mode B on the same instance would
-// break mode A's bare presentations (evidence_required_missing). Both share
-// CHALLENGE_SECRET; each transaction is verified by exactly one instance
-// (routed by tx.mode), and the state<->challenge binding below keeps a nonce
-// from ever reaching the other instance's store.
-export function makeVerifiers() {
-  const common = {
+// -------------------------------------------------------------- verifier ----
+// ONE chiproof instance for both modes (chiproof 0.3.0: `evidence.require`
+// accepts a per-tier `{A?, B?, C?}` object) — tier A stays bare (D27) while
+// tier B requires sig-ed25519/1 (D30), on the same instance/nonce store.
+// Resolves the former two-instance workaround; see README.md.
+export function makeVerifier() {
+  return createVerifier({
     scopeDomain: SCOPE_DOMAIN,
     challengeSecret: CHALLENGE_SECRET,
     // InMemoryNonceStore is test-only; this is a single-process demo/spike,
     // the exact case the explicit override exists for (chiproof.context.md).
     allowInMemoryStore: true,
-  };
-  const A = createVerifier({
-    ...common,
-    stores: { nonce: new InMemoryNonceStore({ quiet: true }) },
-  });
-  const B = createVerifier({
-    ...common,
     stores: { nonce: new InMemoryNonceStore({ quiet: true }) },
     tiers: { max: 'B' },
     evidence: {
@@ -88,10 +80,9 @@ export function makeVerifiers() {
           keys: [{ key_id: ATTESTER_KEY_ID, pubkey: createPublicKey(ATTESTER_PUBKEY_PEM) }],
         }),
       },
-      require: [SIG_ED25519_KEY], // D30: default mode-B evidence delivery
+      require: { A: [], B: [SIG_ED25519_KEY] }, // D30: default mode-B evidence delivery
     },
   });
-  return { A, B };
 }
 
 // ------------------------------------------------------------ app links ----
@@ -195,7 +186,7 @@ function b64urlToJson(s) {
 
 // ------------------------------------------------------------------ app ----
 export function createApp() {
-  const verifiers = makeVerifiers();
+  const verifier = makeVerifier();
   const requestSignerKey = createPrivateKey(REQUEST_SIGNER_PRIVKEY_PEM);
   const byTransactionId = new Map(); // transactionId -> tx
   const byRequestId = new Map();     // requestId -> tx
@@ -231,7 +222,7 @@ export function createApp() {
 
       const transactionId = randomBytes(12).toString('base64url');
       const requestId = randomBytes(12).toString('base64url');
-      const challenge = verifiers[mode].issueChallenge({ tier: mode, ttlMs });
+      const challenge = verifier.issueChallenge({ tier: mode, ttlMs });
 
       const responseUri = `${origin(req)}/wallet/direct_post`;
       const requestUri = `${origin(req)}/wallet/request.jwt/${requestId}`;
@@ -334,14 +325,14 @@ export function createApp() {
         verdict = realNo('vp_token_undecodable');
       } else if (presentation?.challenge?.nonce !== tx.challenge.nonce) {
         // Response must answer THIS transaction's challenge. A sealed challenge
-        // from some other transaction is not this transaction's answer. (This
-        // also keeps each nonce inside its own mode-verifier's store.)
+        // from some other transaction is not this transaction's answer.
         verdict = realNo('state_challenge_mismatch');
       } else {
-        // chiproof is the verdict core, routed by the transaction's mode.
+        // chiproof is the verdict core; the single instance's per-tier
+        // evidence.require does the mode routing (D30, chiproof 0.3.0).
         // verify() never throws; ok:false maps to allowed:null inside the
         // library (never {ok:false,allowed:false}).
-        verdict = await verifiers[tx.mode].verify(presentation);
+        verdict = await verifier.verify(presentation);
       }
       tx.status = 'done';
       tx.verdict = verdict;
