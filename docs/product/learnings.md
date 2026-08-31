@@ -86,6 +86,40 @@ than resolved here.
   RSA-2048 DS certificate**, confirmed by extracting all 588 certificates from the BSI masterlist
   with a ~50-line stdlib-only DER walker and chaining both real DS certificates to their CSCA with
   `openssl verify`. → source: `logs/M1-Q23-EVIDENCE.md` §4 (Part 2).
+- **2026-08-31 — NFC's own foreground-dispatch pause/resume of the still-visible activity fires on
+  every tag, and a wipe-secrets-on-`onPause()` hook destroys the MRZ key before the read can use
+  it.** The M2 scan spike's wipe was originally wired to `onPause()`; the owner's first tap failed
+  because NFC's own pause/resume cycle cleared the MRZ before BAC/PACE establishment could use it.
+  Fixed by moving the wipe to `onStop()`, which fires only on an actual screen-leave — confirmed
+  working across every subsequent capture in the session. → source: `logs/M2-SCAN-EVIDENCE.md`
+  Finding F2.
+- **2026-08-31 — wiping the typed MRZ after every access attempt, not just successful ones, turns
+  a mistyped key into a full retype.** A genuine PACE failure (`SW 0x6300`) with a BAC fallback
+  failure (`SW 0x6985`) during the NL card capture cleared the fields per `wipeMrz()`'s "every
+  attempt, success or failure" contract, forcing a full MRZ retype before the retry could succeed —
+  no document data was exposed by the failure itself. Recommendation for M2 proper: keep the typed
+  fields on an access failure, wipe only on a successful read or on `onStop()`. → source:
+  `logs/M2-SCAN-EVIDENCE.md` Finding F3.
+- **2026-08-31 — any screen that renders DG1 fields is a leak surface twice over: on-device
+  display, and an agent's own accessibility-tree snapshot of that screen.** The M0-inherited
+  `ResultActivity`, unchanged in the M2 scan spike, displays name/gender/country/nationality plus
+  the auth verdicts; a mistimed relaunch during this session brought that screen back to the
+  foreground and a scheduled accessibility snapshot captured partial field text into a local
+  tool-call transcript before the operator caught it — contained (nothing entered the repo or git;
+  no PII value is recorded even here), but the mechanism generalizes beyond the on-screen risk
+  itself. M2 proper has no such screen: mode B shows only a verdict and the derived tag, mode A
+  shows only a verdict, never DG1/personal fields on any screen, in any mode. → source:
+  `logs/M2-SCAN-EVIDENCE.md` Finding F4.
+- **2026-08-31 — UI state is not proof of scan-time state.** During a reinstall capture the mode
+  radio was confirmed via accessibility snapshot to show Mode B checked immediately before the tap,
+  with the owner not touching the control in between, yet the resulting report executed under Mode
+  A (no `zktag_candidates` emitted). A code read found no listener-driven or cached mode field —
+  `MainActivity.kt` reads `RadioGroup.checkedRadioButtonId` live, once, at tag-discovery time — so
+  the mismatch is not explained by anything in the mode-handling code as written; root cause left
+  open. Recommendation for M2 proper: capture the presentation mode from a single, tested source of
+  truth read at the instant a chip session begins, itself covered by an instrumented test, before
+  it gates any zktag-vs-no-zktag derivation decision. → source: `logs/M2-SCAN-EVIDENCE.md`
+  Finding F5 (root cause open).
 
 ## 2. Attestation and vouching
 
@@ -420,6 +454,48 @@ than resolved here.
   it, independent of and orthogonal to licence, and this library is clean on licence while failing
   all three. → source: `logs/M2-EU-ZKP-SPIKE.md` SETUP, §1 (licence), §2 (RSA-parameter limit),
   §3 (no nonce), §4 (no off-device verifier), §5 (private fields), §6 (maturity), RECOMMENDATION.
+- **2026-08-31 — measured: mode-B zktag derivation survives app uninstall/reinstall on both real
+  documents, and reads stored chip key material, not session state.** `document_number` /
+  `optional_data` / `dg1_full` were byte-identical pre- and post-reinstall for both documents; the
+  NL card's chip-bound candidates (`dg14_ca_key`, `dg15_aa_key`) — each drawn from a Chip/Active
+  Authentication exchange that runs fresh per-session cryptographic challenges — were likewise
+  byte-identical across the reinstall, showing the derivation reads DG14/DG15's stored static
+  public keys, not that session's ephemeral randomness. This depends on nothing device-held,
+  exactly as FR11 specifies. → source: `logs/M2-SCAN-EVIDENCE.md` TEST 1; `product/zkagent-prd.md`
+  FR11.
+- **2026-08-31 — measured: the BSI masterlist parses 588/588 certificates in 585 ms on the Pixel
+  6a, and the PRD's masterlist two-bucket rule is now written down, matching what M0 and this spike
+  both already implement.** A truncated/half-loaded masterlist (integrity failure) yields
+  `ok:false` (could not check); a well-formed masterlist that simply lacks the issuing CSCA yields
+  `ok:true, allowed:false` (a real no, issuer-untrusted) — the CSCA-removed negative excluded a
+  nonzero count on both documents (8 US, 2 NL). M0's PRD row wording ("must yield `ok:false`" for
+  the CSCA-removed case) is marked superseded. → source: `logs/M2-SCAN-EVIDENCE.md` TEST 2;
+  `product/zkagent-prd.md` §6 M0/M2 rows.
+- **2026-08-31 — D9 × D29 interaction: two independently-sound decisions combined into an
+  unwritten consequence.** D9 (mode-B derivation field = `document_number`) and D29 (mode B
+  accepts non-chip-auth documents) together mean mode-B uniqueness and blocking are forgeable
+  wherever `chip_auth: false` — `document_number` lives in DG1, which a cloned chip can replay
+  verbatim with no challenge-response, minting the identical zktag as the genuine holder and
+  inheriting their pseudonymous reputation (or evading a block placed on them). The guarantee holds
+  only where `chip_auth: true` (D21); FR11 now states this as an explicit conditional rather than
+  leaving it implicit. Lesson: decisions that are each sound in isolation can combine into a
+  consequence neither decision's own review surfaced — check pairs, not just each decision alone.
+  → source: `product/zkagent-prd.md` v1.16 preamble, D9, D29, FR11.
+- **2026-08-31 — a fix existing in a library is not the same as the default caller using it.** The
+  `sig-ed25519/1` evidence plug's settled byte layout binds claim-hash + nonce-bytes + scope +
+  zktag, but code review found the spike's own plug still lacked the zktag binding after chiproof
+  0.3.0 had already shipped the capability to add it (fixed; review closed 17/17 findings, one
+  High). The shipped `signed-receipt/1` plug (owner ruling 2026-08-30) is the reference for
+  nonce-bytes encoding (base64url-decoded, not utf8) — chiproof's own test fixture for that plug
+  still uses `utf8(nonce)`, flagged for cleanup rather than a spec deviation. → source:
+  `product/zkagent-prd.md` D30, FR12.
+- **2026-08-31 — real-device handoff: the EU-Blueprint-shaped `av://` app-link roundtrip works on
+  the Pixel 6a end to end with an ES256-signed request object; the DC API is live on Chrome 151
+  (its own system consent gate renders) but ends in `NotAllowedError` with no registered Credential
+  Manager provider.** Interop with real EU wallets remains impossible regardless, for the separate
+  reasons already recorded under the EU wire-shape findings above (credential format, client
+  identification) — cross-referenced here as the on-device half of the same story, not a new
+  blocker. → source: `logs/M2-DEVICE-EVIDENCE.md` Findings 3–4; `logs/M2-CONFORMANCE.md` SETUP.
 
 ## 5. Process lessons
 
@@ -478,6 +554,33 @@ than resolved here.
   regexes that GNU grep accepts; structured data (JSON captures, ASN.1 dumps) should be parsed with
   `python3` instead. → source: `.claude/remember/MEMORY.md` (Facts); recurring across every stash
   file's Gotchas section.
+- **2026-08-31 — omitting `model` on an Agent spawn silently inherits the parent model, not a safe
+  default.** Several coding agents spawned this session without an explicit `model` ran on Fable
+  instead of Sonnet, exhausting credits mid-run before it was caught; a forking skill (e.g.
+  `/code-review`) runs on the parent model by construction and needs no override. Rule adopted:
+  every `Agent` spawn passes `model: sonnet` explicitly, and review work is delegated to a Sonnet
+  `quality-assurance` agent, never the bare review skill. → source: this session's own record,
+  2026-08-31; `~/.claude/projects/-home-hamr-PycharmProjects-zkagent/memory/orchestrator-only-sonnet-codes.md`.
+- **2026-08-31 — spawning a replacement agent without checking for a still-running one put two
+  agents on the same physical phone at once.** The orchestrator briefly believed an in-progress
+  device-handoff agent had died and spawned a duplicate; both drove the same device for a short
+  window (the contention visible in `M2-DEVICE-EVIDENCE.md` screenshots 06–10) before the collision
+  was identified and the duplicate's phone access was killed. → source: `logs/M2-DEVICE-EVIDENCE.md`
+  Method section ("Provenance / contention"); `.claude/remember/MEMORY.md` (Facts, "`/clear` keeps
+  agents running").
+- **2026-08-31 — writing artifacts to disk as the run proceeds, not only at the end, made two
+  mid-run agent kills cost only the unfinished tail.** The device-handoff evidence doc was
+  reconstructed entirely from screenshots and source files already saved to disk before the
+  contention above was caught, rather than losing the whole run. → source: `logs/M2-DEVICE-EVIDENCE.md`
+  Method section.
+- **2026-08-31 — self-consistency is not conformance.** 15/15 green tests in the spike's own test
+  suite proved only that the spike's two ends agree with each other; its DCQL block, diffed against
+  the real EU reference verifier's own request-object builder, was confirmed decorative — accepted
+  unvalidated at init time, enforcement pushed to a wallet's credential-selection step no
+  `zkagent`-only wallet can pass. Only running the third party's actual code (the EU org's own
+  Docker image, and a source read of the ZK library's Kotlin) turned "we haven't checked" into
+  "checked, does not interop, for two independent reasons." → source: `logs/M2-CONFORMANCE.md`
+  Finding 1, §"What this establishes" (15/15 green tests).
 
 ## 6. Background — the ZK question, explained
 
