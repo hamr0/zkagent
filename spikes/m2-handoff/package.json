@@ -1,0 +1,14 @@
+{
+  "name": "m2-handoff-spike",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "M2 POC step (b): throwaway EU-Blueprint-shaped test verifier website around chiproof. Spike code — not shipped, not published.",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "chiproof": "file:../../packages/chiproof"
+  }
+}
