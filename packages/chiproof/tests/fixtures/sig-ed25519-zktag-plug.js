@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Test-only REFERENCE zktag-binding Ed25519 plug (0.3.0, Gap 1). NEVER shipped:
-// the FR12 `sig-ed25519/1` byte layout is an M2 implementation detail still
-// awaiting owner confirmation (see spikes/m2-handoff), so this fixture exists
-// only to exercise the `binds.zktag` contract end-to-end — an attester-held
-// Ed25519 key signs claim + nonce + scope + THE PRESENTED ZKTAG, so evidence
-// bound to one zktag must die under another (the zktag-swap attack).
+// the FR12 `sig-ed25519/1` byte layout is an M2 implementation detail — the
+// owner confirmed it 2026-08-31 (see spikes/m2-handoff/sig-ed25519-plug.mjs,
+// the reference implementation), so this fixture exists only to exercise the
+// `binds.zktag` contract end-to-end — an attester-held Ed25519 key signs
+// claim + nonce + scope + THE PRESENTED ZKTAG, so evidence bound to one
+// zktag must die under another (the zktag-swap attack).
 import { createHash, verify as edVerify } from 'node:crypto';
 import { canonicalize } from '../../src/canonical.js';
 
@@ -12,14 +13,16 @@ export const ZKTAG_SIG_KEY = 'test-sig-ed25519-zktag/1';
 
 /**
  * The exact bytes the attester signs. Exported so tests can build evidence.
- * Layout (test-only): sha256( domain-sep || sha256(claim) || nonce || scope || zktag ).
+ * Layout: sha256( domain-sep || sha256(claim) || nonceBytes || scope || zktag ).
+ * `nonce` is base64url-decoded to raw bytes, matching the shipped
+ * `signed-receipt/1` plug's convention (src/plugs/signed-receipt.js).
  */
 export function zktagSigMessage(claim, nonce, scopeDomain, zktag) {
   const claimHash = createHash('sha256').update(canonicalize(claim), 'utf8').digest();
   return createHash('sha256')
     .update(Buffer.from('test-sig-ed25519-zktag/1\n', 'utf8'))
     .update(claimHash)
-    .update(Buffer.from(nonce, 'utf8'))
+    .update(Buffer.from(nonce, 'base64url'))
     .update(Buffer.from(scopeDomain, 'utf8'))
     .update(Buffer.from(zktag, 'utf8'))
     .digest();
