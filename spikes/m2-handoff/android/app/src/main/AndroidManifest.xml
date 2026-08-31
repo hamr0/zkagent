@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="m2-handoff spike"
+        android:usesCleartextTraffic="true"
+        android:allowBackup="false"
+        android:supportsRtl="true">
+
+        <!-- Single activity handling the Blueprint AV-Profile custom scheme av://.
+             https App Links are the Blueprint's primary same-device method but need
+             a hosted /.well-known/assetlinks.json to verify; for a throwaway spike
+             we use av:// (the Profile's mandated fallback) as the on-device primary.
+             Recorded as a finding, not a defect. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="av" android:host="authorize" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

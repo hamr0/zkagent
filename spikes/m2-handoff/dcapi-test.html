@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M2 DC API probe</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; padding: .7rem 1.4rem; }
+  pre { background: #f2f2f2; padding: .6rem; white-space: pre-wrap; word-break: break-all; }
+  .ok { color: #1b5e20; } .bad { color: #b71c1c; } b { font-weight: 700; }
+</style>
+<h1>M2 DC API probe (Chrome-on-Android)</h1>
+<p>Tests <code>navigator.credentials.get({digital: …})</code> with the
+<code>openid4vp-v1-unsigned</code> request shape from M2-CAPTURE Finding 5, on
+this device, with <b>no registered Credential Manager provider</b>. Failure is a
+finding, not a defect — see the evidence doc.</p>
+
+<p id="support"></p>
+<button id="go">Call navigator.credentials.get({digital})</button>
+<h2>Result</h2>
+<pre id="out">(not run yet)</pre>
+
+<script>
+const out = document.getElementById('out');
+const support = document.getElementById('support');
+
+// Feature-detection: is the Digital Credentials API even present?
+const hasDigital = ('credentials' in navigator) && ('DigitalCredential' in window);
+const hasGet = ('credentials' in navigator) && (typeof navigator.credentials.get === 'function');
+support.innerHTML =
+  'window.DigitalCredential present: <b>' + ('DigitalCredential' in window) + '</b><br>' +
+  'navigator.credentials.get present: <b>' + hasGet + '</b><br>' +
+  'userAgent: <b>' + navigator.userAgent + '</b>';
+
+// A minimal OpenID4VP-style request in the DC API envelope (Finding 5 shape).
+const request = {
+  digital: {
+    requests: [{
+      protocol: 'openid4vp-v1-unsigned',
+      data: {
+        response_type: 'vp_token',
+        response_mode: 'dc_api',
+        client_id: 'web-origin:m2-handoff.test',
+        nonce: 'probe-nonce-0001',
+        dcql_query: {
+          credentials: [{
+            id: 'proof_of_age',
+            format: 'mso_mdoc',
+            meta: { doctype_value: 'eu.europa.ec.av.1' },
+            claims: [{ path: ['eu.europa.ec.av.1', 'age_over_18'] }]
+          }]
+        }
+      }
+    }]
+  }
+};
+
+document.getElementById('go').addEventListener('click', async () => {
+  out.className = '';
+  out.textContent = 'calling navigator.credentials.get(...)\n';
+  const t0 = performance.now();
+  try {
+    const cred = await navigator.credentials.get(request);
+    const dt = (performance.now() - t0).toFixed(0);
+    out.className = 'ok';
+    out.textContent = 'RESOLVED in ' + dt + ' ms\n' + JSON.stringify(cred, null, 2);
+  } catch (e) {
+    const dt = (performance.now() - t0).toFixed(0);
+    out.className = 'bad';
+    out.textContent = 'REJECTED in ' + dt + ' ms\n' +
+      'name: ' + (e && e.name) + '\n' +
+      'message: ' + (e && e.message) + '\n' +
+      'toString: ' + String(e);
+  }
+});
+</script>
