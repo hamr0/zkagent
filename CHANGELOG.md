@@ -426,7 +426,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   bare tier A (D27) beside an evidence-required tier B (D30), replacing the
   two-instance workaround the spike needed; the 0.2.0 plain-array form keeps
   its instance-global semantics unchanged and `routeEvidence` accepts both
-  (new export `normalizeRequire`). 125 tests (116 pre-existing, zero
+  (new export `normalizeRequire`). 126 tests (116 pre-existing, zero
   regressions), typecheck and a strict-TS adopter gate green; no other
   runtime change.
 

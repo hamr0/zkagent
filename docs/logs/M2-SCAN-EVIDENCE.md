@@ -5,7 +5,7 @@ MEASURED sections filled in, findings recorded, app uninstalled from the test de
 file's SETUP and pre-registered failure modes were written before any scan, per PRD
 discipline (M0's own `docs/logs/M0-EVIDENCE.md` "rewrite the row so the spike can fail"
 precedent). **Result: TEST 1, TEST 2, and TEST 3 all PASS for both documents**; several
-non-blocking findings (F1–F6, see Findings) were surfaced along the way, including one
+non-blocking findings (F1–F7, see Findings) were surfaced along the way, including one
 contained privacy incident (F4) and one unresolved spike bug (F5) — both flagged for M2
 proper, not fixed in this throwaway spike.
 
@@ -395,6 +395,20 @@ full-load delta and the US/NL native-heap deltas in the per-scan reports should 
 coarse, non-authoritative signal only, not a memory-footprint measurement of the masterlist
 parse itself.
 
+**F7 — the derivation gate in this spike is mode-only, not verdict-gated (design input for
+M2 proper, not a spike defect).** `MainActivity.kt`'s TEST 3 branch (~line 446) derives
+zktag candidates whenever `modeB` is true — `if (modeB) { ... M0Probe.deriveCandidates(...)
+... }` — with no check of the passive-auth verdict computed earlier in the same scan. That
+is correct for a measurement probe: TEST 1 and TEST 3 need candidates on every mode-B run,
+including runs with planted negatives, in order to observe what the derivation actually
+produces. It is wrong for the product. M2 proper MUST gate minting on `passiveAuth.ok &&
+passiveAuth.allowed == true` in the app itself, in addition to whatever the verifier already
+enforces via the evidence tier — D21 (always read, conditionally mint; owner-confirmed
+2026-08-31) puts the operator, not the verifier, in control of that gate. A masterlist real-
+no (`ok:true, allowed:false`) must derive and emit no zktag at all — the challenge is
+answered with a real no and consumed, not silently paired with a pseudonymous tag from an
+issuer-untrusted document.
+
 ---
 
 ## What this establishes / does NOT establish
@@ -423,7 +437,7 @@ parse itself.
   RESOLVED, see PENDING.
 
 **Findings surfaced by running the scans (not established as "safe" — the opposite; these
-are defects/risks to carry into M2 proper, per F1–F6 above):**
+are defects/risks to carry into M2 proper, per F1–F7 above):**
 - F3: wipe-on-any-attempt forces an unnecessary full MRZ retype on an access failure.
 - F4: the M0-inherited ResultActivity renders DG1 personal fields on screen and was
   transiently exposed to an automation snapshot this session — M2 proper must not have this
@@ -432,6 +446,9 @@ are defects/risks to carry into M2 proper, per F1–F6 above):**
   a correctness risk for the mode gate itself, not just a UX issue, since a production system
   must not silently execute the wrong disclosure mode.
 - F6: native-heap deltas throughout this document (and M0's) are a coarse signal only.
+- F7: the spike's derivation gate is mode-only (`if (modeB)`), not verdict-gated — M2
+  proper must additionally gate minting on `passiveAuth.ok && passiveAuth.allowed ==
+  true` in the app.
 
 **NOT established by this spike:**
 - Renewal stability of the derivation field (D9's real open question) — untestable with
@@ -502,6 +519,10 @@ to get both US-passport and NL-ID-card readings, matching M0's own two-document 
       not a "fix the existing screen" item, a "do not build this screen" item.
 - [ ] F3 (wipe-on-any-attempt UX) — recommend keeping fields on access failure, wiping only
       on success or `onStop()`.
+- [ ] F7 (mode-only derivation gate) — M2 proper must gate minting on
+      `passiveAuth.ok && passiveAuth.allowed == true` in the app, on top of whatever the
+      verifier enforces via the evidence tier; a masterlist real-no must derive and emit
+      no zktag.
 - [x] BSI ZIP provenance re-check — RESOLVED (2026-08-31). Committed asset (899,665 bytes,
       sha256 `da33466b…7b8ae`) is byte-identical to M0's copy (`cmp`). Fresh BSI download via
       headless browser (bsi.bund.de blocks curl with Akamai Bot Manager): CSCA page → German
