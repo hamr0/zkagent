@@ -266,6 +266,22 @@ than resolved here.
   themselves carried no separate NL/US fingerprint. → source: `logs/M1B-EVIDENCE.md`;
   `product/zkagent-prd.md` D26.
 
+- **2026-08-31 — the EU itself has published an issuer-free ZK-over-ICAO age-proof library,
+  architecturally the same shape as zkagent's own Track Z thesis, but hardwired to one RSA
+  parameter set.** `av-lib-android-zkp-age-icao` (commit `5f1d806`) runs a Noir/Barretenberg
+  circuit directly over a chip's DG1+SOD+COM triple — no issuer round-trip, no online masterlist
+  call visible in its public API — emitting a bespoke `{data:{age_over_18,...}, proof:...}` JSON.
+  It is fixed to RSA-4096 CSC / RSA-3072 DSC / RSA PKCS#1v1.5-SHA-256 DSC-sig /
+  RSASSA-PSS-SHA-256 SOD-sig / a fixed 1600-byte TBSCertificate — a different, narrower set than
+  either of this project's own two real documents, both RSA-2048/SHA-256 DSC (§1 above,
+  `logs/M1-Q23-EVIDENCE.md` §2), so this specific library cannot currently process either
+  document in hand. Generalizes past this one library: a ZK circuit over passport signatures is
+  hardwired to one signature parameter combination, and supporting real-world document diversity
+  means a circuit per combination — the same structural fact behind D26's disclosed `vk_sha256`
+  circuit-class bucket, immediately above. "Does it support my document?" is therefore a
+  per-circuit empirical question, never a general claim. → source: `logs/M2-CONFORMANCE.md`
+  SETUP, Finding 6. See also §4 below and §6.11 (cross-referenced there).
+
 ## 4. Protocol and design
 
 - **2026-08-03 — RFC 9421 was cited five times in the repo as an assumption and had never been
@@ -350,6 +366,60 @@ than resolved here.
   - One line: bare trusts the sender; attestation trusts the signer; ZK trusts the math; the
     nonce/zktag/claim shapes are identical — only `evidence[]` differs.
   → source: `docs/product/m1-verifier-core-spec.md` §4; PRD D24.
+
+- **2026-08-31 — the EU runs two disconnected age-verification wire shapes, and zkagent as built
+  interoperates with neither as a credential.** (a) The mandated shape: OpenID4VP + DCQL selecting
+  an `mso_mdoc` credential, doctype `eu.europa.ec.av.1`, boolean claim `age_over_18` — verified
+  end to end against a really-running reference verifier backend (`av-srv-verifier-endpoint` @
+  `787089b`, the EU org's own published Docker image, pulled and booted locally). (b) The
+  issuer-free ZK shape described in §3 above (`av-lib-android-zkp-age-icao`) — grepping that
+  repo's Kotlin sources and markdown for `openid4vp`/`dcql`/`mso_mdoc` returned zero matches, and
+  no adapter between the two was found anywhere in the EU's published repos. **Interop verdict,
+  stated plainly, two independent blockers**: **credential format** — a wallet holding no
+  `mso_mdoc` of that doctype has nothing to select, and minting a genuine one needs an issuer
+  signature, which NO-GO #3 forbids (this reconfirms §6.11's existing "no" on passport→mdoc
+  conversion, below); and **client identification** — the reference verifier's real default is a
+  `PreRegistered`/x509 `VerifierId` with a hardcoded SIOPv2 `aud`
+  (`"https://self-issued.me/v2"`), not the `client_id_scheme: redirect_uri` that the Blueprint's
+  own docs (and this project's own earlier spike, `logs/M2-CAPTURE.md` Finding 1) assumed was the
+  mechanism — `redirect_uri` client identification exists in the real source only as an
+  off-by-default legacy-wallet compatibility flag, not the default `VerifierId` shape. → source:
+  `logs/M2-CONFORMANCE.md` SETUP, Findings 1, 2, 6, 7.
+- **2026-08-31 — live UK age gates (Reddit/Discord-class) are not credential flows at all.** They
+  are IDV-vendor iframes/redirects (Persona, k-ID) exchanging opaque inquiry ids via a JS
+  `onComplete` callback plus a server-side webhook — nothing wallet-shaped for a zkagent-style
+  scanner app to answer. The deployed reality and the standardised EU wallet architecture are two
+  different worlds today. → source: `logs/M2-CAPTURE.md` Finding 3.
+- **2026-08-31 — the EU ZK library (§3 above) is NO-GO for adoption as-is; licence was not the
+  problem, three other axes were.** Licence is clean: Apache-2.0 at the repo root, matching
+  `NOTICE.txt` and per-file SPDX headers, no non-commercial clause found anywhere in the target
+  repo or its bundled JS/SRS assets; one transitive LGPL-3.0 dependency (JMRTD 0.8.3, a *different*
+  JMRTD version than this project's own vetted 0.7.18 fork) needs ordinary LGPL compliance
+  handling, not a blocker. The decisive blocker is the RSA-4096-CSC/RSA-3072-DSC constraint (§3)
+  confirmed as a **hard-compiled ACIR ABI array-length limit** (`csc_pubkey: [u8;512]`,
+  `dsc_pubkey: [u8;384]`, `tbs_certificate: [u8;1600]`), not a config flag — debug-symbol paths
+  name a `two_circuits`/`epassport_rsa4096_3072_pss` workspace, implying sibling parameter sets
+  exist in the author's build tree but were never published. Two further, independently sufficient
+  blockers: **no nonce, challenge, or nullifier field exists anywhere in the 26-parameter ABI**
+  (worse than `zk-passport/1`, which at least carries a challenge through `service_subscope`,
+  D25) — and `current_date` is hardcoded inside the library at hour granularity, not
+  caller-adjustable, a linkability regression against this project's own D28 day-granularity
+  choice; and **no verification path exists outside Android** — no exported VK, no Node binding,
+  no documented wire contract for the "server-side verifier" the library's own docstring promises,
+  on an untested Noir `1.0.0-beta.21` vs. `bb 5.0.0` pairing (the version `zk-passport/1` already
+  pins). One genuine, unverified-by-testing advantage: `country`/`certificate_tags`/
+  `certificate_type` are private ABI fields, so — unlike `zk-passport/1` — this circuit does not
+  structurally leak the issuer/circuit-class bucket D26 had to disclose; no leak-closure spike (the
+  `M1B-EVIDENCE.md` method) was run to confirm it holds. Maturity: `0.0.3-SNAPSHOT`, no tags, 6
+  commits, ~3 months stale, its one instrumented test file sits behind a CI job disabled with
+  `if: false`, and still no OpenID4VP/DCQL adapter has appeared. GO-IF, recorded as actionable:
+  a published circuit variant covering real-world DSC key sizes, an exported VK with a documented
+  off-device verification contract, and any nonce-carrying mechanism. **Durable lesson**: an
+  issuer-free ZK age library existing is not the same as one being adoptable — parameter coverage,
+  nonce binding, and an off-device verification contract are the three things that actually decide
+  it, independent of and orthogonal to licence, and this library is clean on licence while failing
+  all three. → source: `logs/M2-EU-ZKP-SPIKE.md` SETUP, §1 (licence), §2 (RSA-parameter limit),
+  §3 (no nonce), §4 (no off-device verifier), §5 (private fields), §6 (maturity), RECOMMENDATION.
 
 ## 5. Process lessons
 
@@ -634,6 +704,14 @@ credential circuits exists on that repo (an SD-JWT VC PR, ECDSA-based); passport
 never been discussed there. Status: Track Z's realistic engine remains Barretenberg (RSA circuits
 exist and have run against real documents, §3); longfellow is a watch item, reopened only if Google
 adds RSA.
+
+**Confirmed empirically 2026-08-31**: the "convert passport to mdoc? no" call above was
+reconfirmed against real EU-org source and a locally-run reference verifier, not re-derived here —
+see the §3 and §4 entries dated 2026-08-31 (`logs/M2-CONFORMANCE.md`, `logs/M2-CAPTURE.md`). Those
+entries also record that the EU has separately published its own Barretenberg/Noir circuit over
+ICAO documents (`av-lib-android-zkp-age-icao`), architecturally the same road as this section's
+"(b) ZK-prove the passport itself" — but not wired into its own OpenID4VP/DCQL wire, and hardwired
+to a narrower RSA parameter set than either of this project's two real documents.
 
 ### 6.12 Claims we may make today
 
