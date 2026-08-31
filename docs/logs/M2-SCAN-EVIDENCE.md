@@ -34,7 +34,7 @@ appear nowhere in this repo.
 | Device | Pixel 6a (`bluejay`), adb serial `34011JEGR02358`, stock Android 17, NFC on | Same device as M0/M1 |
 | Spike | `spikes/m2-scan/` — **fork of `spikes/m0`** (not a from-scratch app, per instruction) | `M0Probe.kt` copied byte-for-byte unchanged; MRZ-persistence defect designed out (see below); `M2MasterlistProbe.kt` added; `MainActivity.kt` extended for TEST 1/2/3 |
 | APK build id | `applicationId com.zkagent.m2scan`, `versionCode 1`, `versionName "0.1-spike"`, built `2026-08-31` via `./gradlew :app:assembleRegularDebug` (BUILD SUCCESSFUL, 35 tasks) | Distinct `applicationId` from `com.tananaev.passportreader` (the M0 spike, still installed on this device) so TEST 1's uninstall/reinstall never touches the M0 app |
-| Masterlist asset | `spikes/m2-scan/app/src/main/assets/masterList`, **899,665 bytes**, SHA-256 `da33466be6b98437456ee46d1d3021ea881081717c4bdd2ac7a513c2f1b7b8ae` | Byte-identical file to `spikes/m0`'s bundled asset (same size as M0-EVIDENCE.md SETUP: 899,665 bytes, BSI German Master List, 2026-05-28 publication, 588 certs / 116 countries per M0 Finding 1). Not re-fetched from BSI directly in this spike — M0's own PENDING item ("BSI ZIP fetched directly and diffed") is still open and is not resolved here either |
+| Masterlist asset | `spikes/m2-scan/app/src/main/assets/masterList`, **899,665 bytes**, SHA-256 `da33466be6b98437456ee46d1d3021ea881081717c4bdd2ac7a513c2f1b7b8ae` | Byte-identical file to `spikes/m0`'s bundled asset (same size as M0-EVIDENCE.md SETUP: 899,665 bytes, BSI German Master List, 2026-05-28 publication, 588 certs / 116 countries per M0 Finding 1). Provenance re-verified against a fresh BSI download on 2026-08-31 — RESOLVED, see PENDING |
 | Install | `adb -s 34011JEGR02358 install -r app-regular-debug.apk` → `Success`; confirmed running via `adb shell pidof com.zkagent.m2scan` (pid 24974) and `dumpsys activity activities` showing the activity as top, visible task; no `AndroidRuntime`/`FATAL` lines in logcat after launch | Device was locked at launch time (screenshot showed the lock screen) — launch was confirmed via `dumpsys`/`pidof`, not visually; the owner must unlock the phone before scanning |
 
 **Deviations from `spikes/m0`, deliberate (full list in `spikes/m2-scan/README.md`):**
@@ -419,8 +419,8 @@ parse itself.
 - The MRZ-persistence defect identified going in is designed out in this fork (F1), and the
   APK builds/installs/runs cleanly (unchanged from before any scan).
 - The masterlist asset is byte-identical to M0's own bundled copy (unchanged from before any
-  scan; still not independently re-verified against a fresh BSI download — that remains
-  M0's own open PENDING item).
+  scan) and its provenance against a fresh BSI download is now independently verified —
+  RESOLVED, see PENDING.
 
 **Findings surfaced by running the scans (not established as "safe" — the opposite; these
 are defects/risks to carry into M2 proper, per F1–F6 above):**
@@ -502,8 +502,16 @@ to get both US-passport and NL-ID-card readings, matching M0's own two-document 
       not a "fix the existing screen" item, a "do not build this screen" item.
 - [ ] F3 (wipe-on-any-attempt UX) — recommend keeping fields on access failure, wiping only
       on success or `onStop()`.
-- [ ] BSI ZIP provenance re-check — still M0's own open item, not resolved by this spike
-      either (same bundled asset, same unverified-against-source-ZIP status).
+- [x] BSI ZIP provenance re-check — RESOLVED (2026-08-31). Committed asset (899,665 bytes,
+      sha256 `da33466b…7b8ae`) is byte-identical to M0's copy (`cmp`). Fresh BSI download via
+      headless browser (bsi.bund.de blocks curl with Akamai Bot Manager): CSCA page → German
+      master list → `GermanMasterList` ZIP (507,904 bytes, sha256 `ac294f59…26b612c`) →
+      `DE_ML_2026-05-28-08-28-45.ml` (CMS SignedData, 902,359 bytes, sha256
+      `e036f8c9…d7526dd0`, signingTime 2026-05-28 06:28:45 GMT). `openssl cms -verify`
+      succeeded — signer `CN=CSCA Master List Signer, serialNumber=0039, C=DE, O=bund,
+      OU=bsi`, issuer `CN=csca-germany`. Extracted eContent (899,665 bytes, sha256
+      `da33466b…7b8ae`) matches the committed asset exactly — it is the raw eContent (SET OF
+      Certificate, 588 certs), not the CMS wrapper. Verdict: IDENTICAL — provenance verified.
 - [ ] Renewal stability of `document_number` — untestable with documents in hand.
 - [x] `com.zkagent.m2scan` uninstalled from the test device at end of session (see SETUP/
       end-of-session note) — confirmed via `adb shell pm list packages | grep m2scan`

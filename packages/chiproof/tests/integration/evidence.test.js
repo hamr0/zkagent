@@ -211,6 +211,33 @@ test('a plug reporting ok:false propagates as ok:false with its own reason', asy
   assert.equal(out.reason, 'fixture_backend_down');
 });
 
+test('MATRIX 14b: an ok:false required plug beats a valid one -- allowed:null wins, order-independent', async () => {
+  const v = makeVerifier({
+    require: ['adv/1', 'ok/1'],
+    plugs: { 'adv/1': cannotCheckPlug, 'ok/1': alwaysValid() },
+  });
+
+  const c1 = v.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  const brokenFirst = await v.verify(
+    presentationFor(c1, { evidence: [item('adv'), item('ok')] }),
+    { now: T0 },
+  );
+  assertInvariant(brokenFirst);
+  assert.equal(brokenFirst.ok, false, 'broken-first order');
+  assert.equal(brokenFirst.allowed, null, 'broken-first order');
+  assert.equal(brokenFirst.reason, 'fixture_backend_down');
+
+  const c2 = v.issueChallenge({ tier: 'A', ttlMs: 60_000, now: T0 });
+  const brokenLast = await v.verify(
+    presentationFor(c2, { evidence: [item('ok'), item('adv')] }),
+    { now: T0 },
+  );
+  assertInvariant(brokenLast);
+  assert.equal(brokenLast.ok, false, 'broken-last order');
+  assert.equal(brokenLast.allowed, null, 'broken-last order');
+  assert.equal(brokenLast.reason, 'fixture_backend_down');
+});
+
 // ---------------------------------------------------------------------------
 // Matrix 15: device-class evidence in tier A -> refused.
 // ---------------------------------------------------------------------------

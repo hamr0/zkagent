@@ -20,11 +20,9 @@
 //
 // The nonce stays base64url-DECODED (raw bytes), matching chiproof's shipped
 // `signed-receipt/1` plug (packages/chiproof/src/plugs/signed-receipt.js) and
-// the owner's 2026-08-30 ruling recorded there — NOT the utf8(nonce) encoding
-// used by the 0.3.0 test-only fixture
-// (packages/chiproof/tests/fixtures/sig-ed25519-zktag-plug.js), which is
-// inconsistent with the shipped plug. Flagged for a later chiproof cleanup;
-// not changed here (chiproof is out of scope for this spike).
+// its `sig-ed25519-zktag-plug.js` test fixture
+// (packages/chiproof/tests/fixtures/sig-ed25519-zktag-plug.js), aligned to
+// base64url in commit a3ffa9c (2026-08-31) — both now match.
 //
 // NOTE vs D30's literal wording ("nonce + scope"): the claim hash is ALSO
 // bound, because chiproof's plug contract refuses at registration any plug
