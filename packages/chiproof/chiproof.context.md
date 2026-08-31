@@ -79,7 +79,7 @@ accepted and weakened later.
 | `scopeDomain` | non-empty `string` | **required** | This verifier's own scope. Bound into `signed-receipt/1`'s signed message and `zk-passport/1`'s `service_scope` field; passed to every plug via `ctx.scopeDomain`. |
 | `masterlistRoot` | `string` | `undefined` | Not validated by the core. Passed through unchanged to plugs via `ctx.masterlistRoot` for a plug that needs it (e.g. to check which masterlist snapshot a document's chain was verified against). The core does not read or fetch a masterlist itself — masterlist verification is the phone's job (M1 spec §1). |
 | `evidence.plugs` | `Record<string, Plug>` | `{}` | Plugs to register, keyed by `"type/version"` (e.g. `"zk-passport/1"`). Each value is the object returned by a plug factory (`zkPassport(...)`, `signedReceipt(...)`, or your own). Registration runs `assertPlug` and throws on a malformed plug — see "Evidence plug contract". |
-| `evidence.require` | `string[]` | `[]` | Evidence types (registry keys) that **must** be present and valid, or `verify()` refuses (`evidence_required_missing`). Empty = bare mode. Every entry must name a plug registered in `evidence.plugs`, or construction throws. |
+| `evidence.require` | `string[]` or `{A?, B?, C?}` | `[]` | Evidence types (registry keys) that **must** be present and valid, or `verify()` refuses (`evidence_required_missing`). Empty = bare mode. The plain-array form applies at **every** tier (the 0.2.0 semantics, unchanged); the per-tier object form lets ONE instance serve a bare tier A next to an evidence-required tier B (D27/D30) — a tier absent from the object requires nothing at that tier. Every entry must name a plug registered in `evidence.plugs`, or construction throws. |
 | `evidence.accept` | `string[]` | `[]` | Evidence types checked **if present**, but not required. Same registration constraint as `require`. |
 | `evidence.maxItems` | integer ≥ 1 | `4` | Hard cap on `presentation.evidence.length`, enforced before any plug runs — a presentation cannot buy N plug verifications for the price of one. |
 | `evidence.maxItemBytes` | integer ≥ 1 | `262144` | Hard cap on one evidence item's canonical-JSON byte size, enforced before any plug runs. |
@@ -105,7 +105,8 @@ Every export below is re-exported from the package root (`import { ... } from 'c
 | `InMemoryNonceStore` | Test-only `NonceStore`. See "Gotchas". |
 | `EvidenceRegistry` | `new EvidenceRegistry()`; `.registerPlug(type, plug)` **throws** via `assertPlug` on a malformed plug; `.has(type)`, `.get(type)`. |
 | `assertPlug(type, plug)` | **Throws** `TypeError` describing the first defect in a plug's declaration. Used internally by `registerPlug`; exported so you can validate a custom plug before registering it. |
-| `routeEvidence(slot, items, tier, ctx)` | **Never throws.** Returns either `{verified: string[], warnings: string[]}` on success, or a verdict (`realNo(...)`/`cannotCheck(...)`) on refusal — the internal pipeline `createVerifier` wires up for you; documented for anyone building an alternative pipeline around the same plugs. |
+| `routeEvidence(slot, items, tier, ctx)` | **Never throws.** Returns either `{verified: string[], warnings: string[]}` on success, or a verdict (`realNo(...)`/`cannotCheck(...)`) on refusal — the internal pipeline `createVerifier` wires up for you; documented for anyone building an alternative pipeline around the same plugs. `slot.require` may be a plain array (0.2.0 form, same list at every tier) or a per-tier `{A, B, C}` object. |
+| `normalizeRequire(raw)` | **Throws** `TypeError` on a shape that is neither an array nor a per-tier `{A?, B?, C?}` object (or whose values are not string arrays). Returns the frozen `{A, B, C}` object `createVerifier` builds from `config.evidence.require` — exported for anyone wiring `routeEvidence` directly. |
 | `signedReceipt({keys})` | **Throws** `TypeError` at registration if `keys` is empty/malformed or has a duplicate `key_id`. Returns a `Plug` (linkability `'signer'`, tier ceiling `'C'`) whose `verify()` never throws. |
 | `receiptMessage(claim, nonce, scopeDomain)` | Pure. Returns the exact `Buffer` a signer must sign for `signed-receipt/1`. Propagates `canonicalize`'s throw if `claim` is unsignable (e.g. contains a float). |
 | `zkPassport({bbPath, vks, threshold, timeoutMs?, tmpDir?})` | **Throws** `TypeError` at registration if `bb` cannot be run at `bbPath`, reports a version other than `5.0.0`, `threshold` has no pinned `param_commitment`, or `vks` is malformed. Returns a `Plug` (linkability `'none'`, tier ceiling `'A'`) whose `verify()` never throws (bb failures map to `ok:false`, never a thrown error). |
@@ -147,7 +148,10 @@ A plug is any object shaped:
 
 ```js
 {
-  binds: { nonce: true, claim: true, scope: true },  // all three, or registration throws
+  binds: { nonce: true, claim: true, scope: true, zktag?: boolean },
+                    // nonce/claim/scope: all three, or registration throws
+                    // zktag (optional, default false): this evidence is also
+                    // tied to the presented zktag (ctx.zktag)
   linkability: 'none' | 'signer' | 'device',
   tierCeiling: 'A' | 'B' | 'C',
   verify(item, ctx) {
@@ -165,6 +169,11 @@ throws a `TypeError` naming the defect:
   `true`. Evidence that cannot be tied to *this* challenge, *this* claim,
   and *this* scope is replayable by construction, so it is refused **at
   boot**, before it can ever reach `verify()`.
+- `binds.zktag`, when declared, must be a boolean. Declaring `true` means the
+  evidence is additionally bound to the presented zktag, so a valid item
+  cannot be replayed under a different zktag (the zktag-swap attack).
+- `binds.zktag === true` with `tierCeiling: 'A'` is refused — tier A never
+  carries a zktag (D21), so such a plug could never run.
 - `linkability` must be one of `'none'`, `'signer'`, `'device'`.
 - `tierCeiling` must be `'A'`, `'B'`, or `'C'`.
 - `verify` must be a function.
@@ -179,6 +188,10 @@ throws a `TypeError` naming the defect:
   whether it's checked.
 - A presented tier above the plug's own `tierCeiling` is refused
   (`evidence_tier_exceeds_plug_ceiling`).
+- A checked item whose plug declares `binds.zktag === true`, on a
+  presentation that carries no zktag (tier A), is "could not check":
+  `{ok:false, allowed:null, reason:'evidence_zktag_unavailable'}` — the
+  binding cannot be evaluated at all, which is never a "no" (§3 invariant).
 - Types in neither `require` nor `accept` are recognised (if registered) or
   ignored (if not), but never verified.
 - Bounds run first, on every item, before any plug is invoked: duplicate
@@ -194,6 +207,10 @@ throws a `TypeError` naming the defect:
   nonce,            // string — the challenge's nonce
   claim,            // { over_threshold, threshold } — the presented claim
   tier,             // 'A'|'B'|'C' — the presented tier
+  zktag,            // string | null — the presented zktag (tier B/C); null at
+                    // tier A. A plug declaring binds.zktag === true never sees
+                    // null here: the router answers evidence_zktag_unavailable
+                    // before calling it.
   scopeDomain,      // string — this verifier's config.scopeDomain
   masterlistRoot,   // string | undefined — passed through from config, unvalidated
   trustedClients,   // the configured FR10 list, for a plug that wants to cross-check

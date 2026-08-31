@@ -12,7 +12,7 @@ export { cannotCheck, realNo, yes } from './verdict.js';
 export { canonicalize, sha256 } from './canonical.js';
 export { issueChallenge, verifyChallenge, spendNonce } from './challenge.js';
 export { InMemoryNonceStore } from './stores/memory.js';
-export { EvidenceRegistry, assertPlug, routeEvidence } from './evidence.js';
+export { EvidenceRegistry, assertPlug, routeEvidence, normalizeRequire } from './evidence.js';
 export { signedReceipt, receiptMessage } from './plugs/signed-receipt.js';
 export { zkPassport, subscopeFromNonce, scopeField, paramCommitment } from './plugs/zk-passport.js';
 
@@ -21,7 +21,7 @@ import {
   issueChallenge as issueChallengeImpl, verifyChallenge, spendNonce,
 } from './challenge.js';
 import { InMemoryNonceStore } from './stores/memory.js';
-import { EvidenceRegistry, routeEvidence } from './evidence.js';
+import { EvidenceRegistry, routeEvidence, normalizeRequire } from './evidence.js';
 
 const SPEC = 'zkagent/1';
 const TIER_ORDER = Object.freeze({ A: 0, B: 1, C: 2 });
@@ -106,13 +106,22 @@ export function createVerifier(config) {
     }
     return Object.freeze([...list]);
   };
+  // `require` may be the 0.2.0 plain array (same requirement at every tier) or
+  // a per-tier `{A?, B?, C?}` object, so ONE instance can serve a bare tier A
+  // (D27) next to an evidence-required tier B (D30). Normalized to {A,B,C}.
+  const requireByTier = normalizeRequire(ev.require);
+  for (const tierKey of /** @type {const} */ (['A', 'B', 'C'])) {
+    for (const t of requireByTier[tierKey]) {
+      if (!registry.has(t)) throw new TypeError(`createVerifier: config.evidence.require names "${t}" but no such plug is registered`);
+    }
+  }
   const bound = (name, dflt) => {
     const v = ev[name] === undefined ? dflt : ev[name];
     if (!Number.isInteger(v) || v < 1) throw new TypeError(`createVerifier: config.evidence.${name} must be an integer >= 1, got ${v}`);
     return v;
   };
   const slot = Object.freeze({
-    registry, require: listOf('require'), accept: listOf('accept'),
+    registry, require: requireByTier, accept: listOf('accept'),
     maxItems: bound('maxItems', 4), maxItemBytes: bound('maxItemBytes', 262_144),
   });
 
@@ -242,14 +251,18 @@ async function verifyInner(settled, presentation, ctx) {
   }
 
   // --- evidence slot (§4, D24) --------------------------------------------
+  // `zktag` is the presented zktag at tier B/C (already validated non-empty
+  // above), and null at tier A — a plug that binds it can then never blur
+  // "no zktag exists" into a signature check against the wrong bytes.
   const plugCtx = Object.freeze({
-    nonce: challenge.nonce, claim, tier, scopeDomain: settled.scopeDomain,
+    nonce: challenge.nonce, claim, tier, zktag: typeof zktag === 'string' ? zktag : null,
+    scopeDomain: settled.scopeDomain,
     masterlistRoot: settled.masterlistRoot, trustedClients: settled.trustedClients, now, maxScanAge,
   });
   const routed = await routeEvidence(settled.slot, evidence ?? [], tier, plugCtx);
   if ('ok' in routed) return routed; // a verdict: refused or could not check
 
-  const reason = settled.slot.require.length === 0 ? 'no-evidence-required' : 'evidence-verified';
+  const reason = settled.slot.require[tier].length === 0 ? 'no-evidence-required' : 'evidence-verified';
   const extra = routed.warnings.length > 0 ? { warnings: routed.warnings } : {};
   return tier === 'A'
     ? yes({ tier, reason, evidence: routed.verified, ...extra })

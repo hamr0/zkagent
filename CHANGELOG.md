@@ -410,6 +410,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   - New **Q9** (M4): phone→agent cert handoff UX (QR / paste / localhost
     POST). Added to the M4 deliverable and checkpoint.
 
+## [0.3.0] — 2026-08-31
+
+- **`chiproof@0.3.0`** — Two spec gaps found by the M2 handoff spike, closed
+  together (owner-approved 2026-08-31). **Plugs can now bind the presented
+  zktag:** `PlugCtx` gains `zktag` (`string | null` — `null` at tier A, which
+  refuses a zktag by D21), and a plug may declare `binds.zktag: true`,
+  mirroring `binds.claim`. Evidence bound to one zktag now dies under another
+  — a zktag-swapped presentation is a real no (`ok:true, allowed:false`), not
+  a shrug — while a zktag-binding plug on a tier-A presentation yields
+  `ok:false, reason:'evidence_zktag_unavailable'` (could not check, never a
+  "no"), and `binds.zktag:true` with `tierCeiling:'A'` is refused at
+  registration as a plug that could never run. **`evidence.require` is now
+  optionally per-tier:** `{A?, B?, C?}` lets one verifier instance serve a
+  bare tier A (D27) beside an evidence-required tier B (D30), replacing the
+  two-instance workaround the spike needed; the 0.2.0 plain-array form keeps
+  its instance-global semantics unchanged and `routeEvidence` accepts both
+  (new export `normalizeRequire`). 125 tests (116 pre-existing, zero
+  regressions), typecheck and a strict-TS adopter gate green; no other
+  runtime change.
+
 ## [0.2.0] — 2026-08-30
 
 - **`chiproof@0.2.0`** — Types: `verify()` returns `Verdict`; `issueChallenge()`

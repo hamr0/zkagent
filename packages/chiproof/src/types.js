@@ -88,10 +88,16 @@
 /**
  * The context passed to every evidence plug's `verify(item, ctx)` (M1 spec §4).
  *
+ * `zktag` is the presented zktag at tier B/C, and `null` at tier A — tier A
+ * carries no zktag by construction (D21), so a plug that declares
+ * `binds.zktag === true` can never run there (the slot answers
+ * `ok:false, reason:'evidence_zktag_unavailable'` instead of calling it).
+ *
  * @typedef {object} PlugCtx
  * @property {string} nonce
  * @property {Claim} claim
  * @property {'A'|'B'|'C'} tier
+ * @property {string|null} zktag
  * @property {string} scopeDomain
  * @property {string} [masterlistRoot]
  * @property {{name?: string, package: string, certDigest: string, specVersion?: string}[]} trustedClients
@@ -102,8 +108,14 @@
 /**
  * An evidence plug's registration-time declaration (M1 spec §4, PRD D24).
  *
+ * `binds.zktag` is optional (default `false`): a plug declaring `true`
+ * additionally ties its evidence to the presented zktag (`ctx.zktag`), so a
+ * presentation carrying valid evidence bound to one zktag cannot be replayed
+ * under another. A zktag-binding plug cannot have `tierCeiling: 'A'`
+ * (registration throws) — tier A never has a zktag.
+ *
  * @typedef {object} Plug
- * @property {{nonce: true, claim: true, scope: true}} binds
+ * @property {{nonce: true, claim: true, scope: true, zktag?: boolean}} binds
  * @property {'none'|'signer'|'device'} linkability
  * @property {'A'|'B'|'C'} tierCeiling
  * @property {(item: EvidenceItem, ctx: PlugCtx) => PlugResult|Promise<PlugResult>} verify
@@ -119,6 +131,18 @@
  */
 
 /**
+ * Per-tier evidence requirements: registry keys that MUST be present and
+ * valid at each presented tier. A tier absent from the object requires
+ * nothing (bare) at that tier. The plain-array form of `evidence.require`
+ * remains the instance-global equivalent (same list at every tier).
+ *
+ * @typedef {object} RequireByTier
+ * @property {string[]} [A]
+ * @property {string[]} [B]
+ * @property {string[]} [C]
+ */
+
+/**
  * `createVerifier(config)`'s config shape (M1 spec §2).
  *
  * @typedef {object} VerifierConfig
@@ -128,7 +152,7 @@
  * @property {{max: 'A'|'B'|'C'}} [tiers]
  * @property {{pubkey: unknown, key_id: string, maxTier: 'A'|'B'|'C'}[]} [trustedChallengeIssuers]
  * @property {{name?: string, package: string, certDigest: string, specVersion?: string}[]} [trustedClients]
- * @property {{require?: string[], accept?: string[], plugs?: Record<string, Plug>, maxItems?: number, maxItemBytes?: number}} [evidence]
+ * @property {{require?: string[]|RequireByTier, accept?: string[], plugs?: Record<string, Plug>, maxItems?: number, maxItemBytes?: number}} [evidence]
  * @property {string} scopeDomain
  * @property {string} [masterlistRoot]
  * @property {boolean} [allowInMemoryStore]

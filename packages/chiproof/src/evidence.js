@@ -4,10 +4,15 @@
  * decides which presented evidence items are checked, by whom, and how a plug's
  * answer maps onto the §3 verdict invariant.
  *
- * A plug is `{ binds: {nonce, claim, scope}, linkability, tierCeiling, verify }`:
- *   - `binds` — every one of the three must be `true`, or registration throws.
+ * A plug is `{ binds: {nonce, claim, scope, zktag?}, linkability, tierCeiling, verify }`:
+ *   - `binds` — nonce/claim/scope must each be `true`, or registration throws.
  *     Evidence that cannot be tied to THIS challenge, THIS claim and THIS scope
  *     is replayable by construction, so it is refused at boot, not at verify.
+ *     `binds.zktag` is optional (default false): `true` declares the evidence
+ *     is additionally tied to the presented zktag (`ctx.zktag`) — such a plug
+ *     cannot run where no zktag exists (tier A), so `tierCeiling: 'A'` with
+ *     `binds.zktag: true` is refused at registration, and a zktag-binding
+ *     item on a tier-A presentation is "could not check", never a "no".
  *   - `linkability` — 'none' | 'signer' | 'device'. Tier A (anonymous,
  *     unlinkable) refuses any item whose plug is not 'none'.
  *   - `tierCeiling` — the highest tier this evidence may support.
@@ -45,12 +50,59 @@ export function assertPlug(type, plug) {
   if (!LINKABILITY.has(plug.linkability)) {
     throw new TypeError(`registerPlug(${type}): linkability must be 'none', 'signer' or 'device'`);
   }
+  if (b.zktag !== undefined && typeof b.zktag !== 'boolean') {
+    throw new TypeError(`registerPlug(${type}): binds.zktag must be a boolean when declared`);
+  }
   if (tierRank(plug.tierCeiling) === undefined) {
     throw new TypeError(`registerPlug(${type}): tierCeiling must be 'A', 'B' or 'C'`);
+  }
+  if (b.zktag === true && plug.tierCeiling === 'A') {
+    throw new TypeError(`registerPlug(${type}): binds.zktag === true is impossible with tierCeiling 'A' — tier A never carries a zktag (D21), so this plug could never run`);
   }
   if (typeof plug.verify !== 'function') {
     throw new TypeError(`registerPlug(${type}): plug.verify must be a function`);
   }
+}
+
+/**
+ * Normalize `evidence.require` (plain array = instance-global, or a per-tier
+ * `{A?, B?, C?}` object) into a frozen `{A, B, C}` of frozen arrays. Throws a
+ * TypeError on any other shape — this is boot-time config validation.
+ *
+ * @param {unknown} raw  `config.evidence.require` (`undefined` = bare everywhere)
+ * @returns {Required<import('./types.js').RequireByTier>}
+ */
+export function normalizeRequire(raw) {
+  /** @type {(v: unknown, label: string) => string[]} */
+  const asList = (v, label) => {
+    if (!Array.isArray(v) || v.some((t) => typeof t !== 'string')) {
+      throw new TypeError(`createVerifier: config.evidence.${label} must be an array of registry-key strings`);
+    }
+    return /** @type {string[]} */ (Object.freeze([...v]));
+  };
+  /** @type {string[]} */
+  const none = /** @type {any} */ (Object.freeze([]));
+  if (raw === undefined) {
+    return Object.freeze({ A: none, B: none, C: none });
+  }
+  if (Array.isArray(raw)) {
+    const all = asList(raw, 'require');
+    return Object.freeze({ A: all, B: all, C: all });
+  }
+  if (isPlainObject(raw)) {
+    const byTier = /** @type {{A?: unknown, B?: unknown, C?: unknown}} */ (raw);
+    for (const k of Object.keys(byTier)) {
+      if (tierRank(k) === undefined) {
+        throw new TypeError(`createVerifier: config.evidence.require per-tier keys must be 'A', 'B' or 'C', got ${JSON.stringify(k)}`);
+      }
+    }
+    return Object.freeze({
+      A: byTier.A === undefined ? none : asList(byTier.A, 'require.A'),
+      B: byTier.B === undefined ? none : asList(byTier.B, 'require.B'),
+      C: byTier.C === undefined ? none : asList(byTier.C, 'require.C'),
+    });
+  }
+  throw new TypeError('createVerifier: config.evidence.require must be an array (all tiers) or a per-tier object {A?, B?, C?}');
 }
 
 export class EvidenceRegistry {
@@ -83,14 +135,19 @@ export function itemKey(item) {
  * item verified and every required type was present; otherwise a verdict built
  * through the verdict.js factories.
  *
- * @param {{registry: EvidenceRegistry, require: string[], accept: string[], maxItems: number, maxItemBytes: number}} slot
+ * `slot.require` may be the 0.2.0 plain array (same list at every tier) or the
+ * normalized per-tier `{A, B, C}` object `createVerifier` builds — both work,
+ * so direct callers of this export keep their 0.2.0 semantics unchanged.
+ *
+ * @param {{registry: EvidenceRegistry, require: string[]|import('./types.js').RequireByTier, accept: string[], maxItems: number, maxItemBytes: number}} slot
  * @param {unknown[]} items  presentation.evidence (already known to be an array)
  * @param {'A'|'B'|'C'} tier presented tier
  * @param {import('./types.js').PlugCtx} ctx  plug ctx per §4
  */
 export async function routeEvidence(slot, items, tier, ctx) {
   const presentedRank = tierRank(tier);
-  const checked = new Set(slot.require.concat(slot.accept));
+  const required = Array.isArray(slot.require) ? slot.require : (slot.require?.[tier] ?? []);
+  const checked = new Set(required.concat(slot.accept));
   const seen = new Set();
   const keys = new Set();
   const toVerify = [];
@@ -113,11 +170,17 @@ export async function routeEvidence(slot, items, tier, ctx) {
     if (tier === 'A' && plug.linkability !== 'none') return realNo('evidence_forbidden_at_tier_a');
     if (presentedRank > tierRank(plug.tierCeiling)) return realNo('evidence_tier_exceeds_plug_ceiling');
     if (!checked.has(key)) continue; // registered but neither required nor accepted here
+    // A zktag-binding plug on a presentation with no zktag (tier A) cannot be
+    // evaluated at all: not evidence about a person, so "could not check",
+    // never a "no" (§3 invariant).
+    if (plug.binds.zktag === true && (ctx.zktag === undefined || ctx.zktag === null)) {
+      return cannotCheck('evidence_zktag_unavailable');
+    }
     seen.add(key);
     toVerify.push([key, plug, item]);
   }
 
-  for (const req of slot.require) {
+  for (const req of required) {
     if (!seen.has(req)) return realNo('evidence_required_missing');
   }
 
