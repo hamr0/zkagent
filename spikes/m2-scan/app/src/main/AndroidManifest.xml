@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="true" />
+
+    <!-- allowBackup is deliberately false: NO-GO discipline for a spike that
+         must never let Android auto-backup carry any in-memory state to
+         Google's backup service. There is nothing to back up (no persistence,
+         see MainActivity's MRZ-wipe design), but this is defense-in-depth. -->
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:name=".MainApplication"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:exported="true"
+            android:name=".ResultActivity"
+            android:screenOrientation="fullSensor" />
+
+    </application>
+
+</manifest>

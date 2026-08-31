@@ -1,0 +1,5 @@
+# Gradle/Kotlin build state and machine-specific config — never committed.
+.gradle/
+.kotlin/
+build/
+local.properties
