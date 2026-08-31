@@ -5,10 +5,12 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { createPrivateKey, generateKeyPairSync, sign as edSign } from 'node:crypto';
+import { createPrivateKey, createPublicKey, generateKeyPairSync, sign as edSign } from 'node:crypto';
 import { startServer } from '../server.mjs';
 import { sigMessage } from '../sig-ed25519-plug.mjs';
 import { DEV_ATTESTER } from '../dev-attester-key.mjs';
+import { verifyJws } from '../jws.mjs';
+import { DEV_REQUEST_SIGNER } from '../dev-request-signer-key.mjs';
 
 const pExecFile = promisify(execFile);
 const walletScript = fileURLToPath(new URL('../scripts/fake-wallet.mjs', import.meta.url));
@@ -34,7 +36,13 @@ async function createTxB() {
 async function fetchRequestObject(tx) {
   const res = await fetch(tx.request_uri);
   assert.equal(res.status, 200);
-  return res.json();
+  assert.equal(res.headers.get('content-type'), 'application/oauth-authz-req+jwt');
+  const jws = await res.text();
+  const v = verifyJws(jws, createPublicKey(DEV_REQUEST_SIGNER.publicKeyPem));
+  assert.equal(v.valid, true, `request JWS must verify (got ${v.reason})`);
+  assert.equal(v.header.alg, 'ES256');
+  assert.equal(v.header.typ, 'oauth-authz-req+jwt');
+  return v.payload;
 }
 
 function buildPresentationB(challenge, { evidence, zktag = SYNTHETIC_ZKTAG } = {}) {

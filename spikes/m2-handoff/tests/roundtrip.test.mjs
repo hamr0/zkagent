@@ -4,7 +4,11 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:http';
+import { createPublicKey } from 'node:crypto';
 import { startServer } from '../server.mjs';
+import { verifyJws } from '../jws.mjs';
+import { DEV_REQUEST_SIGNER } from '../dev-request-signer-key.mjs';
 
 const pExecFile = promisify(execFile);
 const walletScript = fileURLToPath(new URL('../scripts/fake-wallet.mjs', import.meta.url));
@@ -30,7 +34,13 @@ async function createTx(body = {}) {
 async function fetchRequestObject(tx) {
   const res = await fetch(tx.request_uri);
   assert.equal(res.status, 200);
-  return res.json();
+  assert.equal(res.headers.get('content-type'), 'application/oauth-authz-req+jwt');
+  const jws = await res.text();
+  const v = verifyJws(jws, createPublicKey(DEV_REQUEST_SIGNER.publicKeyPem));
+  assert.equal(v.valid, true, `request JWS must verify (got ${v.reason})`);
+  assert.equal(v.header.alg, 'ES256');
+  assert.equal(v.header.typ, 'oauth-authz-req+jwt');
+  return v.payload;
 }
 
 function buildPresentation(challenge) {
@@ -165,4 +175,56 @@ test('fake-wallet script: valid mode exits 0 with allowed=true', async () => {
 test('fake-wallet script: tamper mode exits 0 with allowed=false (nonce_forged)', async () => {
   const { stdout } = await pExecFile(process.execPath, [walletScript, '--base', srv.url, '--mode', 'tamper']);
   assert.match(stdout, /RESULT tier=A mode=tamper: allowed=false reason=nonce_forged -> AS EXPECTED/);
+});
+
+test('negative: tampered request object JWS => wallet refuses BEFORE direct_post', async () => {
+  // Rogue relay: forwards transaction creation to the real server (rewriting
+  // request_uri/app_link to itself) and serves a TAMPERED request object —
+  // payload edited after signing, signature left in place.
+  let realTxId = null;
+  const stub = createServer((req, res) => {
+    (async () => {
+      const stubBase = `http://127.0.0.1:${stub.address().port}`;
+      if (req.method === 'POST' && req.url === '/ui/presentations') {
+        const r = await fetch(`${srv.url}/ui/presentations`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+        });
+        let text = await r.text();
+        realTxId = JSON.parse(text).transactionId;
+        text = text
+          .replaceAll(srv.url, stubBase)
+          .replaceAll(encodeURIComponent(srv.url), encodeURIComponent(stubBase));
+        res.writeHead(201, { 'content-type': 'application/json' });
+        res.end(text);
+      } else if (req.url.startsWith('/wallet/request.jwt/')) {
+        const r = await fetch(`${srv.url}${req.url}`);
+        const [h, p, s] = (await r.text()).split('.');
+        const payload = JSON.parse(Buffer.from(p, 'base64url').toString('utf8'));
+        payload.zkagent.challenge.threshold = 16; // forged after signing
+        const p2 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+        res.writeHead(200, { 'content-type': 'application/oauth-authz-req+jwt' });
+        res.end([h, p2, s].join('.'));
+      } else {
+        res.writeHead(404); res.end();
+      }
+    })().catch(() => { try { res.writeHead(500); res.end(); } catch { /* gone */ } });
+  });
+  await new Promise((r) => stub.listen(0, '127.0.0.1', r));
+  const stubUrl = `http://127.0.0.1:${stub.address().port}`;
+  try {
+    await assert.rejects(
+      pExecFile(process.execPath, [walletScript, '--base', stubUrl, '--mode', 'valid']),
+      (err) => {
+        assert.equal(err.code, 3); // the wallet's refuse exit
+        assert.match(String(err.stderr), /REFUSED: request object JWS verification failed \(signature_invalid\)/);
+        return true;
+      },
+    );
+    // The wallet never POSTed direct_post: the real transaction is still pending.
+    assert.ok(realTxId);
+    const pollRes = await fetch(`${srv.url}/ui/presentations/${realTxId}`);
+    assert.deepEqual(await pollRes.json(), { status: 'pending' });
+  } finally {
+    await new Promise((r) => stub.close(r));
+  }
 });

@@ -10,7 +10,7 @@ Node verifier website implementing the EU-Blueprint-shaped same-device flow reco
 | Wire step | Endpoint here | Capture source |
 |---|---|---|
 | page creates transaction | `POST /ui/presentations` | Finding 1, website/backend side |
-| app fetches request by reference | `GET /wallet/request.jwt/{requestId}` | Finding 1, wallet/app side |
+| app fetches request by reference | `GET /wallet/request.jwt/{requestId}` — **ES256-signed request object** (compact JWS, JAR/RFC 9101, `typ: oauth-authz-req+jwt`, content-type `application/oauth-authz-req+jwt`) | Finding 1, wallet/app side; reference verifier signs ES256 by default |
 | app POSTs response (browser never sees it) | `POST /wallet/direct_post` (form-encoded) | Finding 1, `response_mode` MUST be `direct_post` |
 | page polls for verdict | `GET /ui/presentations/{transactionId}` | Finding 1, website/backend side |
 
@@ -36,13 +36,18 @@ HMAC seal → `nonce_forged`); `--mode expired` waits out a short-TTL challenge.
 
 Config (env): `PORT`, `LINK_SCHEME` (`https` app link primary, `av` custom-scheme
 variant per the Blueprint AV Profile), `APP_LINK_BASE`, `SCOPE_DOMAIN`,
-`CHALLENGE_SECRET` (dev default baked in — spike only).
+`CHALLENGE_SECRET` (dev default baked in — spike only), `REQUEST_SIGNER_KID`/`REQUEST_SIGNER_PRIVKEY_PEM`.
 
 ## Deliberate simplifications (recorded, not hidden)
 
-- **`request.jwt` serves unsigned JSON, not an ES256-signed JWT.** The AV Profile does
-  not require JAR ("explicitly not required"); the reference verifier signs by default.
-  If step (c) needs a signed request object, that is new work — escalate first.
+- **RESOLVED (owner decision 2026-08-31): `request.jwt` is now ES256-signed.**
+  `jws.mjs` (stdlib-only compact JWS: ECDSA P-256/SHA-256, ieee-p1363 signatures)
+  signs the exact request-object JSON as claims, matching the reference verifier's
+  default; the fake wallet verifies against the pinned dev signer pubkey and
+  REFUSES (exit 3, before any `direct_post`) on a bad signature — covered by a
+  rogue-relay negative test. Dev keypair in `dev-request-signer-key.mjs`
+  (dev-only, like the attester key); env overrides `REQUEST_SIGNER_KID`,
+  `REQUEST_SIGNER_PRIVKEY_PEM` (server) / `REQUEST_SIGNER_PUBKEY_PEM` (wallet).
 - **The DCQL block is shape-only.** It matches the captured query (`mso_mdoc`,
   doctype `eu.europa.ec.av.1`, claim `age_over_18`) but the credential actually
   verified is chiproof's `zkagent/1` presentation riding in the request's `zkagent`

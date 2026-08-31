@@ -25,9 +25,11 @@
 // Usage: node scripts/fake-wallet.mjs [--base http://127.0.0.1:8787]
 //          [--tier A|B] [--mode valid|tamper|expired|wrongkey|missing]
 
-import { createPrivateKey, generateKeyPairSync, sign as edSign } from 'node:crypto';
+import { createPrivateKey, createPublicKey, generateKeyPairSync, sign as edSign } from 'node:crypto';
 import { sigMessage, SIG_ED25519_KEY } from '../sig-ed25519-plug.mjs';
 import { DEV_ATTESTER } from '../dev-attester-key.mjs';
+import { verifyJws, REQUEST_OBJECT_TYP } from '../jws.mjs';
+import { DEV_REQUEST_SIGNER } from '../dev-request-signer-key.mjs';
 
 const args = process.argv.slice(2);
 function arg(name, dflt) {
@@ -72,8 +74,21 @@ if (requestUri !== tx.request_uri) {
   console.error('app link request_uri does not match request_uri'); process.exit(2);
 }
 const reqRes = await fetch(requestUri);
-const requestObject = await reqRes.json();
-log(`2. GET ${new URL(requestUri).pathname} -> ${reqRes.status}`, requestObject);
+const jws = await reqRes.text();
+log(`2. GET ${new URL(requestUri).pathname} -> ${reqRes.status} (${reqRes.headers.get('content-type')})`, `${jws.slice(0, 72)}… (compact JWS, ${jws.length} chars)`);
+
+// Verify the ES256-signed request object (JAR) against the pinned request-
+// signer pubkey BEFORE trusting anything in it — a wallet acting on an
+// unverified request can be pointed at an attacker's response_uri. The pin is
+// the DEV-ONLY spike key by default (see dev-request-signer-key.mjs).
+const signerPub = createPublicKey(process.env.REQUEST_SIGNER_PUBKEY_PEM ?? DEV_REQUEST_SIGNER.publicKeyPem);
+const verified = verifyJws(jws, signerPub);
+if (!verified.valid || verified.header.typ !== REQUEST_OBJECT_TYP) {
+  console.error(`REFUSED: request object JWS verification failed (${verified.valid ? 'typ_mismatch' : verified.reason}) — not POSTing direct_post`);
+  process.exit(3);
+}
+log('2a. request JWS verified', { alg: verified.header.alg, typ: verified.header.typ, kid: verified.header.kid });
+const requestObject = verified.payload;
 
 // 3. Build the presentation from the request's chiproof challenge.
 const challenge = requestObject.zkagent.challenge;

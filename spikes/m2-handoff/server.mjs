@@ -18,7 +18,8 @@
 // end-to-end: never throw, ok:false => allowed:null.
 //
 // Known, flagged simplifications vs the reference verifier (see README.md):
-//  - /wallet/request.jwt/{id} serves unsigned JSON, not an ES256-signed JWT.
+//  - (resolved 2026-08-31) /wallet/request.jwt/{id} now serves an ES256-signed
+//    request object (JAR, RFC 9101), matching the reference verifier's default.
 //  - The DCQL block is carried in the captured *shape*; the credential actually
 //    verified is chiproof's `zkagent/1` presentation riding in `zkagent`.
 //  - TWO chiproof instances (one per mode): chiproof's `evidence.require` is
@@ -26,10 +27,12 @@
 //    mode B while keeping mode A bare — flagged upstream; chiproof consumed as-is.
 
 import { createServer } from 'node:http';
-import { randomBytes, createPublicKey } from 'node:crypto';
+import { randomBytes, createPublicKey, createPrivateKey } from 'node:crypto';
 import { createVerifier, InMemoryNonceStore, realNo } from 'chiproof';
 import { sigEd25519, SIG_ED25519_KEY } from './sig-ed25519-plug.mjs';
 import { DEV_ATTESTER } from './dev-attester-key.mjs';
+import { signJws } from './jws.mjs';
+import { DEV_REQUEST_SIGNER } from './dev-request-signer-key.mjs';
 
 // ---------------------------------------------------------------- config ----
 const SCOPE_DOMAIN = process.env.SCOPE_DOMAIN ?? 'm2-handoff.test';
@@ -46,6 +49,11 @@ const APP_LINK_BASE = process.env.APP_LINK_BASE ?? 'https://wallet.example.inval
 // DEV-ONLY spike keypair shared with the fake wallet.
 const ATTESTER_KEY_ID = process.env.ATTESTER_KEY_ID ?? DEV_ATTESTER.key_id;
 const ATTESTER_PUBKEY_PEM = process.env.ATTESTER_PUBKEY_PEM ?? DEV_ATTESTER.publicKeyPem;
+// ES256 request-object (JAR) signing key — the reference verifier signs its
+// request objects by default. Defaults to the DEV-ONLY spike keypair the
+// fake wallet pins the public half of.
+const REQUEST_SIGNER_KID = process.env.REQUEST_SIGNER_KID ?? DEV_REQUEST_SIGNER.kid;
+const REQUEST_SIGNER_PRIVKEY_PEM = process.env.REQUEST_SIGNER_PRIVKEY_PEM ?? DEV_REQUEST_SIGNER.privateKeyPem;
 const DEFAULT_TTL_MS = 120_000;
 const MAX_TTL_MS = 600_000;
 const MAX_BODY_BYTES = 64 * 1024;
@@ -188,6 +196,7 @@ function b64urlToJson(s) {
 // ------------------------------------------------------------------ app ----
 export function createApp() {
   const verifiers = makeVerifiers();
+  const requestSignerKey = createPrivateKey(REQUEST_SIGNER_PRIVKEY_PEM);
   const byTransactionId = new Map(); // transactionId -> tx
   const byRequestId = new Map();     // requestId -> tx
 
@@ -286,9 +295,15 @@ export function createApp() {
       const requestId = path.slice('/wallet/request.jwt/'.length);
       const tx = byRequestId.get(requestId);
       if (!tx) { sendJson(res, 404, { error: 'unknown_request' }); return; }
-      // Reference verifier signs this as an ES256 JWT by default; the profile
-      // does not require JAR. Served as unsigned JSON here — flagged in README.
-      sendJson(res, 200, tx.requestObject);
+      // ES256-signed request object (JAR, RFC 9101) — matches the EU reference
+      // verifier's sign-by-default. Claims = exactly the request-object JSON;
+      // typ per the OpenID4VP request-object convention (oauth-authz-req+jwt).
+      const jws = signJws(tx.requestObject, requestSignerKey, REQUEST_SIGNER_KID);
+      res.writeHead(200, {
+        'content-type': 'application/oauth-authz-req+jwt',
+        'content-length': Buffer.byteLength(jws),
+      });
+      res.end(jws);
       return;
     }
 
