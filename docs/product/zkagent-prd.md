@@ -1,9 +1,15 @@
-# zkagent — PRD v1.17 — 2026-08-31, owner-approved
+# zkagent — PRD v1.18 — 2026-08-31, owner-approved
 
 **Status**: Draft. D1–D8 signed 2026-07-26; D9 closed 2026-08-31 on M0 evidence — the mode-B derivation field is the **document number**. **No promise in this document survives a miss at M0 — which ran 2026-08-29 and held (`docs/logs/M0-EVIDENCE.md`).**
 **Project**: `zkagent` · **Published package**: `chiproof` · **Owner**: hamr · **Repo**: zkagent (sibling of 8een)
 **Parent standards**: `AGENT_RULES.md` (POC-first, dependency hierarchy, prove-don't-assert, security invariants). When anything here disagrees with AGENT_RULES, AGENT_RULES wins.
-**Version history**: §15. This revision (v1.17 — 2026-08-31, owner-approved) writes the M2
+**Version history**: §15. This revision (v1.18 — 2026-08-31, owner-approved) resolves F2 (the
+M2 build's own riskiest-assumption POC, `docs/logs/M2-SESSION-POC.md`) as **algorithm agility**:
+the app selects the strongest key algorithm the device supports and reports which, the verifier
+accepts more than one signature algorithm, and the adopter/operator chooses by their own
+priorities exactly as the evidence slot itself works (D24) — §6.2 items 1, 9, and 11 are amended
+accordingly (candidate decision, `Dn` pending; no `Dn` assigned this revision). The prior
+revision (v1.17 — 2026-08-31, owner-approved) writes the M2
 build scope into the PRD per NO-GO #10, now that M2's opening riskiest-assumption POCs are all
 PASS on both documents (`docs/logs/M2-SCAN-EVIDENCE.md`, `M2-CAPTURE.md`, `M2-CONFORMANCE.md`) —
 new §6.2, referenced from the M2 row, as twelve MUST/MUST NOT items covering the device key,
@@ -186,14 +192,31 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
 `M2-CAPTURE.md`, `M2-CONFORMANCE.md`). This section is the SCOPE gate for the rewrite itself
 (NO-GO #10) — nothing below is built until it is written here.
 
-1. **Device key.** MUST generate an Ed25519 keypair in Android Keystore (StrongBox-backed where
-   available) at first run; this is the app's own `sig-ed25519/1` attester key (D30, FR12) — it
-   signs the challenge binding for mode-B presentations. MUST NOT ever leave the Keystore. MUST
-   NOT feed zktag derivation — D9's derivation input is chip data (`document_number`) only; a
-   device-stable signing key entering derivation would reopen Q23's per-device linkability
-   problem D22 closed. (Per-module memory rule: CPU/enclave material never enters identity
-   derivation.) (role confirmed by owner 2026-08-31: this key is the D30 attester key and nothing
-   else)
+1. **Device key.** MUST generate an Android Keystore keypair (StrongBox-backed where available)
+   at first run; this is the app's own attester key (D30, FR12) — it signs the challenge binding
+   for mode-B presentations. MUST NOT ever leave the Keystore. MUST NOT feed zktag derivation —
+   D9's derivation input is chip data (`document_number`) only; a device-stable signing key
+   entering derivation would reopen Q23's per-device linkability problem D22 closed. (Per-module
+   memory rule: CPU/enclave material never enters identity derivation.) (role confirmed by owner
+   2026-08-31: this key is the D30 attester key and nothing else)
+   **Amended 2026-08-31, owner decision (algorithm agility, F2 resolved — original single-algorithm
+   clause superseded, not deleted; see `docs/logs/M2-SESSION-POC.md` F2 for the evidence and PRD
+   §15/§6.2 item 9 for the paired evidence-registry change):** the app MUST select, at first run,
+   **the strongest key algorithm the device actually supports**, and MUST report which algorithm
+   it selected as part of the attester-key state it exposes. The verifier side (item 9) MUST
+   accept more than one signature algorithm rather than assuming a single fixed one. Evidence
+   basis, stated once: Ed25519 is unavailable as an Android Keystore key on the Pixel 6a at
+   either security level, by either entry point (`docs/logs/M2-SESSION-POC.md` F2 — a dedicated
+   KEY TEST confirmed this is a hardware/platform gap, not a provider quirk); P-256 in StrongBox
+   is available on this device, per-use-auth-bindable (proven live, biometric/device-credential
+   bound), and its signatures verify off-device (independently confirmed by the orchestrator with
+   `openssl`). Default posture: **hardware-backed P-256 where StrongBox exists** — it is the
+   algorithm Android guarantees at that level on hardware like this — and **software Ed25519
+   only where the adopter prefers algorithm uniformity over hardware custody**, with that trade
+   (software-extractable key vs. hardware-confined key) stated plainly to the adopter making the
+   choice. This is a **candidate decision, `Dn` pending** — no decision number is assigned yet.
+   The plug this requires in `chiproof` is referred to only as a **P-256 evidence plug**
+   (candidate name `sig-p256/1`); no other plug name is invented here.
 2. **Biometric gate.** MUST require biometric (or device-credential fallback) authorization
    before minting — i.e. before zktag emission or Keystore-key signing — per D21 ("always read,
    conditionally mint"). MUST NOT gate the chip read itself; D21 reads unconditionally.
@@ -230,12 +253,23 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
    provider-registration spike (open item, `m2-opening-poc-complete.md`) passes first. EU
    wallet/mdoc interop MUST NOT be attempted (NO-GO #3; `M2-CONFORMANCE.md` Findings 1, 2, 7 —
    confirmed non-interoperable by design, not by omission).
-9. **Evidence.** Mode A MUST ship bare (`evidence: []`, D27). Mode-B roundtrip MUST exercise
-   `sig-ed25519/1` as the reference default (D30). Signed layout, stated once:
+9. **Evidence.** Mode A MUST ship bare (`evidence: []`, D27). Mode-B roundtrip MUST exercise the
+   attester-key evidence plug matching whatever algorithm item 1 selected on that device (D30)
+   as the reference default. Signed layout, stated once (per algorithm — see item 1's amendment
+   for why more than one now exists):
    `Ed25519( sha256( utf8("sig-ed25519/1\n") ‖ sha256(canonical(claim)) ‖
    base64urlDecode(nonce) ‖ utf8(scopeDomain) ‖ utf8(zktag) ) )` — nonce bytes are
    base64url-decoded, not utf8; do not copy chiproof's pre-0.3.0 test-fixture encoding, which was
    found inconsistent with this shipped layout.
+   **Amended 2026-08-31, owner decision (algorithm agility, F2 resolved — original single-algorithm
+   clause kept above, not deleted):** the verifier MUST accept **more than one signature
+   algorithm** for the attester-key evidence — `sig-ed25519/1` where the app selected software
+   Ed25519, and the candidate **P-256 evidence plug** (`sig-p256/1`, candidate decision, `Dn`
+   pending) where the app selected hardware-backed P-256, per item 1's amended device-capability
+   selection. Which algorithm a given presentation used MUST be reported alongside the evidence,
+   not inferred by the verifier. This is the same pattern the evidence slot itself already uses
+   (D24): the adopter/operator chooses by their own priorities, and the core supports the choice
+   rather than picking for them.
 10. **Network config.** MUST ship a real `network_security_config` (cleartext disabled). MUST
     define a debug/release split (owner decision 2026-08-31): release build permits NO cleartext;
     debug build permits exactly one cleartext exception, scoped to `10.0.2.2`/localhost, for the
@@ -244,6 +278,16 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
     interop; rung-2 delegation; the Credential Manager provider (unless its spike passes, item 8);
     any change to `chiproof` beyond what the app needs. Pinned dependency: `chiproof@0.3.0`
     (published 2026-08-31, tag `chiproof-v0.3.0`).
+    **Amended 2026-08-31, owner decision (original clause above kept visible, not deleted):**
+    adding a **P-256 evidence plug** to `chiproof` (candidate name `sig-p256/1`; candidate
+    decision, `Dn` pending — see item 1) **is now permitted** — it is required by item 1's
+    device-capability reality (`docs/logs/M2-SESSION-POC.md` F2: Ed25519 is unavailable as an
+    AndroidKeyStore key on the Pixel 6a, at either security level, by either entry point), not
+    scope creep against this item's original "no change beyond what the app needs" bar; the
+    P-256 plug *is* what the app needs. Every other non-goal in this item stands unchanged: no
+    iOS, no on-device ZK prover, no EU wallet/mdoc interop, no rung-2 delegation, no Credential
+    Manager provider unless item 8's spike passes, and no `chiproof` change beyond this one
+    addition.
 12. **Riskiest-assumption POC for the build itself** (per-module rule: POC the riskiest
     assumption before the easy parts; owner decision 2026-08-31): compose StrongBox key
     generation + biometric prompt + PACE chip read in one foreground-dispatch NFC session; pass =
@@ -475,6 +519,7 @@ The dominant risk is not a break in the chain — it is that no one installs the
 
 | Version | Date | Change |
 |---|---|---|
+| v1.18 — 2026-08-31, owner-approved | 2026-08-31 | F2 resolved (`docs/logs/M2-SESSION-POC.md` PENDING → RESOLVED): algorithm agility — support both P-256 and Ed25519, operator chooses by device capability, same pattern as the evidence slot (D24). §6.2 item 1 amended: app selects/reports the strongest key algorithm the device supports; default hardware-backed P-256 where StrongBox exists, software Ed25519 only where the adopter prefers algorithm uniformity over hardware custody. §6.2 item 9 amended: verifier accepts more than one signature algorithm. §6.2 item 11 amended: a P-256 evidence plug in `chiproof` (candidate name `sig-p256/1`) is now permitted, not scope creep — required by item 1's device-capability reality. Candidate decision, `Dn` pending; no `Dn` assigned this revision. |
 | v1.17 — 2026-08-31, owner-approved | 2026-08-31 | M2 build scope written (NO-GO #10): new §6.2, twelve MUST/MUST NOT items (device key custody, biometric gate before minting, app-side passiveAuth mint gate, mode captured at scan time not re-read from UI, no DG1/MRZ rendering + ResultActivity removed, onStop-not-onPause + keep-state-on-access-failure lifecycle, masterlist two-bucket rule, av://+direct_post handoff scope with DC-API/EU-wallet exclusions, bare/sig-ed25519-1 evidence defaults with the signed layout stated once, network_security_config, explicit non-goals, build's own riskiest-assumption POC proposal) plus an exit-criteria table. Four candidate decisions in §6.2 (items 1, 7, 10, 12) were settled by the owner on 2026-08-31 and await Dn numbering. |
 | v1.16 (draft) | 2026-08-31 | Interaction recorded, not a new decision: D9's derivation field (`document_number`, in DG1) is forgeable without chip auth per D29 — mode-B uniqueness/blocking hold only where `chip_auth: true` (D21). D9 and D29 rows annotated, Q18 closure cross-referenced, FR11 gains the conditional-uniqueness statement. Owner-approved 2026-08-31 (orchestrator-recommended): CSCA-absent-from-a-well-formed-masterlist is a real no (`ok:true, allowed:false`), not `ok:false` — reserved for masterlist integrity failure; M0 row's negative (ii) annotated as superseded, M2 row's masterlist line gets the explicit two-bucket statement; FR10/D21 checked and skipped as homes for a third clause |
 | v1.15 (draft) | 2026-08-31 | D30 — `sig-ed25519/1` default mode-B evidence delivery (amends D27, mode A stays bare); FR12 entry added (linkability 'signer', tier ceiling B, ceiling vetoable); D27 and M2 rows annotated |

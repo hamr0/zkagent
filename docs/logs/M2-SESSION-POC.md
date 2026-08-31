@@ -26,7 +26,7 @@ one tap).
 | Component | Version | Note |
 |---|---|---|
 | Host | Fedora 44 | same host as M0/M1/M2-scan |
-| Device | Pixel 6a (`bluejay`), Android 17 (SDK 37), security patch 2026-07-05 | `strongbox_keystore` feature v300 present; fingerprint present |
+| Device | Pixel 6a (`bluejay`), Android 17 (SDK 37), security patch 2026-07-05 | `strongbox_keystore` feature v300 present; **no fingerprint enrolled** (`adb shell dumpsys fingerprint`, checked 2026-08-31: `"prints":[{"id":0,"count":0,...}]`) — every run authorized via device PIN under the `BIOMETRIC_STRONG \| DEVICE_CREDENTIAL` prompt, see F9 |
 | Spike | `spikes/m2-session-poc/` — fork of `spikes/m2-scan/` | `applicationId com.zkagent.m2sessionpoc`; `ResultActivity` and the mode radio control **deleted** (§6.2 item 5 anticipated — no result screen exists to render DG1 fields); `M0Probe.kt` reused unchanged (chip read + passive auth + masterlist path) |
 | Masterlist asset | Same asset as `spikes/m2-scan`, BSI provenance already re-verified 2026-08-31 (`M2-SCAN-EVIDENCE.md` SETUP) — not re-verified here | |
 | New code | `SessionKey.kt` (device-key generation/signing per §6.2 item 1), `MainActivity.kt` (session composition: key → biometric → chip read → sign, one report per tap) | |
@@ -80,8 +80,13 @@ never lost across the biometric prompt, and no reconnect was needed
 | `passive_auth_verified` | 7132 | 5202 |
 | `signed` | 7198 | 5271 |
 
-Biometric confirmation itself takes ~2.9–4.5 s of both ladders (the human interaction, not
-composition overhead); the read completing at all after it is what this POC tests.
+**Correction (2026-08-31, owner-reported): the human interaction on both PASS runs was a device
+PIN entered at a half-screen credential prompt, not a fingerprint touch** (see F9 — no
+fingerprint is enrolled on this device, and `biometric_result: SUCCESS` is the BiometricPrompt
+API's generic success field; it does not distinguish which factor authorized the prompt). The
+~2.9–4.5 s the ladders show is PIN-entry time, not fingerprint-touch time; the read completing at
+all after it is what this POC tests, and PIN entry is the slower of the two factors, so this is
+if anything a stronger survival result than a fingerprint test would have produced.
 
 ---
 
@@ -145,10 +150,11 @@ forbidden by §6.2 item 11's non-goals). This POC did not decide between them �
 > What did verify (orchestrator, on the host, `openssl dgst -sha256 -verify` → `Verified OK`
 > for all three): row c (P-256/StrongBox, unattended diagnostic), row d (P-256/TEE,
 > unattended diagnostic), and row c auth-bound (the one signature made behind the owner's
-> fingerprint via `BiometricPrompt` `CryptoObject`). Only the c-authbound signature is
-> evidence about the biometric-bound path; the diagnostic keys (c, d, a2, b2) were
-> deliberately generated with `setUserAuthenticationRequired(false)` so one biometric prompt
-> sufficed for the run. Capability summary, quoted verbatim:
+> **device PIN — corrected 2026-08-31, see F9; not a fingerprint** — via `BiometricPrompt`
+> `CryptoObject`). Only the c-authbound signature is evidence about the per-use-auth-bound path;
+> the diagnostic keys (c, d, a2, b2) were deliberately generated with
+> `setUserAuthenticationRequired(false)` so one credential prompt sufficed for the run.
+> Capability summary, quoted verbatim:
 >
 > ```
 > ed25519_strongbox: GENERATED yes (row a2, level=STRONGBOX) | SIGNED no (no provider could initSign() this unattended diagnostic key) | VERIFIED-OFF-DEVICE (pending host check)
@@ -229,7 +235,8 @@ this session's captures.
 
 ## NEGATIVE EVIDENCE (run 5, first attempt — NL ID card)
 
-Before the passing NL retry, the first NL attempt hit a real biometric cancellation:
+Before the passing NL retry, the first NL attempt hit a real cancellation of the credential
+prompt (device PIN entry, per F9 — not a fingerprint):
 
 ```
 verdict: FAIL
@@ -305,11 +312,14 @@ above; `allStepsOk()` is now the sole PASS/FAIL authority. This is the ag-001 cl
 
 **F5 — per-use auth via `CryptoObject` works, and is the strong form of §6.2 item 2.** Every
 PASS run shows `auth_mode (read back from KeyInfo, never assumed): PER_USE` — the key requires
-fresh biometric authorization at sign time, not a 15-second validity window, proven live by
-reading the mode back from `KeyInfo` rather than trusting what was requested at generation.
+fresh biometric-**or-device-credential** authorization at sign time (§6.2 item 2's prompt is
+`BIOMETRIC_STRONG | DEVICE_CREDENTIAL`; see F9 — on this device that authorization was in fact a
+PIN, not a fingerprint), not a 15-second validity window, proven live by reading the mode back
+from `KeyInfo` rather than trusting what was requested at generation.
 
-**F6 — biometric adds ~3–4 s inside the tap, and the tag tolerates it.** Both PASS ladders show
-`biometric_succeeded` landing ~3.0–4.5 s after `biometric_prompt_shown`, entirely inside one
+**F6 — the credential prompt adds ~3–4 s inside the tap, and the tag tolerates it.** Both PASS
+ladders show `biometric_succeeded` (the API field name; see F9 for what factor actually fired it
+on this device) landing ~3.0–4.5 s after `biometric_prompt_shown`, entirely inside one
 continuous NFC session with the tag connection intact — the §6.2 item 12 result restated as a
 timing fact.
 
@@ -326,24 +336,53 @@ from an earlier attempt and kept breaking signing across runs 1–3 until run 4 
 regenerated it (`key state: existing alias is NOT per-use (mode=WINDOW(15s)) — regenerating
 fresh as per-use now that provider resolution (resolveByAttempt) is fixed`).
 
+**F9 — correction, owner-reported 2026-08-31: the auth factor actually exercised across every
+run was a device PIN, not a fingerprint; the strong-biometric path is untested on this device.**
+Every run's half-screen credential prompt was answered by typing a PIN, not touching the
+fingerprint sensor. This is a valid authorization under the `BIOMETRIC_STRONG | DEVICE_CREDENTIAL`
+prompt (§6.2 item 2), but `biometric_result: SUCCESS` throughout this file is the BiometricPrompt
+API's generic success field — it does not distinguish which factor authorized the prompt, and
+every earlier "biometric"/"fingerprint" reference in this file describing what the owner did (not
+the API/prompt itself) has been corrected in place. `adb shell dumpsys fingerprint` on this device
+(checked 2026-08-31) shows zero enrolled prints (`"prints":[{"id":0,"count":0,...}]`), consistent
+with the owner's report and explaining why the prompt fell through to device-credential entry.
+Per-use key binding and the `CryptoObject`-authorized signature both worked correctly under
+device-credential auth — the run-5 `sig_result` signed under this auth mode verified off-device
+independently by the orchestrator (see INDEPENDENT SIGNATURE VERIFICATION above), so the
+per-use-auth-bound path is proven for at least one factor. A PIN entry is *slower* than a
+fingerprint touch, and the `IsoDep` session still survived the full ~3–4 s of it on both PASS
+runs — if anything this is a stronger timing result for §6.2 item 12 than a fingerprint test
+would have produced, since it exercised the slower of the two factors. What remains open: the
+strong-biometric (fingerprint) path itself is **untested** on this device, and §6.2 item 2's
+"biometric" wording should be read throughout as "biometric or device credential", not narrowed
+to "fingerprint" — the prompt as specified (`BIOMETRIC_STRONG | DEVICE_CREDENTIAL`) always
+permitted device-credential fallback, and this session is the first evidence that the fallback
+path itself composes correctly with the NFC session.
+
 ---
 
 ## PENDING
 
-- [ ] **F2's escalation (owner decision needed — superseded question, see F2 above).** No
-      longer "is Ed25519 available via a different entry point" — the follow-up KEY TEST
-      showed it is not available on this device at all, by any entry point, at any security
-      level. The decision is now a three-way choice, presented neutrally, owner decides:
+- [x] **F2's escalation — RESOLVED, owner decision 2026-08-31.** No longer "is Ed25519
+      available via a different entry point" — the follow-up KEY TEST showed it is not
+      available on this device at all, by any entry point, at any security level. Three
+      options were weighed, presented neutrally (kept visible below as the record of what was
+      weighed); the owner chose **option 3, algorithm agility — support both, operator chooses
+      per device capability**, in the owner's own words: signing is "another thing we mention
+      honestly and operator choose and we support both" — exactly how the evidence slot itself
+      already works (D24). This is now recorded in `docs/product/zkagent-prd.md` v1.18, §6.2
+      items 1, 9, and 11 (amended 2026-08-31); a `sig-p256/1` evidence plug is now permitted in
+      `chiproof` (candidate name only — no `Dn` assigned, "candidate decision, Dn pending").
       1. **`sig-p256/1` chiproof plug** — hardware-backed (StrongBox/TEE), biometric-bindable
          (proven live via row c auth-bound); requires amending §6.2 item 11 (currently forbids
          touching `chiproof` for this) and adding a new signature-scheme plug.
       2. **Software Ed25519** — keeps D30 unchanged as written; no StrongBox binding, no
          biometric binding, the private key is extractable software material rather than
          hardware-confined.
-      3. **Both, operator chooses per device capability** — the owner's stated reading
+      3. **Both, operator chooses per device capability — CHOSEN.** The owner's stated reading
          (2026-08-31): signing algorithm is a documented device-capability variable and the
          operator picks by priority order at runtime. Costs: two code paths to maintain and
-         test; still needs §6.2 item 11 amended to allow the P-256 branch.
+         test; still needs §6.2 item 11 amended to allow the P-256 branch (done, see above).
 - [ ] **Second device, untested.** This POC ran on one Pixel 6a only; whether the same
       session composition (and the same provider/key-algorithm findings) holds on a second
       device is unverified.
@@ -353,6 +392,11 @@ fresh as per-use now that provider resolution (resolveByAttempt) is fixed`).
       design (deleted along with `ResultActivity`), so it neither reproduces nor clears that
       bug — it is simply not applicable here, and §6.2 item 4 still needs its own resolution
       in the M2 build.
+- [ ] **Strong-biometric (fingerprint) path, untested (F9).** Every run in this file was
+      authorized via device PIN, not a fingerprint — this device has zero fingerprints enrolled
+      (`dumpsys fingerprint`, checked 2026-08-31). Test the `BIOMETRIC_STRONG` fingerprint path
+      on a device with a fingerprint enrolled before treating §6.2 item 12's composition result
+      as covering both factors of the `BIOMETRIC_STRONG | DEVICE_CREDENTIAL` prompt.
 
 ---
 
