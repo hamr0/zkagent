@@ -1,9 +1,40 @@
-# zkagent — PRD v1.18 — 2026-08-31, owner-approved
+# zkagent — PRD v1.19 — 2026-09-01, owner-approved
 
 **Status**: Draft. D1–D8 signed 2026-07-26; D9 closed 2026-08-31 on M0 evidence — the mode-B derivation field is the **document number**. **No promise in this document survives a miss at M0 — which ran 2026-08-29 and held (`docs/logs/M0-EVIDENCE.md`).**
 **Project**: `zkagent` · **Published package**: `chiproof` · **Owner**: hamr · **Repo**: zkagent (sibling of 8een)
 **Parent standards**: `AGENT_RULES.md` (POC-first, dependency hierarchy, prove-don't-assert, security invariants). When anything here disagrees with AGENT_RULES, AGENT_RULES wins.
-**Version history**: §15. This revision (v1.18 — 2026-08-31, owner-approved) resolves F2 (the
+**Version history**: §15. This revision (v1.19 — 2026-09-01, owner-approved) records seven
+owner decisions from a live mode-B handoff run on the Pixel 6a / NL ID card, real Chrome `av://`
+tap → spike verifier (`direct_post` HTTP 200 `accepted:true`, but verdict `evidence_required_missing`
+because `spikes/m2-handoff/server.mjs` still required `sig-ed25519/1` only while the device sent
+`sig-p256/1` per F2): **D31** — the verifier accepts any one of an operator-configured set of
+attester-sig evidence plugs (`sig-ed25519/1`, `sig-p256/1`), superseding D30's single-required-plug
+framing for mode B and opening an any-of/alternatives semantic gap in chiproof's `evidence.require`
+(currently all-of, `packages/chiproof/src/evidence.js:184`) — opened, then closed same-day by D36;
+**D32** — the attester-sig plugs are the reference default only, not privileged; an
+operator may configure any registered chiproof evidence plug (e.g. `zk-passport/1`) as its mode-B
+requirement, per D24, still gated by the per-tier linkability rule; **D33** — the scanner
+preselects and locks the presentation mode from a pending handoff request's `zkagent.tier`,
+disabling manual override, failing loudly on an absent/invalid tier (new §6.2 item 13); **D34** —
+the scanner verifies the request object's JWS against a pinned/provisioned trusted-signer set
+before trusting any field inside it, refusing (never warning-and-continue) on failure — closes the
+escalation in `HandoffClient.kt`'s class doc, narrows D20 for this build specifically (new §6.2
+item 14), opened Q29 (trusted-signer provisioning), closed same-day by D37; **D35** — the value-free
+report MAY survive Activity recreation in-memory (already implemented; approval recorded); **D36**
+— a device never chooses to downgrade evidence/key strength, only falls through to the next
+preference on failure of the preferred one (closes Q28; `DeviceKey`'s `winnerPreference` already
+implements this); **D37** — request trust is origin-bound, not authority-bound: the scanner MUST
+enforce `client_id`/`request_uri`/`response_uri` origin consistency and fetch the request-signer
+key over TLS from a well-known path under that origin (closes Q29; EU AV-profile-shaped, Annex A
+TLS/Web PKI root of trust), with tier-C operator-curated allow-lists and OS-level trust for
+direction 2 (the requester trusting the app) recorded as a stated, not mitigated, limitation
+alongside chip cloning (D29). §6.2 items 4 (F5 closed, not reproduced), 6, 8, 9, 11 (chiproof pin
+and `sig-p256/1` naming status corrected), and 14 (origin binding + well-known key path, D37) are
+annotated; the exit-criteria table gains two rows.
+Evidence: commit `9f60489` (handoff off the main thread — item 8 had never executed in the scanner
+before 2026-09-01 — and `response_uri`/`state` read from the request object's top level, not
+`zkagent.challenge`).
+The prior revision (v1.18 — 2026-08-31, owner-approved) resolves F2 (the
 M2 build's own riskiest-assumption POC, `docs/logs/M2-SESSION-POC.md`) as **algorithm agility**:
 the app selects the strongest key algorithm the device supports and reports which, the verifier
 accepts more than one signature algorithm, and the adopter/operator chooses by their own
@@ -229,6 +260,10 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
    decide mode. F5 (mode-radio bug: UI showed Mode B, executed mode was A, root cause not found
    in `MainActivity.kt` as written) is OPEN — M2 MUST either root-cause it or restructure capture
    so it is structurally impossible, not assume this rewrite fixes it by construction.
+   **Closed 2026-09-01: not reproduced under the structural fix; the earlier observation is
+   attributed to the default-A radio state being left selected, not a capture bug.** **See item 13
+   below (D33): when a handoff request is pending, mode is no longer read from the RadioGroup at
+   all — it is preset and locked from the request's `zkagent.tier`.**
 5. **No document-field rendering.** MUST NOT render DG1/MRZ/any personal field on any screen, any
    mode (F4 — the M0-inherited `ResultActivity` leaked partial DG1 text into an accessibility
    snapshot this session). `ResultActivity` MUST be removed, not deprioritized. Mode A screens
@@ -238,6 +273,10 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
    an `onPause` wipe clears state mid-read). MUST keep typed MRZ fields on an access failure
    (PACE→BAC fallback, `SW 0x6300`→`0x6985`) so a mistyped key is a retry, not a full retype (F3);
    wipe only on a successful read or `onStop()`.
+   **Amended 2026-09-01, owner decision (D35):** the last value-free report text MAY be retained
+   in-memory across Activity recreation (`onSaveInstanceState` Bundle), never persisted to disk.
+   Already implemented; this records approval, not new behavior. MRZ/session-material wipe rules
+   above are unchanged.
 7. **Masterlist.** MUST bundle the full BSI CMS SignedData (`DE_ML_*.ml`) and verify the CMS
    signature and signer chain (`CSCA Master List Signer` ← `csca-germany`) at load, before the
    integrity check; a signature/chain failure is an integrity failure ⇒ `ok:false` (owner decision
@@ -253,6 +292,16 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
    provider-registration spike (open item, `m2-opening-poc-complete.md`) passes first. EU
    wallet/mdoc interop MUST NOT be attempted (NO-GO #3; `M2-CONFORMANCE.md` Findings 1, 2, 7 —
    confirmed non-interoperable by design, not by omission).
+   **Confirmed exercised end-to-end 2026-09-01, commit `9f60489`** (real Chrome `av://` tap, NL ID
+   card, mode B, Pixel 6a) — the handoff call had never previously executed inside the scanner
+   before this run. Two defects found and fixed in that commit: (a) the handoff ran on the main
+   thread inside `BiometricPrompt.onAuthenticationSucceeded`, raising
+   `NetworkOnMainThreadException` on the `request_uri` fetch — now runs on a background thread,
+   same idiom as the masterlist probe; the per-use-auth key stays valid across the hop because it
+   is bound to the `CryptoObject`, not a time window; (b) `response_uri`/`state` were being read
+   from `zkagent.challenge` instead of the request object's top level, where they actually live —
+   fixed to read top-level. See item 14 below (D34) for the still-open JWS-verification gap this
+   run also surfaced.
 9. **Evidence.** Mode A MUST ship bare (`evidence: []`, D27). Mode-B roundtrip MUST exercise the
    attester-key evidence plug matching whatever algorithm item 1 selected on that device (D30)
    as the reference default. Signed layout, stated once (per algorithm — see item 1's amendment
@@ -270,38 +319,84 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
    not inferred by the verifier. This is the same pattern the evidence slot itself already uses
    (D24): the adopter/operator chooses by their own priorities, and the core supports the choice
    rather than picking for them.
+   **Amended 2026-09-01, owner decision (D31, "accept more than one algorithm" made enforceable —
+   original amendment above kept, not deleted):** the prior paragraph named the requirement but not
+   the mechanism, and the gap was live: a real mode-B run on 2026-09-01 reached
+   `evidence_required_missing` because `spikes/m2-handoff/server.mjs` required `sig-ed25519/1`
+   only while the device sent `sig-p256/1`. The verifier's evidence requirement MUST be an any-of
+   set (`sig-ed25519/1` OR `sig-p256/1`, or whatever the operator configures per D32), not chiproof's
+   current all-of `evidence.require` (`packages/chiproof/src/evidence.js:184`). The request object's
+   `evidence_required` field carries the same alternatives shape so the app knows what it may send.
+   Which plug in the accepted set was actually used MUST be recorded in the verdict (unchanged from
+   the paragraph above). **Open design question, not decided — Q28 (§11):** may a device pick the
+   weaker of the accepted alternatives, or must it always offer its strongest? Recommended default:
+   the verifier lists its accepted set in preference order, accepts any member, and records which
+   was used in the verdict — no enforcement of "strongest offered" at the protocol level.
 10. **Network config.** MUST ship a real `network_security_config` (cleartext disabled). MUST
     define a debug/release split (owner decision 2026-08-31): release build permits NO cleartext;
     debug build permits exactly one cleartext exception, scoped to `10.0.2.2`/localhost, for the
     local test verifier only.
 11. **Non-goals (M2 build).** MUST NOT include: iOS; an on-device ZK prover; EU wallet/mdoc
     interop; rung-2 delegation; the Credential Manager provider (unless its spike passes, item 8);
-    any change to `chiproof` beyond what the app needs. Pinned dependency: `chiproof@0.3.0`
-    (published 2026-08-31, tag `chiproof-v0.3.0`).
+    any change to `chiproof` beyond what the app needs. Pinned dependency: `chiproof 0.4.0`
+    (in-repo, unpublished; published when M2 lands) — the scanner and `spikes/m2-handoff` both
+    build against the in-repo `packages/chiproof`, the latter via `file:../../packages/chiproof`.
     **Amended 2026-08-31, owner decision (original clause above kept visible, not deleted):**
-    adding a **P-256 evidence plug** to `chiproof` (candidate name `sig-p256/1`; candidate
-    decision, `Dn` pending — see item 1) **is now permitted** — it is required by item 1's
-    device-capability reality (`docs/logs/M2-SESSION-POC.md` F2: Ed25519 is unavailable as an
+    adding a **P-256 evidence plug** to `chiproof` (`sig-p256/1` — see item 1) **is now permitted**
+    — it is required by item 1's device-capability reality (`docs/logs/M2-SESSION-POC.md` F2: Ed25519 is unavailable as an
     AndroidKeyStore key on the Pixel 6a, at either security level, by either entry point), not
     scope creep against this item's original "no change beyond what the app needs" bar; the
     P-256 plug *is* what the app needs. Every other non-goal in this item stands unchanged: no
     iOS, no on-device ZK prover, no EU wallet/mdoc interop, no rung-2 delegation, no Credential
     Manager provider unless item 8's spike passes, and no `chiproof` change beyond this one
     addition.
+    **Updated 2026-09-01:** `sig-p256/1` is no longer a candidate name awaiting a `Dn` — it shipped
+    in `chiproof@0.4.0` (commit `0550c10`, "sig-ed25519/1 + sig-p256/1 attester-key plugs") on this
+    item's own F2 resolution, and its role as a co-equal reference-default alternative to
+    `sig-ed25519/1` (not a single required plug) is now governed by D31/D32/D36.
 12. **Riskiest-assumption POC for the build itself** (per-module rule: POC the riskiest
     assumption before the easy parts; owner decision 2026-08-31): compose StrongBox key
     generation + biometric prompt + PACE chip read in one foreground-dispatch NFC session; pass =
     the IsoDep session survives the biometric UI interruption and the read completes. Run on the
     Pixel 6a with both documents — this is the one untested interaction the items above assume
     works together.
+13. **Mode preselection from a pending handoff request** (new 2026-09-01, owner decision D33,
+    "B yes, app should preselect"). When a handoff request (`av://`/QR) is pending at the moment
+    mode capture happens (item 4), the app MUST set the mode from the request object's
+    `zkagent.tier` field and MUST disable the mode radio for user override; consent stays the
+    Lock + biometric/credential gate (item 2), unchanged. If no handoff is pending, manual
+    selection works as today. If the pending request's tier is absent or not one of A/B/C, the app
+    MUST fail loudly (log + report) — no default.
+14. **Request-object JWS verification before trusting any field** (new 2026-09-01, owner decision
+    D34, "C yes, it should verify"). The scanner MUST verify the request object's JWS signature
+    against a pinned/provisioned set of trusted request-signer keys before trusting ANY field
+    inside it — nonce, `response_uri`, `state`, tier, `evidence_required` — closing the escalation
+    recorded in `HandoffClient.kt`'s class doc ("this client does NOT pin a request-signer key").
+    Verification failure, or no matching trusted signer, MUST refuse the handoff (log + report),
+    never warn-and-continue. **This is stricter than D20's spec-level floor** (D20 permits unsigned
+    challenges at tiers A/B, sealed only by the nonce HMAC) — a build MAY require more than the
+    floor, and this is the M2 reference app's own choice, not a change to D20 itself.
+    **Amended 2026-09-01, owner decision (D37, closes Q29 — original clause above kept, not
+    deleted):** the trusted-signer set is not an arbitrary pinned list — it is origin-derived.
+    The scanner MUST enforce that `client_id`, `request_uri`, and `response_uri` all resolve to
+    one and the same HTTPS origin (scheme+host+port) before anything else; a mismatch MUST
+    refuse (log + report) — this is D37's origin-binding MUST, closing the `av://`-hijack half of
+    Q29. The request-signer public key MUST then be fetched over TLS from a well-known path under
+    that same origin (`https://<origin>/.well-known/zkagent-verifier`, D37) and the JWS verified
+    against it; a fetch failure or signature mismatch MUST refuse. **M2-scope exception (D37):**
+    `spikes/m2-handoff` runs on plain `http://127.0.0.1`, so the scanner ships one build-time
+    pinned dev request-signer key, labelled dev-only, in place of the well-known fetch; the
+    "no production trust store yet" disclosure stays until a real TLS origin exists.
 
 **Exit criteria**
 
 | Check | Pass |
 |---|---|
 | Three `M2-SCAN-EVIDENCE.md` checkpoints, re-run on the real build, Pixel 6a, both documents | Reinstall zktag stability; on-device masterlist two-bucket rule with both negatives; mode A emits no zktag after a mode-B presentation |
-| Handoff roundtrip | Passes against the `spikes/m2-handoff` verifier over `av://`/`direct_post` |
-| Mode-radio bug (F5) | Root-caused, or made structurally impossible by item 4's single-source-of-truth capture |
+| Handoff roundtrip | Passes against the `spikes/m2-handoff` verifier over `av://`/`direct_post`, including a mode-B presentation accepted under D31's any-of evidence set |
+| Mode-radio bug (F5) | **Closed 2026-09-01**: not reproduced under the structural fix (item 4); attributed to the default-A radio state, not a capture bug |
+| Mode preselection (item 13) | A pending handoff request's `zkagent.tier` sets and locks the mode radio; an absent/invalid tier fails loudly, no default |
+| Request-object verification (item 14) | An unsigned or unverifiable request object is refused (log + report) at every tier, not only C |
 
 ## 7. Riskiest-assumption register (what M0 must answer)
 
@@ -388,6 +483,13 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
 | D28 | *(2026-08-30 (late evening), owner decision, closes Q27)* **`current_date` is coarsened to day granularity client-side.** The prover feeds midnight-UTC of the scan day to the age circuit (the field is a `pub u64` the client controls — no circuit or chiproof change needed; the plug's `max_scan_age` comparison logic is unchanged). Consequence: the effective `max_scan_age` floor is 1 day — an adopter configuring a tighter window gets day-level effective precision. Second-level scan-session correlation across sites is eliminated. The upstream granularity ask remains filed (circuits#154) for a spec-level answer |
 | D29 | *(2026-08-31, owner decision, closes Q18, on evidence in `docs/logs/M0-EVIDENCE.md` Finding 9)* **Mode B accepts documents without chip authentication.** M0 measured the split: the US passport carries neither AA nor CA (clone-replayable), the NL ID card carries both (clone-detectable). The verifier reports `chip_auth` true/false in the verdict per D21, and every claim and README wording states explicitly that clone-replay of non-chip-auth documents is within the captcha-grade bar. Adopters may tighten (require `chip_auth`) via their own config; the reference posture does not. Mode-B-scoped: mode A is unaffected — no identifier is emitted, so there is nothing to impersonate. Interaction with D10: Q18 was the open risk undermining the 30-day-expiry rationale; that risk is now accepted-and-stated, not mitigated. **Interaction noted 2026-08-31 (not a reversal):** the clone-replayable field this closure accepts is D9's own derivation field (`document_number`, in DG1) — a cloned document without chip authentication mints the identical zktag to the genuine holder's, inheriting their pseudonymous reputation and any block placed on it. Mode-B uniqueness and blocking are guaranteed only where `chip_auth: true`; an adopter needing clone-resistant blocking must require it and accept the coverage loss (D21, FR11) |
 | D30 | *(2026-08-31, owner decision)* **`sig-ed25519/1` is the DEFAULT evidence delivery for mode-B presentations.** Owner's words: "ed25519 can be default delivery with mode B, since every attestor can create their own private key — live proof instead of complete vanilla." This AMENDS, not reverses, D27: the M2 reference app's mode-A / default presentation remains bare (`evidence: []`); mode-B presentations carry `sig-ed25519/1` as the reference default — the evidence slot ships with live proof that it works end-to-end, not permanently vanilla. The evidence: an attester-held Ed25519 key signs the challenge binding (claim-hash + nonce + scope + zktag; layout settled 2026-08-31, see FR12). Rationale: demonstrates the D24 slot with vetted, boring crypto — Ed25519 is in the Node stdlib (zero runtime deps, NO-GO #2 clean), and every operator/attester is self-sovereign over its own key: no CA, no mdoc machinery, the 8een signed-proof shape streamlined. Linkability class 'signer', tier ceiling B — see FR12; the ceiling is orchestrator-recommended (a stable signer key across sites would break tier A's cross-site bar), and the owner can veto it |
+| D31 | *(2026-09-01, owner decision, on evidence from a live mode-B run on the Pixel 6a / NL ID card, real Chrome `av://` tap → spike verifier: `direct_post` reached HTTP 200 `accepted:true`, but the verdict was `evidence_required_missing`, because `spikes/m2-handoff/server.mjs` still required `sig-ed25519/1` only (D30) while the device — which cannot generate Ed25519 in AndroidKeyStore, F2 — sent `sig-p256/1`)* **The verifier accepts any one of an operator-configured set of attester-sig evidence plugs, not a single fixed one.** Owner's words: "A yes, either." Supersedes D30's single-required-plug framing for mode B: `sig-ed25519/1` and `sig-p256/1` become co-equal reference-default alternatives; the device picks the strongest it supports (F2, §6.2 item 1) and the verifier accepts whichever arrives, provided it is in the operator's accepted set. This requires an any-of/alternatives semantic that chiproof's evidence slot does not have today — `evidence.require` (`packages/chiproof/src/evidence.js:184`) is all-of: every listed key must be `seen` or the presentation is `evidence_required_missing`. chiproof 0.4.0 is unpublished, so the contract change (an alternatives group in `evidence.require`, and the matching `evidence_required` shape in the request object) is cheap now. The verdict MUST record which plug in the accepted set was actually used (§6.2 item 9, unchanged). **Opened Q28** (§11), closed same-day by D36 |
+| D32 | *(2026-09-01, owner decision, clarifies D24 — does not introduce a new mechanism)* **The attester-sig plugs are the reference default, not a privileged mode-B requirement.** Owner's words (verbatim-ish): "that signature can be changed/replaced by operators by anything else like zkpassport, or anything they want." D24's evidence-slot design already permits this; this decision records it explicitly so it is not re-litigated: an operator/verifier MAY configure any registered chiproof evidence plug (e.g. `zk-passport/1`) or set of alternatives (D31) as its mode-B requirement, in place of or alongside `sig-ed25519/1`/`sig-p256/1`. Constraint unchanged: whatever the operator chooses still passes chiproof's per-tier linkability gate — tier A: linkability none (`evidence.js`'s tier-A-refuses-linkability check); a 'signer'-class plug (D30's tier ceiling B) or a 'device'-class plug cannot be substituted into tier A regardless of operator preference |
+| D33 | *(2026-09-01, owner decision)* **The scanner preselects and locks the presentation mode from a pending handoff request, rather than leaving it to manual selection.** Owner's words: "B yes, app should preselect." New §6.2 item 13: when a handoff request is pending at the moment mode capture happens (§6.2 item 4), the app sets the mode from the request object's `zkagent.tier` field and disables the mode radio for user override; user consent remains the Lock + biometric/credential gate (item 2), unchanged. If no handoff is pending, manual selection works as today. If the pending request's tier is absent or not one of A/B/C, the app MUST fail loudly (log + report) rather than default to any mode |
+| D34 | *(2026-09-01, owner decision)* **The scanner verifies the request object's JWS signature against a pinned/provisioned set of trusted request-signer keys before trusting any field inside it** (nonce, `response_uri`, `state`, tier, `evidence_required`). Owner's words: "C yes, it should verify." New §6.2 item 14. Closes the escalation recorded in `HandoffClient.kt`'s class doc ("this client does NOT pin a request-signer key — there is no owner-approved key/config surface for `trustedChallengeIssuers` in this build"). Verification failure, or no matching trusted signer, MUST refuse the handoff (log + report) — never a warning-and-continue. **This narrows D20 for the M2 reference app specifically**: D20 permits unsigned challenges at tiers A/B as a spec-level floor (the nonce HMAC alone seals the fields); the M2 build's own policy is stricter — it requires a verified signature at every tier, not only C. D20 itself is unchanged as the spec floor; a build MAY require more than the floor. **Opens Q29** (§11) — provisioning/rotation of the trusted-signer set on-device is unresolved; recommended default (not yet owner-approved): a build-time pinned dev key for the spike verifier only, with an explicit "no production trust store yet" disclosure alongside every claim this app makes |
+| D35 | *(2026-09-01, owner decision)* **The last value-free report text MAY be retained in-memory across Activity recreation** (`onSaveInstanceState` Bundle), never persisted to disk. Owner's words: "D yes." Already implemented (§6.2 item 6); this records approval rather than describing new behavior. MRZ/session-material wipe rules (`onStop()`, not `onPause()`) are unchanged |
+| D36 | *(2026-09-01, owner decision, closes Q28)* **The device orders its own key/evidence capabilities by a fixed strength preference and attempts them in that order; it never chooses to downgrade.** Owner's words: "why would code/phone that is mechanical choose to downgrade? it could if one that it can do fails … you should query phone first for what it can do and use it as first pref." This is what `DeviceKey`'s KEY-TEST / `winnerPreference` (`apps/scanner/app/src/main/java/com/tananaev/passportreader/DeviceKey.kt:82`) already does: the device queries its own capabilities first, tries its preferred combo, and falls through to the next only when generation/use of the preferred one *fails on this device* — never as a choice among successes. If the operator's accepted set (D31) contains nothing the device can produce, the presentation fails loudly with the reason; there is no negotiation round-trip. The verifier still accepts any member of the operator's set and records which was used (D31, unchanged) — it cannot enforce "must offer strongest" because it cannot observe device capability without attestation, and attestation is excluded from mode-B evidence (a raw chain is a per-device identifier, D22). Note: P-256 and Ed25519 are equivalent-strength (~128-bit) — the "downgrade" between them is nominal, not a security regression; the meaningful strength axis is `security_level` (STRONGBOX > TEE > software), which the report already asserts (per-module memory rule: assert what came back, don't just confirm success) |
+| D37 | *(2026-09-01, owner decision, closes Q29)* **Request trust is origin-bound (EU AV-profile shape), not authority-bound.** Owner's words: "agree, verifier is not our issue, unless it's mode c like kyc and that's operator bound curated list, and i also agree with os level and to cover av:// to ensure requesting website is the same." **Origin binding (closes the av:// hijack half of Q29):** the trust anchor for a handoff request is the requesting site's HTTPS origin, not an authority key. The scanner MUST enforce that `client_id`, `request_uri`, and `response_uri` resolve to one and the same origin (scheme+host+port); `scope_domain` (the zktag scope) is derived from that origin and shown to the user at consent; a mismatch MUST refuse (log + report). This is what "cover av:// to ensure requesting website is the same" means: a hijacked or relayed `av://` tap can only ever route the answer back to the origin that issued the request. **Key discovery (closes D34's provisioning gap, the other half of Q29):** the verifier publishes its request-signing public key at a well-known path under that same origin — `https://<origin>/.well-known/zkagent-verifier` (no prior PRD-named path; exact path is an implementation detail, this is the recorded one) — the scanner fetches it over TLS and verifies the request-object JWS against it; a fetch failure or signature mismatch MUST refuse. Root of trust is TLS/Web PKI, matching the EU Age Verification profile (Annex A: `client_id_scheme` MUST be `redirect_uri`, "client authentication is not required", TLS + Web PKI as the trust root — §12 already cites this profile). **"Verifier is not our issue":** anyone may ask; there is no zkagent registrar or central allow-list at tiers A/B (NO-GO #3 unaffected — this is a bind, not a registry). Rationale: what an asker receives is already scoped to its own origin (mode A: nothing stable; mode B: zktag scoped to `scope_domain`, D5/FR2), so restricting *who* may ask protects nothing — the property that matters is that the *answer* goes back to who the user is answering, which origin binding gives directly. **Tier C exception:** for KYC-like tier C, the relying operator MAY require its own curated allow-list of request signers (the EU Android AV app's `PreregisteredVerifier(clientId, verifierApi, legalName)` shape) — this is operator-bound configuration, per D19/D20's tier-C pinning, not a zkagent-central list. **Direction 2 accepted as a stated limitation, not solved:** the owner accepts OS-level trust for v1 on the mirror question (the requester trusting the app/device is genuine) — same posture as the EU AV profile ("reader authentication is not required and out of scope"; OS/browser are trusted components). No Play Integrity (D24 history — non-borrowable), no raw attestation chain (D22 — per-device identifier). An operator that cannot accept trusting the app selects a plug the verifier checks itself (`zk-passport/1`) per D32. Record alongside the existing chip-cloning limitation (D29) as a second named, accepted gap — not mitigated, disclosed. **`av://` hijack note, recorded not mitigated:** Annex A mandates the `av://` custom scheme; on Android any app may register it (the EU reference app registers host `*`). Damage is bounded by origin binding above to the request itself (no personal data crosses in a hijacked request) plus direction-2 exposure. Mitigation path, follow-up not an M2 MUST: verified HTTPS App Links (`assetlinks.json`) as the primary link once zkagent has a domain; `av://` kept for EU-profile compatibility. **M2 spike default:** `spikes/m2-handoff` runs on plain `http://127.0.0.1` (no TLS), so the scanner ships one build-time pinned dev request-signer key, labelled dev-only; the well-known fetch above is the production path, not exercised by the spike. The "no production trust store yet" disclosure (D34/Q29) stays until a real TLS origin exists |
 
 **Resolved and closed** (kept as one-liners; full reasoning is in the version history and session stashes): **Q2** — Apple entitlement moot for M0. **Q5** — Android is primary (D2). **Q6** — iOS deferred (D2). **Q9** — phone→agent cert handoff ships all three paths (QR ~400–550 bytes in one static QR with no fountain coding; LAN POST; user-moved file, which leaks the zktag to whatever routes it and must be documented rather than blocked). The cert carries the agent's *public* key and is signed by the phone, so integrity is free and the channel needs neither confidentiality nor authentication. No zkagent-run server in any path.
 
@@ -486,6 +588,28 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
   `max_scan_age` window can usefully be — a real trade-off, not a free fix. Not decided: coarsen to
   day granularity vs. keep tight scan-age precision. **Closed 2026-08-30 (late evening): coarsen to day granularity, midnight-UTC (D28); effective `max_scan_age` floor is 1 day.**
 
+- **Q28 (closed by D36) — may a device offer the weaker of an accepted evidence-alternatives set, or
+  must it always offer its strongest?** D31 makes the mode-B attester-sig requirement an any-of set
+  (`sig-ed25519/1` OR `sig-p256/1`, or whatever an operator configures per D32) rather than one fixed
+  plug. Question was whether a device that *could* produce the stronger of two accepted alternatives
+  may instead present the weaker one, and whether the verifier should care. **Closed 2026-09-01: no
+  choice exists to make — the device queries its own capabilities first, orders them by fixed
+  strength preference, and falls through only on failure of the preferred combo, never voluntarily
+  (D36); the verifier cannot enforce "must offer strongest" without device attestation, which is
+  excluded (D22).**
+- **Q29 (closed by D37) — how are `trustedChallengeIssuers` (the request-signer keys the app pins)
+  provisioned and rotated on-device?** D34 requires the scanner to verify every request object's
+  JWS against a pinned/provisioned trusted-signer set before trusting any field inside it, but no
+  key/config surface for this existed in the build. **Closed 2026-09-01: the trust anchor is the
+  requesting site's HTTPS origin, not an arbitrary pinned list (D37).** The scanner enforces
+  `client_id`/`request_uri`/`response_uri` origin consistency, then fetches the request-signer
+  public key over TLS from a well-known path under that origin
+  (`https://<origin>/.well-known/zkagent-verifier`) — TLS/Web PKI as the root of trust, matching
+  the EU Age Verification profile's Annex A (`client_id_scheme: redirect_uri`, "client
+  authentication is not required"). Tier C may layer an operator-curated allow-list on top
+  (D37). M2 scope keeps one build-time pinned dev key for the non-TLS spike verifier until a real
+  TLS origin exists — "no production trust store yet" stays disclosed until then.
+
 ## 12. Grounding (why this isn't a dart in the dark)
 
 - Personhood credentials called for, issuer assumed, none stood up: arXiv **2408.07892** (OpenAI/Microsoft/Harvard et al.); delegation-to-agents follow-up: arXiv **2501.09674** (MIT et al.)
@@ -519,6 +643,7 @@ The dominant risk is not a break in the chain — it is that no one installs the
 
 | Version | Date | Change |
 |---|---|---|
+| v1.19 — 2026-09-01, owner-approved | 2026-09-01 | Seven owner decisions from a live mode-B handoff run on the Pixel 6a / NL ID card (real Chrome `av://` tap, `direct_post` HTTP 200 `accepted:true`, verdict `evidence_required_missing`). D31: verifier accepts any one of an operator-configured attester-sig evidence set (supersedes D30's single-required-plug framing), needs an any-of semantic chiproof's `evidence.require` does not have today (currently all-of); opened, then closed same-day, Q28. D32: attester-sig plugs are the reference default only, not privileged — an operator may configure any registered evidence plug (D24 clarified, not changed). D33: scanner preselects/locks mode from a pending handoff request's `zkagent.tier`, fails loudly on absent/invalid tier — new §6.2 item 13. D34: scanner verifies the request object's JWS against a pinned trusted-signer set before trusting any field, refuses on failure — new §6.2 item 14, narrows D20 for this build specifically, closes the `HandoffClient.kt` escalation, opened then closed same-day, Q29. D35: value-free report MAY survive Activity recreation in-memory (approval of already-implemented behavior). D36: closes Q28 — a device never chooses to downgrade key/evidence strength, only falls through to the next preference on failure of the preferred one; the verifier cannot enforce "must offer strongest" without attestation, which is excluded (D22). D37: closes Q29 — request trust is origin-bound (EU AV-profile shape: Annex A TLS/Web PKI root, `client_id_scheme: redirect_uri`), not authority-bound; scanner MUST enforce `client_id`/`request_uri`/`response_uri` origin consistency and fetch the request-signer key over TLS from a well-known path under that origin; tier-C operator-curated allow-lists permitted (D19/D20 shape); OS-level trust for direction 2 (requester trusting the app) accepted as a stated limitation, not mitigated, alongside chip cloning (D29); `av://` hijack risk bounded by origin binding, verified HTTPS App Links recorded as a follow-up; M2 spike keeps one dev-only pinned key pending a real TLS origin. §6.2 items 4 (F5 closed), 6, 8, 9 annotated; item 11 corrected — `sig-p256/1` naming no longer "candidate, Dn pending" (shipped in chiproof 0.4.0, now governed by D31/D32/D36), pin text changed from a stale published-npm claim (`chiproof@0.3.0`) to `chiproof 0.4.0` (in-repo, unpublished); item 14 amended with D37's origin-binding MUST and well-known key path. Exit-criteria table gains two rows. Evidence: commit `9f60489` (handoff off main thread, `response_uri`/`state` read from the request object's top level). |
 | v1.18 — 2026-08-31, owner-approved | 2026-08-31 | F2 resolved (`docs/logs/M2-SESSION-POC.md` PENDING → RESOLVED): algorithm agility — support both P-256 and Ed25519, operator chooses by device capability, same pattern as the evidence slot (D24). §6.2 item 1 amended: app selects/reports the strongest key algorithm the device supports; default hardware-backed P-256 where StrongBox exists, software Ed25519 only where the adopter prefers algorithm uniformity over hardware custody. §6.2 item 9 amended: verifier accepts more than one signature algorithm. §6.2 item 11 amended: a P-256 evidence plug in `chiproof` (candidate name `sig-p256/1`) is now permitted, not scope creep — required by item 1's device-capability reality. Candidate decision, `Dn` pending; no `Dn` assigned this revision. |
 | v1.17 — 2026-08-31, owner-approved | 2026-08-31 | M2 build scope written (NO-GO #10): new §6.2, twelve MUST/MUST NOT items (device key custody, biometric gate before minting, app-side passiveAuth mint gate, mode captured at scan time not re-read from UI, no DG1/MRZ rendering + ResultActivity removed, onStop-not-onPause + keep-state-on-access-failure lifecycle, masterlist two-bucket rule, av://+direct_post handoff scope with DC-API/EU-wallet exclusions, bare/sig-ed25519-1 evidence defaults with the signed layout stated once, network_security_config, explicit non-goals, build's own riskiest-assumption POC proposal) plus an exit-criteria table. Four candidate decisions in §6.2 (items 1, 7, 10, 12) were settled by the owner on 2026-08-31 and await Dn numbering. |
 | v1.16 (draft) | 2026-08-31 | Interaction recorded, not a new decision: D9's derivation field (`document_number`, in DG1) is forgeable without chip auth per D29 — mode-B uniqueness/blocking hold only where `chip_auth: true` (D21). D9 and D29 rows annotated, Q18 closure cross-referenced, FR11 gains the conditional-uniqueness statement. Owner-approved 2026-08-31 (orchestrator-recommended): CSCA-absent-from-a-well-formed-masterlist is a real no (`ok:true, allowed:false`), not `ok:false` — reserved for masterlist integrity failure; M0 row's negative (ii) annotated as superseded, M2 row's masterlist line gets the explicit two-bucket statement; FR10/D21 checked and skipped as homes for a third clause |
