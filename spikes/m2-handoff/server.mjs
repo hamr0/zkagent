@@ -102,6 +102,22 @@ const ATTESTER_P256_PUBKEY_PEM = process.env.ATTESTER_P256_PUBKEY_PEM ?? DEV_ATT
 // fake wallet pins the public half of.
 const REQUEST_SIGNER_KID = process.env.REQUEST_SIGNER_KID ?? DEV_REQUEST_SIGNER.kid;
 const REQUEST_SIGNER_PRIVKEY_PEM = process.env.REQUEST_SIGNER_PRIVKEY_PEM ?? DEV_REQUEST_SIGNER.privateKeyPem;
+// Q33 (2026-09-01): the verifier's configured age threshold is now settable
+// from the environment, so an operator can ask for something other than 18
+// and observe the scanner ignore it (it hardcodes threshold = 18,
+// apps/scanner/.../MainActivity.kt:1181 -- Q33a, not yet owner-decided,
+// whether the app should read this back). This is the ONLY source of the
+// value: it flows into issueChallenge() below and out to the device inside
+// the signed, nonce-bound `zkagent.challenge.threshold` -- do NOT add a
+// sibling `zkagent.threshold` field (tried before, reverted: not
+// nonce-bound). chiproof's createVerifier throws a TypeError on a
+// non-integer threshold (src/index.js), so validate here and fail fast
+// with a clear message rather than passing a bad env value through.
+const THRESHOLD_RAW = process.env.THRESHOLD ?? '18';
+const THRESHOLD = Number(THRESHOLD_RAW);
+if (!Number.isInteger(THRESHOLD)) {
+  throw new Error(`invalid THRESHOLD env var: ${JSON.stringify(THRESHOLD_RAW)} -- must be an integer`);
+}
 const DEFAULT_TTL_MS = 120_000;
 const MAX_TTL_MS = 600_000;
 const MAX_BODY_BYTES = 64 * 1024;
@@ -133,6 +149,7 @@ export function makeVerifier() {
   return createVerifier({
     scopeDomain: SCOPE_DOMAIN,
     challengeSecret: CHALLENGE_SECRET,
+    threshold: THRESHOLD,
     // InMemoryNonceStore is test-only; this is a single-process demo/spike,
     // the exact case the explicit override exists for (chiproof.context.md).
     allowInMemoryStore: true,
@@ -339,10 +356,13 @@ export function createApp() {
       };
       byTransactionId.set(transactionId, tx);
       byRequestId.set(requestId, tx);
-      // Value-free: transactionId, mode, ttlMs only — never the challenge,
-      // nonce, or anything a real device would carry.
+      // Value-free: transactionId, mode, ttlMs, threshold only — never the
+      // challenge, nonce, or anything a real device would carry. threshold
+      // here is the verifier's own configured value (Q33), logged so an
+      // operator can see what was asked for next to the verdict that comes
+      // back below.
       // eslint-disable-next-line no-console
-      console.log(`[m2-handoff] tx created transactionId=${transactionId} mode=${mode} ttlMs=${ttlMs}`);
+      console.log(`[m2-handoff] tx created transactionId=${transactionId} mode=${mode} ttlMs=${ttlMs} threshold=${THRESHOLD}`);
 
       sendJson(res, 201, {
         transactionId,
@@ -429,7 +449,7 @@ export function createApp() {
         // eslint-disable-next-line no-console
         console.log(
           `[m2-handoff] verdict transactionId=${tx.transactionId} tier=${verdict.tier ?? tx.mode} `
-          + `ok=${verdict.ok} allowed=${verdict.allowed} reason=${verdict.reason} `
+          + `threshold=${THRESHOLD} ok=${verdict.ok} allowed=${verdict.allowed} reason=${verdict.reason} `
           + `evidence=${JSON.stringify(verdict.evidence ?? [])} attester=${attesterStatus}`,
         );
       }
