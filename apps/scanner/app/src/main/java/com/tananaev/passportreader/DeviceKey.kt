@@ -52,6 +52,12 @@ object DeviceKey {
     private const val PROBE_ALIAS = "zkagent_scanner_attester_probe"
     private const val SOFTWARE_ED25519_ALIAS_TAG = "software" // not a Keystore alias — see softwareEd25519Store
 
+    /** Top of [winnerPreference] (row a1) — the algorithm/evidence-plug
+     * identifier this device would use if it could. Exposed so callers (the
+     * mint report) can state "requested vs used" without duplicating the
+     * preference order. */
+    const val PREFERRED_EVIDENCE_TYPE = "sig-ed25519/1"
+
     /** Registry-facing algorithm identifiers — MUST match what chiproof's
      * evidence-type registry calls these (item 9's `sig-ed25519/1` is
      * shipped; `sig-p256/1` is a CANDIDATE plug the parallel chiproof work
@@ -93,6 +99,11 @@ object DeviceKey {
         val matrix: List<Attempt>,
         val winnerRowId: String?,
         val tradeoffNote: String,
+        /** Task 2 (M2 handoff-fix session): true iff this KeyState came from
+         * the reuse path (existing per-use alias found), false if a fresh
+         * key was generated this call. Defaulted so the generate-path and
+         * software-Ed25519 call sites below don't all need updating. */
+        val reusedExistingKey: Boolean = false,
     )
 
     private fun deleteAlias(ks: KeyStore, alias: String) {
@@ -311,6 +322,7 @@ object DeviceKey {
             matrix = emptyList(),
             winnerRowId = null,
             tradeoffNote = "reused existing device key from a prior run",
+            reusedExistingKey = true,
         )
     }
 
@@ -329,6 +341,60 @@ object DeviceKey {
         ks.getCertificate(ALIAS)?.publicKey?.encoded
     } catch (e: Exception) {
         null
+    }
+
+    /** Task 2 (M2 handoff-fix session, owner-approved scope): asserts what
+     * the CURRENTLY STORED [ALIAS] key actually is, by querying [KeyInfo] on
+     * it — never what was requested. Matches the "probe must assert what
+     * came back" discipline (F2/KEY TEST finding: this device silently
+     * substitutes P-256 for Ed25519 via AndroidKeyStore). Value-free by
+     * construction: algorithm/curve names, an enum, a boolean, a duration —
+     * no key bytes, no fingerprint. */
+    data class KeyDetails(
+        val jcaAlgorithm: String,
+        val curve: String,
+        val securityLevel: String,
+        val origin: String,
+        val userAuthRequired: Boolean,
+        val authValiditySeconds: Int,
+    )
+
+    fun currentKeyDetails(): KeyDetails? {
+        return try {
+            val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }
+            val entry = ks.getEntry(ALIAS, null) as? KeyStore.PrivateKeyEntry ?: return null
+            val privateKey = entry.privateKey
+            val factory = KeyFactory.getInstance(privateKey.algorithm, KEYSTORE)
+            val info = factory.getKeySpec(privateKey, KeyInfo::class.java) as KeyInfo
+            val curve = when (privateKey) {
+                is java.security.interfaces.ECKey -> when (val fieldSize = privateKey.params.curve.field.fieldSize) {
+                    256 -> "P-256"
+                    else -> "EC-$fieldSize"
+                }
+                else -> privateKey.algorithm // e.g. "Ed25519" — JCA has no separate curve name for it
+            }
+            KeyDetails(
+                jcaAlgorithm = privateKey.algorithm,
+                curve = curve,
+                securityLevel = when (info.securityLevel) {
+                    KeyProperties.SECURITY_LEVEL_STRONGBOX -> "STRONGBOX"
+                    KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT -> "TEE"
+                    KeyProperties.SECURITY_LEVEL_SOFTWARE -> "SOFTWARE"
+                    else -> "UNKNOWN(${info.securityLevel})"
+                },
+                origin = when (info.origin) {
+                    KeyProperties.ORIGIN_GENERATED -> "GENERATED"
+                    KeyProperties.ORIGIN_IMPORTED -> "IMPORTED"
+                    KeyProperties.ORIGIN_UNKNOWN -> "UNKNOWN"
+                    else -> "UNKNOWN(${info.origin})"
+                },
+                userAuthRequired = info.isUserAuthenticationRequired,
+                authValiditySeconds = info.userAuthenticationValidityDurationSeconds,
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "currentKeyDetails() failed: ${e.javaClass.simpleName}: ${e.message}")
+            null
+        }
     }
 
     // ---- software Ed25519 opt-in path (item 1's stated trade) -------------

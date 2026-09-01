@@ -581,7 +581,19 @@ abstract class MainActivity : AppCompatActivity() {
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     val authorizedSig = result.cryptoObject?.signature ?: sig
-                    mintAndMaybeHandoff(keyState, authorizedSig, dg1File, baseReport)
+                    // 2026-09-01 bug fix: mintAndMaybeHandoff does network I/O
+                    // (handoff fetch + direct_post) and this callback runs on
+                    // the main thread — NetworkOnMainThreadException. Move it
+                    // to a background thread, matching the Thread{}.start()
+                    // idiom used elsewhere in this file (runMasterlistProbe,
+                    // the DeviceKey.ensureKey call above). Safe to defer: the
+                    // key's biometric auth is crypto-object-bound (per-use,
+                    // validity duration 0 — see DeviceKey.specBuilder /
+                    // authModeLabel), not time-window-bound, so using
+                    // [authorizedSig] later on another thread does not risk
+                    // the auth window expiring the way a validity-duration
+                    // key would.
+                    Thread { mintAndMaybeHandoff(keyState, authorizedSig, dg1File, baseReport) }.start()
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -601,7 +613,14 @@ abstract class MainActivity : AppCompatActivity() {
      * the ALREADY-AUTHORIZED device key, and — if a [pendingHandoff] is
      * queued — POSTs `direct_post`. zktag is never fully rendered on screen;
      * only a truncated hash, matching this project's value-free logging
-     * discipline elsewhere. */
+     * discipline elsewhere.
+     *
+     * **Runs on a background thread** (see [promptAndMint]'s
+     * `onAuthenticationSucceeded`) — `HandoffClient.fetchRequest` and
+     * `postDirectPost` are blocking network calls. Every [emitReport] call
+     * below is therefore wrapped in [runOnUiThread], and [pendingHandoff] is
+     * cleared on the main thread too, once the handoff has definitively
+     * completed or failed — never mid-flight. */
     private fun mintAndMaybeHandoff(keyState: DeviceKey.KeyState, signature: Signature, dg1File: DG1File, baseReport: String) {
         val scopeDomain = pendingHandoff?.let {
             runCatching { Uri.parse(it.requestUri).host }
@@ -612,7 +631,7 @@ abstract class MainActivity : AppCompatActivity() {
         val zktag = candidates["document_number"]
         if (zktag == null) {
             Log.w(TAG, "M2 stage: no document_number field to derive zktag from (D9)")
-            emitReport(baseReport + "\nmint: FAILED — no document_number field to derive from (D9)")
+            runOnUiThread { emitReport(baseReport + "\nmint: FAILED — no document_number field to derive from (D9)") }
             return
         }
         val threshold = 18
@@ -620,18 +639,31 @@ abstract class MainActivity : AppCompatActivity() {
         val handoff = pendingHandoff
         val challenge: JSONObject
         val nonce: String
+        // OpenID4VP request-object JSON, TOP LEVEL — response_uri/state/
+        // client_id/response_mode live here (server.mjs ~line 230-270), NOT
+        // inside zkagent.challenge (which carries only nonce/tier/expiry).
+        // 2026-09-01 bug: this file previously read response_uri/state off
+        // `challenge`, so a live verifier's request object always looked
+        // like it "carried no response_uri" even though it was present one
+        // level up.
+        var requestObject: JSONObject = JSONObject()
         if (handoff != null) {
             Log.i(TAG, "M2 stage: handoff pending — fetching request_uri=${handoff.requestUri}")
             try {
                 val fetched = HandoffClient.fetchRequest(handoff.requestUri)
                 Log.i(TAG, "M2 stage: handoff request fetched — http_status=${fetched.httpStatus} was_signed=${fetched.wasSigned} signature_verified=${fetched.signatureVerified}")
+                requestObject = fetched.json
                 val zkagent = fetched.json.optJSONObject("zkagent") ?: fetched.json
                 challenge = zkagent.optJSONObject("challenge") ?: JSONObject()
                 nonce = challenge.optString("nonce", "")
-                Log.i(TAG, "M2 stage: handoff challenge parsed — nonce_present=${nonce.isNotEmpty()} response_uri_present=${challenge.has("response_uri")}")
+                Log.i(TAG, "M2 stage: handoff challenge parsed — nonce_present=${nonce.isNotEmpty()} response_uri_present=${requestObject.has("response_uri")}")
+            } catch (e: HandoffClient.HandoffHttpException) {
+                Log.e(TAG, "M2 stage: handoff request fetch FAILED — HTTP ${e.httpStatus}", e)
+                runOnUiThread { emitReport(baseReport + "\nmint: local signature OK, but handoff request fetch FAILED — HTTP ${e.httpStatus}: ${e.message}") }
+                return
             } catch (e: Exception) {
                 Log.e(TAG, "M2 stage: handoff request fetch FAILED", e)
-                emitReport(baseReport + "\nmint: local signature OK, but handoff request fetch FAILED: ${e.javaClass.simpleName}: ${e.message}")
+                runOnUiThread { emitReport(baseReport + "\nmint: local signature OK, but handoff request fetch FAILED: ${e.javaClass.simpleName}: ${e.message}") }
                 return
             }
         } else {
@@ -651,8 +683,32 @@ abstract class MainActivity : AppCompatActivity() {
         val evidence = EvidenceSigner.sign(signature, message, keyState.algorithm, keyId)
 
         val zktagHashPrefix = java.security.MessageDigest.getInstance("SHA-256").digest(zktag.toByteArray()).joinToString("") { "%02x".format(it) }.take(12)
+
+        // Task 2 (owner-approved scope): assert what the KEYSTORE actually
+        // holds and what plug was actually chosen — never what was merely
+        // requested — per "probe must assert what came back" (F2/KEY TEST:
+        // this device silently substitutes P-256 for Ed25519).
+        val keyDetails = DeviceKey.currentKeyDetails()
+        val deviceKeyLine = if (keyDetails != null) {
+            "device_key: alg=${keyDetails.jcaAlgorithm} curve=${keyDetails.curve} security_level=${keyDetails.securityLevel} " +
+                "origin=${keyDetails.origin} user_auth_required=${keyDetails.userAuthRequired} auth_validity=${keyDetails.authValiditySeconds}s\n"
+        } else {
+            Log.w(TAG, "M2 stage: DeviceKey.currentKeyDetails() failed — could not assert stored key facts")
+            "device_key: FAILED to assert stored key facts (KeyInfo query failed)\n"
+        }
+        val deviceKeyOriginLine = "device_key: ${if (keyState.reusedExistingKey) "reused existing alias" else "created this mint"}\n"
+        val evidencePlug = "${evidence.type}/${evidence.version}"
+        val evidencePlugLine = if (evidencePlug == DeviceKey.PREFERRED_EVIDENCE_TYPE) {
+            "evidence_plug: $evidencePlug\n"
+        } else {
+            "evidence_plug: requested=${DeviceKey.PREFERRED_EVIDENCE_TYPE} used=$evidencePlug reason=not selected by DeviceKey's preference order on this device — see device_key_tradeoff\n"
+        }
+
         var report = baseReport +
             "\nmint: OK\n" +
+            deviceKeyLine +
+            deviceKeyOriginLine +
+            evidencePlugLine +
             "device_key_algorithm: ${keyState.algorithm} (${keyState.securityLevel}, sig_alg=${keyState.signatureAlgorithm})\n" +
             "device_key_tradeoff: ${keyState.tradeoffNote}\n" +
             "evidence_type: ${evidence.type}/${evidence.version} key_id=${evidence.keyId}\n" +
@@ -662,25 +718,31 @@ abstract class MainActivity : AppCompatActivity() {
         if (handoff != null) {
             try {
                 val presentation = HandoffClient.buildPresentation("B", claim, challenge, zktag, listOf(evidence))
-                val responseUri = challenge.optString("response_uri", "").ifEmpty { null }
+                val responseUri = requestObject.optString("response_uri", "").ifEmpty { null }
                 if (responseUri == null) {
-                    Log.w(TAG, "M2 stage: handoff challenge carries no response_uri — cannot direct_post")
-                    report += "handoff: FAILED — challenge carries no response_uri\n"
+                    Log.w(TAG, "M2 stage: handoff request object carries no top-level response_uri — cannot direct_post")
+                    report += "handoff: FAILED — request object carries no response_uri\n"
                 } else {
-                    val state = if (challenge.has("state")) challenge.getString("state") else null
+                    val state = if (requestObject.has("state")) requestObject.getString("state") else null
                     Log.i(TAG, "M2 stage: handoff direct_post -> $responseUri (state_present=${state != null})")
                     val result = HandoffClient.postDirectPost(responseUri, state, presentation)
-                    Log.i(TAG, "M2 stage: handoff direct_post response http_status=${result.httpStatus} body=${result.body}")
+                    if (result.httpStatus !in 200..299) {
+                        Log.w(TAG, "M2 stage: handoff direct_post response NON-2xx http_status=${result.httpStatus} body=${result.body}")
+                    } else {
+                        Log.i(TAG, "M2 stage: handoff direct_post response http_status=${result.httpStatus} body=${result.body}")
+                    }
                     report += "handoff: direct_post http_status=${result.httpStatus} -> ${result.body}\n"
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "M2 stage: handoff direct_post FAILED", e)
                 report += "handoff: FAILED ${e.javaClass.simpleName}: ${e.message}\n"
             }
-            pendingHandoff = null
+            // Handoff has now definitively completed or failed — clear on
+            // the main thread (item 6 lifecycle discipline).
+            runOnUiThread { pendingHandoff = null }
         }
         report += "\nverdict: PASS (minted)"
-        emitReport(report)
+        runOnUiThread { emitReport(report) }
     }
 
     // -------------------------------------------------------- masterlist UI
