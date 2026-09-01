@@ -84,8 +84,15 @@ object EvidenceSigner {
 
     private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)
 
-    /** One evidence-slot item (D24 shape): `{ type, version, data: { key_id, sig } }`. */
-    data class EvidenceItem(val type: String, val version: Int, val keyId: String, val sigBase64: String)
+    /** One evidence-slot item (D24 shape, amended D38): `{ type, version,
+     * data: { key_id, pubkey, sig } }`. D38: `pubkey` (base64 of the
+     * SubjectPublicKeyInfo/X.509 DER, the SAME bytes [keyIdFor] hashes) now
+     * travels WITH the presentation, so a verifier's attester-key store can
+     * bind key->zktag on first sight (`attester_bound_first_sight`) instead
+     * of needing a pre-registered key list — the verifier MUST recompute
+     * `key_id` from `pubkey` with the identical function and refuse on a
+     * mismatch, never trust a claimed `key_id` alone (PRD §10 D38). */
+    data class EvidenceItem(val type: String, val version: Int, val keyId: String, val pubkeyBase64: String, val sigBase64: String)
 
     /**
      * Signs the ALGORITHM-APPROPRIATE message (via [messageFor]) with the
@@ -96,12 +103,24 @@ object EvidenceSigner {
      * `Signature` bound to `SHA256withECDSA` hashes [message] itself (correct
      * for the RAW p256 preimage); one bound to `Ed25519` does not (correct
      * for the pre-hashed ed25519 message).
+     *
+     * D38: takes `publicKeyDer` (the SubjectPublicKeyInfo/X.509 DER for the
+     * key `signature` is bound to — [DeviceKey.currentPublicKeyDer]'s
+     * output) instead of a pre-computed `keyId` — `key_id` is derived HERE,
+     * from these same bytes, via [keyIdFor], so `key_id` and `pubkey` can
+     * never drift apart the way two independently-computed values could.
      */
-    fun sign(signature: Signature, message: ByteArray, algorithm: DeviceKey.Algorithm, keyId: String): EvidenceItem {
+    fun sign(signature: Signature, message: ByteArray, algorithm: DeviceKey.Algorithm, publicKeyDer: ByteArray): EvidenceItem {
         signature.update(message)
         val raw = signature.sign()
         val type = algorithm.evidenceType // "sig-ed25519" (hw or sw) | "sig-p256"
-        return EvidenceItem(type = type, version = 1, keyId = keyId, sigBase64 = Base64.getEncoder().encodeToString(raw))
+        return EvidenceItem(
+            type = type,
+            version = 1,
+            keyId = keyIdFor(publicKeyDer),
+            pubkeyBase64 = Base64.getEncoder().encodeToString(publicKeyDer),
+            sigBase64 = Base64.getEncoder().encodeToString(raw),
+        )
     }
 
     fun keyIdFor(publicKeyDer: ByteArray): String =

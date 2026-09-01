@@ -18,20 +18,15 @@ import java.nio.charset.StandardCharsets
  *   ->  build the zkagent/1 presentation  ->  POST response_uri (direct_post,
  *   form-encoded: state + vp_token, vp_token = base64url(JSON))
  *
- * **ESCALATION**: the reference verifier signs its request objects (JAR,
- * RFC 9101, ES256) and the fake wallet verifies that signature against a
- * PINNED request-signer key before trusting the challenge inside (D20:
- * unsigned challenges are only accepted at tiers A/B, and even then the
- * nonce HMAC seals the fields). This client does NOT pin a request-signer
- * key — there is no owner-approved key/config surface for
- * `trustedChallengeIssuers` in this build (D20 names the shape;
- * §6.2 does not specify where an app build gets one). It reads the request
- * body as-is: if it looks like a compact JWS (three base64url segments), it
- * decodes the payload WITHOUT verifying the signature and logs a loud
- * warning; if it is plain JSON, it uses it directly (D20's explicit
- * allowance for unsigned tier-A/B challenges). This is a real gap flagged
- * for the owner, not a silent downgrade — see README.md / the conformance
- * report.
+ * **CLOSED 2026-09-01 (D34/D37, §6.2 item 14)**: this file used to decode a
+ * compact-JWS request object WITHOUT verifying its signature (see git
+ * history for the prior "ESCALATION" doc). That gap is closed — this file
+ * is now transport-only (GET the bytes, POST the presentation) and does NOT
+ * decode or trust anything about the request object's contents. Origin
+ * consistency and JWS verification both happen in [RequestTrust] BEFORE
+ * [MainActivity] ever reads a field out of a fetched request; see
+ * [RequestTrust]'s class doc for the origin rule and key resolution, and
+ * [fetchRequestRaw] below, which returns the raw response body untouched.
  */
 object HandoffClient {
 
@@ -74,16 +69,19 @@ object HandoffClient {
         }
     }
 
-    data class FetchedRequest(val json: JSONObject, val wasSigned: Boolean, val signatureVerified: Boolean, val httpStatus: Int)
+    /** Raw HTTP outcome of the `request_uri` GET — body untouched, not even
+     * parsed as JSON/JWS. Verification ([RequestTrust.verifyRequestObject])
+     * and origin binding ([RequestTrust.originOf]) happen on this raw body
+     * BEFORE anything in it is trusted (D34/D37, §6.2 item 14). */
+    data class RawFetch(val body: String, val httpStatus: Int)
 
     /** Thrown with the HTTP status attached so a caller can log it explicitly
      * — a total no-op (never fetched) must never look the same in logcat as
      * "fetched, got a 4xx/5xx". */
     class HandoffHttpException(val httpStatus: Int, message: String) : Exception(message)
 
-    /** GET request_uri (request by reference). See class doc ESCALATION —
-     * a JWS body is decoded but its signature is NOT verified in this build. */
-    fun fetchRequest(requestUri: String): FetchedRequest {
+    /** GET request_uri (request by reference). Transport only — see class doc. */
+    fun fetchRequestRaw(requestUri: String): RawFetch {
         val conn = (URL(requestUri).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 10_000
@@ -95,17 +93,12 @@ object HandoffClient {
             throw HandoffHttpException(status, "GET $requestUri -> HTTP $status${if (errBody != null) ": $errBody" else ""}")
         }
         val body = conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-        val parts = body.trim().split(".")
-        return if (parts.size == 3 && body.trim().startsWith("ey")) {
-            Log.w(TAG, "request object is a compact JWS — signature NOT verified (no pinned request-signer key in this build, see HandoffClient class doc ESCALATION)")
-            val payload = String(Base64.decode(parts[1], Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP), StandardCharsets.UTF_8)
-            FetchedRequest(JSONObject(payload), wasSigned = true, signatureVerified = false, httpStatus = status)
-        } else {
-            FetchedRequest(JSONObject(body), wasSigned = false, signatureVerified = false, httpStatus = status)
-        }
+        return RawFetch(body, status)
     }
 
-    /** Builds the `zkagent/1` presentation object per D19/D27/D30/item-9. */
+    /** Builds the `zkagent/1` presentation object per D19/D27/D30/item-9.
+     * D38: `data` gains `pubkey` alongside `key_id`/`sig` — see
+     * [EvidenceSigner.EvidenceItem]'s doc. */
     fun buildPresentation(
         tier: String,
         claim: Map<String, Any?>,
@@ -128,6 +121,7 @@ object HandoffClient {
             item.put("version", e.version)
             val data = JSONObject()
             data.put("key_id", e.keyId)
+            data.put("pubkey", e.pubkeyBase64)
             data.put("sig", e.sigBase64)
             item.put("data", data)
             evArr.put(item)

@@ -65,6 +65,14 @@ android {
         }
     }
 
+    // NEW — AGP 8 requires explicit opt-in for the generated BuildConfig
+    // class. Needed for BuildConfig.DEBUG, which gates DeviceKey's dev
+    // attester-public-key export (long-press KEY TEST) to debug builds only —
+    // absent from release, no other use.
+    buildFeatures {
+        buildConfig = true
+    }
+
     // Canonical.kt and MasterlistVerifier.kt's CMS logic have no Android
     // framework dependency EXCEPT android.util.Log calls for diagnostics —
     // returnDefaultValues lets those no-op in a plain JVM unit test instead
@@ -100,6 +108,7 @@ dependencies {
     implementation(libs.zxing.core)
 
     testImplementation(libs.junit)
+    testImplementation(libs.json) // see libs.versions.toml — real org.json for unit tests only
     // bcpkix-jdk15on (CMS) and bouncycastle asn1 classes are pure-Java, so
     // MasterlistVerifier's CMS logic is exercisable in a plain JVM unit test
     // without any Android framework classes — Canonical.kt likewise has zero

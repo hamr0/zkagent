@@ -1,7 +1,14 @@
 package com.tananaev.passportreader
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.security.KeyPairGenerator
+import java.security.Signature
+import java.security.spec.ECGenParameterSpec
+import java.util.Base64
 
 /**
  * §6.2 item 9 — the signed-message byte layout, checked against KNOWN
@@ -77,5 +84,88 @@ class EvidenceSignerTest {
         val p1 = EvidenceSigner.sigP256Message(claim, nonce, scopeDomain, "tag-one")
         val p2 = EvidenceSigner.sigP256Message(claim, nonce, scopeDomain, "tag-two")
         assert(!p1.contentEquals(p2)) { "p256 message must change when zktag changes" }
+    }
+
+    // ------------------------------------------------- D38: pubkey in EvidenceItem
+
+    /** Real (non-Keystore) P-256 keypair via the plain JVM "EC" provider —
+     * SHA256withECDSA over the RAW (unhashed) p256 preimage, matching
+     * [DeviceKey]'s device-key signing discipline (see class doc above:
+     * "SHA256withECDSA... hashes its own input"). This is a pure-JVM
+     * substitute for an AndroidKeyStore key, sufficient to exercise
+     * [EvidenceSigner.sign]'s D38 pubkey/key_id wiring without a device. */
+    private fun freshP256KeyPair() = KeyPairGenerator.getInstance("EC").apply {
+        initialize(ECGenParameterSpec("secp256r1"))
+    }.generateKeyPair()
+
+    @Test
+    fun `sign - D38 EvidenceItem carries pubkey, and key_id is recomputed from it (never trusted separately)`() {
+        val keyPair = freshP256KeyPair()
+        val pubDer = keyPair.public.encoded
+        val message = EvidenceSigner.sigP256Message(claim, nonce, scopeDomain, zktag)
+        val signature = Signature.getInstance("SHA256withECDSA").apply {
+            initSign(keyPair.private)
+            update(message)
+        }
+
+        val item = EvidenceSigner.sign(signature, message, DeviceKey.Algorithm.P256_HARDWARE, pubDer)
+
+        assertEquals("sig-p256/1", "${item.type}/${item.version}")
+        assertEquals(EvidenceSigner.keyIdFor(pubDer), item.keyId)
+        assertEquals(Base64.getEncoder().encodeToString(pubDer), item.pubkeyBase64)
+
+        // A verifier recomputing key_id from the transmitted pubkey (D38's
+        // whole point — never trust a claimed key_id alone) must land on
+        // the SAME value item.keyId already carries.
+        val decodedPubDer = Base64.getDecoder().decode(item.pubkeyBase64)
+        assertEquals(item.keyId, EvidenceSigner.keyIdFor(decodedPubDer))
+    }
+
+    @Test
+    fun `sign - a different key produces a different key_id and pubkey (no cross-key collision)`() {
+        val kp1 = freshP256KeyPair()
+        val kp2 = freshP256KeyPair()
+        val message = EvidenceSigner.sigP256Message(claim, nonce, scopeDomain, zktag)
+
+        val sig1 = Signature.getInstance("SHA256withECDSA").apply { initSign(kp1.private); update(message) }
+        val item1 = EvidenceSigner.sign(sig1, message, DeviceKey.Algorithm.P256_HARDWARE, kp1.public.encoded)
+
+        val sig2 = Signature.getInstance("SHA256withECDSA").apply { initSign(kp2.private); update(message) }
+        val item2 = EvidenceSigner.sign(sig2, message, DeviceKey.Algorithm.P256_HARDWARE, kp2.public.encoded)
+
+        assertTrue(item1.keyId != item2.keyId)
+        assertTrue(item1.pubkeyBase64 != item2.pubkeyBase64)
+    }
+
+    @Test
+    fun `HandoffClient buildPresentation - item serialization JSON carries pubkey alongside key_id and sig`() {
+        val keyPair = freshP256KeyPair()
+        val pubDer = keyPair.public.encoded
+        val message = EvidenceSigner.sigP256Message(claim, nonce, scopeDomain, zktag)
+        val signature = Signature.getInstance("SHA256withECDSA").apply {
+            initSign(keyPair.private)
+            update(message)
+        }
+        val item = EvidenceSigner.sign(signature, message, DeviceKey.Algorithm.P256_HARDWARE, pubDer)
+
+        val presentation = HandoffClient.buildPresentation(
+            tier = "B",
+            claim = claim,
+            challenge = JSONObject().put("nonce", nonce),
+            zktag = zktag,
+            evidence = listOf(item),
+        )
+
+        val data = presentation.getJSONArray("evidence").getJSONObject(0).getJSONObject("data")
+        assertEquals(item.keyId, data.getString("key_id"))
+        assertEquals(item.pubkeyBase64, data.getString("pubkey"))
+        assertEquals(item.sigBase64, data.getString("sig"))
+
+        // A verifier's exact D38 contract: recompute key_id from the
+        // serialized pubkey and compare, never trust the serialized key_id
+        // in isolation.
+        val recomputedKeyId = EvidenceSigner.keyIdFor(Base64.getDecoder().decode(data.getString("pubkey")))
+        assertEquals(data.getString("key_id"), recomputedKeyId)
+        assertNotNull(data.getString("pubkey"))
     }
 }

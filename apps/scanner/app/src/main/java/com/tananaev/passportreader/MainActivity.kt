@@ -54,6 +54,7 @@ import org.jmrtd.lds.SecurityInfo
 import org.jmrtd.lds.icao.DG1File
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
+import java.net.URI
 import java.security.Signature
 import java.text.ParseException
 import java.text.SimpleDateFormat
@@ -122,6 +123,37 @@ import java.util.Locale
  * access-establishment failure (PACE/BAC `SW 0x6300`->`0x6985`), so a
  * mistyped key is a retry, not a full re-lock+retype (F3); every other
  * outcome wipes both.
+ *
+ * ---------------------------------------------------------------------
+ * §6.2 items 13/14 (D33/D34/D37) — handoff trust, fetched EARLY:
+ * ---------------------------------------------------------------------
+ * A pending handoff's request object is fetched and verified
+ * ([RequestTrust]: origin consistency, then ES256 JWS signature) the
+ * INSTANT the `av://`/QR/pasted link is captured ([beginHandoffVerification]),
+ * on a background thread — not later, inside the mint path, the way this
+ * file used to. The verified result lives in [verifiedRequest], alongside
+ * [pendingHandoff], for the rest of that handoff's lifetime. This is what
+ * lets [lockModeAndArm] (item 4's ONE call site for [lockedMode]) preset and
+ * lock the mode from the request's `zkagent.tier` BEFORE the user can touch
+ * the mode radio — [lockedMode] still has exactly one writer, it is just fed
+ * from [verifiedRequest] instead of [modeGroup] when a handoff is pending.
+ * [applyHandoffVerificationOutcome] also calls `modeGroup.check(...)` on a
+ * successful verify, so the RESULT is visible (D33: the app "sets" the
+ * mode) the instant verification succeeds, not only once Lock is pressed —
+ * this is a DISPLAY write, not a read: [modeGroup.checkedRadioButtonId] is
+ * still read from the UI in exactly the one place item 4 names
+ * ([lockModeAndArm]), and the control is disabled the whole time
+ * ([beginHandoffVerification] disables it before this write ever happens),
+ * so the user still can't touch it. A tier this preview can't map (C,
+ * absent, invalid) clears the check instead of guessing — the actual
+ * refusal is reported once the user tries to lock (item 13's fail-loud path).
+ * [mintAndMaybeHandoff] later REUSES [verifiedRequest] rather than
+ * re-fetching — same nonce, same verified fields, one fetch per handoff.
+ * Any verification failure (origin mismatch, bad/missing/wrong-alg
+ * signature, no resolvable key) is a refusal: [pendingHandoff] and
+ * [verifiedRequest] are cleared, the mode radio is re-enabled for manual
+ * use (no handoff is pending any more), and the refusal is logged AND
+ * reported — never a silent downgrade to trusting the fields anyway.
  */
 abstract class MainActivity : AppCompatActivity() {
 
@@ -132,6 +164,11 @@ abstract class MainActivity : AppCompatActivity() {
 
     // ---- handoff: see class doc item 8 / HandoffClient ----
     private var pendingHandoff: HandoffClient.PendingHandoff? = null
+
+    // ---- verified handoff request object: see class doc items 13/14 ----
+    // Set ONLY by [applyHandoffVerificationOutcome] on a successful verify;
+    // cleared alongside [pendingHandoff] everywhere that is cleared.
+    private var verifiedRequest: RequestTrust.VerifiedRequest? = null
 
     // ---- last rendered report, for onSaveInstanceState only — see
     // [emitReport] and the item 6 note there. Never written to disk. ----
@@ -212,6 +249,19 @@ abstract class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_devicekey_probe).setOnClickListener {
             Thread { runDeviceKeyProbe() }.start()
         }
+        // DEBUG-BUILD-ONLY, owner-approved this session: long-press KEY TEST
+        // exports the CURRENT device attester public key (+ key_id) to
+        // filesDir for the owner to pin into the spikes/m2-handoff dev
+        // verifier — see DeviceKey.exportDevAttesterPublicKeyIfPresent's doc
+        // for the value-free logging discipline and the no-key-as-side-effect
+        // rule. Listener not even attached outside a debug build — belt and
+        // suspenders alongside that function's own BuildConfig.DEBUG guard.
+        if (BuildConfig.DEBUG) {
+            findViewById<View>(R.id.button_devicekey_probe).setOnLongClickListener {
+                Thread { DeviceKey.exportDevAttesterPublicKeyIfPresent(applicationContext) }.start()
+                true
+            }
+        }
 
         findViewById<View>(R.id.button_scan_qr).setOnClickListener {
             qrCaptureLauncher.launch(null)
@@ -247,9 +297,39 @@ abstract class MainActivity : AppCompatActivity() {
         handleIncomingIntent(intent)
     }
 
+    private fun setModeGroupEnabled(enabled: Boolean) {
+        modeGroup.isEnabled = enabled
+        for (i in 0 until modeGroup.childCount) modeGroup.getChildAt(i).isEnabled = enabled
+    }
+
+    /** §6.2 item 13 (D33): the mode a pending, VERIFIED handoff request
+     * demands — `zkagent.tier`, parsed no more than this one place. Returns
+     * null (absent/invalid) or throws-shaped via [TierOutcome.Unsupported]/
+     * [TierOutcome.Invalid] for the two failure cases item 13 distinguishes:
+     * an unsupported-but-well-formed tier (C) vs. anything else absent/bad. */
+    private sealed class TierOutcome {
+        data class Ok(val mode: PresentationMode) : TierOutcome()
+        object Unsupported : TierOutcome() // tier C — well-formed, not built yet
+        data class Invalid(val got: String) : TierOutcome() // absent or not A/B/C
+    }
+
+    private fun tierOutcomeFor(verified: RequestTrust.VerifiedRequest): TierOutcome {
+        val tier = RequestTrust.tierOf(verified.json)
+        return when (tier) {
+            "A" -> TierOutcome.Ok(PresentationMode.A)
+            "B" -> TierOutcome.Ok(PresentationMode.B)
+            "C" -> TierOutcome.Unsupported
+            else -> TierOutcome.Invalid(tier ?: "<absent>")
+        }
+    }
+
     // ---------------------------------------------------------------- item 4
-    /** The ONE call site in this file that reads [modeGroup]. Disables the
-     * control the same instant it is read, then arms NFC dispatch. */
+    /** The ONE call site in this file that reads [modeGroup] OR
+     * [verifiedRequest] to decide mode. Disables the control the same
+     * instant it is consulted, then arms NFC dispatch. §6.2 item 13 (D33):
+     * when a handoff is pending, [lockedMode] comes from the verified
+     * request's `zkagent.tier` instead of the RadioGroup — never both, and
+     * never a second call site. */
     private fun lockModeAndArm() {
         if (lockedMode != null) return // already locked this session
         val passportRaw = passportNumberView.text?.toString()
@@ -259,9 +339,35 @@ abstract class MainActivity : AppCompatActivity() {
             Snackbar.make(passportNumberView, R.string.error_input, Snackbar.LENGTH_SHORT).show()
             return
         }
-        lockedMode = if (modeGroup.checkedRadioButtonId == R.id.mode_b) PresentationMode.B else PresentationMode.A
-        modeGroup.isEnabled = false
-        for (i in 0 until modeGroup.childCount) modeGroup.getChildAt(i).isEnabled = false
+
+        val handoff = pendingHandoff
+        val mode: PresentationMode
+        if (handoff != null) {
+            val verified = verifiedRequest
+            if (verified == null) {
+                Snackbar.make(passportNumberView, "Still verifying the handoff request — try again in a moment", Snackbar.LENGTH_SHORT).show()
+                return
+            }
+            when (val outcome = tierOutcomeFor(verified)) {
+                is TierOutcome.Ok -> mode = outcome.mode
+                is TierOutcome.Unsupported -> {
+                    Log.e(TAG, "M2 stage: pending handoff requests tier C — not supported in this build (item 13)")
+                    emitReport("handoff: REFUSED — tier C requested, not supported in this build (no tier-C flow)")
+                    return
+                }
+                is TierOutcome.Invalid -> {
+                    Log.e(TAG, "M2 stage: pending handoff request has absent/invalid tier (got: ${outcome.got}) — refusing, no default mode (item 13)")
+                    emitReport("handoff: REFUSED — request tier absent or invalid (got: ${outcome.got}), no default mode")
+                    return
+                }
+            }
+            modeGroup.check(if (mode == PresentationMode.B) R.id.mode_b else R.id.mode_a)
+        } else {
+            mode = if (modeGroup.checkedRadioButtonId == R.id.mode_b) PresentationMode.B else PresentationMode.A
+        }
+
+        lockedMode = mode
+        setModeGroupEnabled(false)
         lockButton.isEnabled = false
         modeLockedBanner.visibility = View.VISIBLE
         modeLockedBanner.text = "Locked: mode ${lockedMode} — tap your document now"
@@ -310,9 +416,8 @@ abstract class MainActivity : AppCompatActivity() {
         if (intent.action == Intent.ACTION_VIEW && data != null) {
             val handoff = HandoffClient.parseAvLink(data)
             if (handoff != null) {
-                pendingHandoff = handoff
-                handoffStatus.text = "Handoff request received (av://) — fill in your document details, lock a mode and scan to answer it."
                 Log.i(TAG, "M2 stage: pendingHandoff captured from av:// intent")
+                beginHandoffVerification(handoff)
                 return
             }
         }
@@ -343,23 +448,133 @@ abstract class MainActivity : AppCompatActivity() {
             Snackbar.make(reportView, "Not a recognised av:// link or request_uri", Snackbar.LENGTH_LONG).show()
             return
         }
-        pendingHandoff = handoff
         handoffManualInput.text?.clear()
-        handoffStatus.text = "Handoff request captured — fill in your document details, lock a mode and scan to answer it."
+        beginHandoffVerification(handoff)
+    }
+
+    // ------------------------------------------------------- items 13/14
+    /** Fetches and verifies [handoff]'s request object ([RequestTrust]) on a
+     * background thread, the INSTANT the link is captured — see class doc.
+     * The mode radio and Lock button are held off until this resolves, so
+     * there is no window where the user could lock a session against an
+     * unverified/wrong tier. */
+    private fun beginHandoffVerification(handoff: HandoffClient.PendingHandoff) {
+        pendingHandoff = handoff
+        verifiedRequest = null
+        handoffStatus.text = "Handoff request received — verifying signature and origin…"
+        setModeGroupEnabled(false)
+        lockButton.isEnabled = false
+        Log.i(TAG, "M2 stage: handoff captured, verifying request object before mode/lock become available (D33/D34/D37)")
+        Thread {
+            val outcome = try {
+                verifyPendingHandoff(handoff)
+            } catch (e: Exception) {
+                Log.e(TAG, "M2 stage: handoff verification threw", e)
+                RequestTrust.Outcome.Refused("verification threw ${e.javaClass.simpleName}: ${e.message}")
+            }
+            runOnUiThread { applyHandoffVerificationOutcome(handoff, outcome) }
+        }.start()
+    }
+
+    /** §6.2 item 14 (D34/D37), in order: (1) `client_id`/`request_uri` origin
+     * match, before anything else; (2) resolve a trusted key for that
+     * origin (dev-pinned for `http://127.0.0.1`/`localhost`, well-known
+     * fetch otherwise); (3) GET the request object and verify its ES256 JWS
+     * against that key; (4) the verified payload's OWN `response_uri` must
+     * resolve to the SAME origin as (1). Any failure refuses — see class doc. */
+    private fun verifyPendingHandoff(handoff: HandoffClient.PendingHandoff): RequestTrust.Outcome {
+        val requestUriOrigin = RequestTrust.originOf(handoff.requestUri)
+            ?: return RequestTrust.Outcome.Refused("request_uri has no parseable origin: ${handoff.requestUri}")
+        val clientIdOrigin = handoff.clientId?.let {
+            RequestTrust.originOf(it) ?: return RequestTrust.Outcome.Refused("client_id has no parseable origin: $it")
+        }
+        if (clientIdOrigin != null && clientIdOrigin != requestUriOrigin) {
+            return RequestTrust.Outcome.Refused("origin mismatch: client_id=$clientIdOrigin request_uri=$requestUriOrigin")
+        }
+        val origin = requestUriOrigin
+
+        val key = RequestTrust.resolveVerifierKey(origin)
+            ?: return RequestTrust.Outcome.Refused("no trusted request-signer key resolvable for origin $origin")
+
+        val raw = try {
+            HandoffClient.fetchRequestRaw(handoff.requestUri)
+        } catch (e: HandoffClient.HandoffHttpException) {
+            return RequestTrust.Outcome.Refused("request_uri fetch failed: HTTP ${e.httpStatus}: ${e.message}")
+        } catch (e: Exception) {
+            return RequestTrust.Outcome.Refused("request_uri fetch failed: ${e.javaClass.simpleName}: ${e.message}")
+        }
+
+        val verified = RequestTrust.verifyRequestObject(raw.body, key)
+        val payload = verified.payload
+        if (!verified.ok || payload == null) {
+            return RequestTrust.Outcome.Refused("JWS verification failed: ${verified.reason}")
+        }
+
+        val responseUriStr = payload.optString("response_uri", "").ifEmpty { null }
+            ?: return RequestTrust.Outcome.Refused("verified request object carries no response_uri")
+        val responseUriOrigin = RequestTrust.originOf(responseUriStr)
+            ?: return RequestTrust.Outcome.Refused("response_uri has no parseable origin: $responseUriStr")
+        if (responseUriOrigin != origin) {
+            return RequestTrust.Outcome.Refused("origin mismatch: response_uri=$responseUriOrigin request_uri=$requestUriOrigin")
+        }
+
+        Log.i(TAG, "M2 stage: handoff request object verified — origin=$origin signature_verified=true key_kind=${if (key.isDev) "dev-pinned" else "well-known"}")
+        return RequestTrust.Outcome.Verified(RequestTrust.VerifiedRequest(payload, origin))
+    }
+
+    /** Applies [outcome] on the UI thread. A superseded in-flight
+     * verification (a newer handoff replaced [pendingHandoff] before this
+     * one resolved) is dropped — never allowed to clobber a fresher state. */
+    private fun applyHandoffVerificationOutcome(handoff: HandoffClient.PendingHandoff, outcome: RequestTrust.Outcome) {
+        if (pendingHandoff !== handoff) {
+            Log.i(TAG, "M2 stage: dropping a superseded handoff verification result")
+            return
+        }
+        when (outcome) {
+            is RequestTrust.Outcome.Verified -> {
+                verifiedRequest = outcome.request
+                val rawTier = RequestTrust.tierOf(outcome.request.json)
+                handoffStatus.text = "Handoff verified — origin: ${outcome.request.origin}, requested tier: ${rawTier ?: "<absent>"}. Fill in your document details and lock to answer it."
+                // §6.2 item 13 (D33): SHOW the mode the request set the instant
+                // verification succeeds — a display write, not the read item 4
+                // guards (see class doc addendum above). lockModeAndArm() is
+                // still the only place that turns this into lockedMode. C/
+                // absent/invalid tiers clear the check rather than guess; the
+                // fail-loud refusal happens when the user tries to lock.
+                when (rawTier) {
+                    "A" -> modeGroup.check(R.id.mode_a)
+                    "B" -> modeGroup.check(R.id.mode_b)
+                    else -> modeGroup.clearCheck()
+                }
+                lockButton.isEnabled = true
+                // Mode radio stays disabled: item 13 forbids user override once a handoff is pending.
+            }
+            is RequestTrust.Outcome.Refused -> {
+                Log.e(TAG, "M2 stage: handoff REFUSED — ${outcome.reason}")
+                emitReport("handoff: REFUSED — ${outcome.reason}")
+                pendingHandoff = null
+                verifiedRequest = null
+                handoffStatus.text = "Handoff refused (${outcome.reason}) — you may still scan manually."
+                setModeGroupEnabled(true)
+                lockButton.isEnabled = true
+            }
+        }
     }
 
     /** §6.2 item 6: MRZ + [lockedMode] are kept ONLY on an access-establishment
-     * failure. Every other case (success, or a later-stage failure) wipes both. */
+     * failure. Every other case (success, or a later-stage failure) wipes both.
+     * §6.2 item 13: if a VERIFIED handoff is still pending across a retry, the
+     * mode radio stays locked/disabled — a failed read must not reopen manual
+     * mode selection out from under a still-pending handoff. */
     private fun wipeSession(keepMrzAndMode: Boolean) {
         if (!keepMrzAndMode) {
             passportNumberView.text?.clear()
             expirationDateView.text?.clear()
             birthDateView.text?.clear()
             lockedMode = null
-            modeGroup.isEnabled = true
-            for (i in 0 until modeGroup.childCount) modeGroup.getChildAt(i).isEnabled = true
-            lockButton.isEnabled = true
             modeLockedBanner.visibility = View.GONE
+            lockButton.isEnabled = true
+            setModeGroupEnabled(pendingHandoff == null || verifiedRequest == null)
         }
     }
 
@@ -550,20 +765,80 @@ abstract class MainActivity : AppCompatActivity() {
             return
         }
 
+        // D38 (§6.2 item 1 amendment): a per-origin attester key needs an
+        // origin to scope it to. A mode-B mint with no verified handoff
+        // request has no verifier to bind to anyway — refused here, before
+        // the biometric prompt ever shows, rather than falling back to a
+        // demo/local "manual" key scope (owner-escalated choice, this
+        // session: refuse-loudly over a `zkagent_attester_manual` alias).
+        val origin = verifiedRequest?.origin
+        if (mode == PresentationMode.B && origin == null) {
+            Log.e(TAG, "M2 stage: mode B mint REFUSED — no verified request origin to scope the attester key to (D38)")
+            emitReport(baseReport + "\nmint: REFUSED — mode B requires a verified request origin to scope the attester key to (D38); no handoff is pending")
+            return
+        }
+
         emitReport(baseReport + "\nmint_gate: MET — requesting biometric/device-credential authorization before minting (item 2)\n")
         Thread {
+            // D38 amendment (2026-09-01 live-run finding, owner decision:
+            // "isolate" — see DeviceKey class doc): the attester key alias
+            // is now scoped to (origin, zktag), not origin alone — a
+            // per-origin-only key let one verifier see two different
+            // documents share a device key. The zktag needs no user auth to
+            // DERIVE (unlike the key's USE, the signature, which stays
+            // behind the biometric prompt below), so it is derived here,
+            // before ensureKey/key generation — key generation itself also
+            // needs no user auth.
+            //
+            // Same "one source, never re-derived a second way" discipline
+            // as everywhere else in this file: handoff/verified are read
+            // once here (and re-checked, in case the pending handoff was
+            // cleared/replaced on the main thread in the interim — the same
+            // defensive re-check mintAndMaybeHandoff always did), and the
+            // resulting zktag/scopeDomain are threaded through
+            // promptAndMint -> mintAndMaybeHandoff as parameters rather than
+            // re-derived down there.
+            val handoff = pendingHandoff
+            val verified = verifiedRequest
+            if (handoff == null || verified == null) {
+                Log.e(TAG, "M2 stage: pending handoff / verifiedRequest disappeared before zktag derivation — refusing (D38)")
+                runOnUiThread { emitReport(baseReport + "\nmint: FAILED — no verified request object to mint against (D38)") }
+                return@Thread
+            }
+            // scope_domain comes from ONE source — the VERIFIED request's own
+            // origin ([RequestTrust.originOf], D37) — not a fresh, unverified
+            // re-parse of pendingHandoff.requestUri's host (items 13/14).
+            val scopeDomain = runCatching { URI(verified.origin).host }
+                .onFailure { e -> Log.w(TAG, "M2 stage: could not parse verified origin host: ${e.javaClass.simpleName}: ${e.message}") }
+                .getOrNull()
+            if (scopeDomain == null) {
+                Log.e(TAG, "M2 stage: verified origin has no parseable host — refusing to mint")
+                runOnUiThread { emitReport(baseReport + "\nmint: FAILED — verified origin has no parseable host") }
+                return@Thread
+            }
+            val candidates = M0Probe.deriveCandidates(dg1File, null, null, domain = scopeDomain)
+            val zktag = candidates["document_number"]
+            if (zktag == null) {
+                Log.w(TAG, "M2 stage: no document_number field to derive zktag from (D9)")
+                runOnUiThread { emitReport(baseReport + "\nmint: FAILED — no document_number field to derive from (D9)") }
+                return@Thread
+            }
+            // origin is guaranteed non-null here for mode B (checked above,
+            // and a local val is stable across the lambda capture) — !! documents
+            // that invariant rather than silently defaulting to an empty-string alias.
+            val alias = DeviceKey.aliasForOriginAndZktag(origin!!, zktag)
             val keyState = try {
-                DeviceKey.ensureKey(applicationContext)
+                DeviceKey.ensureKey(applicationContext, alias)
             } catch (e: Exception) {
                 Log.e(TAG, "M2 stage: DeviceKey.ensureKey threw", e)
                 runOnUiThread { emitReport(baseReport + "\nmint: FAILED — device key generation threw ${e.javaClass.simpleName}: ${e.message}") }
                 return@Thread
             }
-            runOnUiThread { promptAndMint(keyState, dg1File, baseReport) }
+            runOnUiThread { promptAndMint(keyState, baseReport, zktag, scopeDomain) }
         }.start()
     }
 
-    private fun promptAndMint(keyState: DeviceKey.KeyState, dg1File: DG1File, baseReport: String) {
+    private fun promptAndMint(keyState: DeviceKey.KeyState, baseReport: String, zktag: String, scopeDomain: String) {
         val sig = DeviceKey.initSignature(keyState)
         if (sig == null) {
             Log.w(TAG, "M2 stage: DeviceKey.initSignature returned null — no usable device key/signature")
@@ -593,7 +868,7 @@ abstract class MainActivity : AppCompatActivity() {
                     // [authorizedSig] later on another thread does not risk
                     // the auth window expiring the way a validity-duration
                     // key would.
-                    Thread { mintAndMaybeHandoff(keyState, authorizedSig, dg1File, baseReport) }.start()
+                    Thread { mintAndMaybeHandoff(keyState, authorizedSig, baseReport, zktag, scopeDomain) }.start()
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -608,37 +883,49 @@ abstract class MainActivity : AppCompatActivity() {
         prompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(sig))
     }
 
-    /** Derives the zktag (SAME field as M0/D9: `document_number`, chip data
-     * only — NEVER the device key), signs the item-9 evidence message with
-     * the ALREADY-AUTHORIZED device key, and — if a [pendingHandoff] is
-     * queued — POSTs `direct_post`. zktag is never fully rendered on screen;
-     * only a truncated hash, matching this project's value-free logging
-     * discipline elsewhere.
+    /** Signs the item-9 evidence message (over the `zktag`/`scopeDomain`
+     * [continueAfterRead]'s Thread already derived, BEFORE key generation —
+     * D38 amendment, see [DeviceKey] class doc — and threaded through
+     * [promptAndMint]) with the ALREADY-AUTHORIZED device key, and — if a
+     * [pendingHandoff] is queued — POSTs `direct_post`. zktag is never
+     * fully rendered on screen; only a truncated hash, matching this
+     * project's value-free logging discipline elsewhere.
      *
      * **Runs on a background thread** (see [promptAndMint]'s
      * `onAuthenticationSucceeded`) — `HandoffClient.fetchRequest` and
      * `postDirectPost` are blocking network calls. Every [emitReport] call
      * below is therefore wrapped in [runOnUiThread], and [pendingHandoff] is
      * cleared on the main thread too, once the handoff has definitively
-     * completed or failed — never mid-flight. */
-    private fun mintAndMaybeHandoff(keyState: DeviceKey.KeyState, signature: Signature, dg1File: DG1File, baseReport: String) {
-        val scopeDomain = pendingHandoff?.let {
-            runCatching { Uri.parse(it.requestUri).host }
-                .onFailure { e -> Log.w(TAG, "M2 stage: could not parse handoff request_uri host: ${e.javaClass.simpleName}: ${e.message}") }
-                .getOrNull()
-        } ?: "reference-app.test"
-        val candidates = M0Probe.deriveCandidates(dg1File, null, null, domain = scopeDomain)
-        val zktag = candidates["document_number"]
-        if (zktag == null) {
-            Log.w(TAG, "M2 stage: no document_number field to derive zktag from (D9)")
-            runOnUiThread { emitReport(baseReport + "\nmint: FAILED — no document_number field to derive from (D9)") }
+     * completed or failed — never mid-flight.
+     *
+     * @param zktag the SAME value [continueAfterRead]'s Thread derived to
+     *   build [keyState]'s (origin, zktag)-scoped alias — never re-derived
+     *   here, so there is exactly one derivation per mint, not two that
+     *   could drift apart.
+     * @param scopeDomain likewise, the same verified-origin host already
+     *   used to derive [keyState]'s alias. */
+    private fun mintAndMaybeHandoff(keyState: DeviceKey.KeyState, signature: Signature, baseReport: String, zktag: String, scopeDomain: String) {
+        // D38: a mode-B mint always has a pending, VERIFIED handoff by the
+        // time it reaches here — continueAfterRead's D38 guard refuses
+        // before this function is ever entered otherwise (no verified
+        // origin -> no key scope -> refused before the biometric prompt).
+        // Guarded again anyway rather than ever mint against an absent or
+        // unverified request object.
+        val handoff = pendingHandoff
+        val verified = verifiedRequest
+        if (handoff == null || verified == null) {
+            Log.e(TAG, "M2 stage: reached mint with no pending handoff / verifiedRequest — refusing to proceed (D38)")
+            runOnUiThread { emitReport(baseReport + "\nmint: local signature OK, but handoff: REFUSED — no verified request object to mint against (D38)") }
             return
         }
         val threshold = 18
         val claim = mapOf("over_threshold" to true, "threshold" to threshold)
-        val handoff = pendingHandoff
-        val challenge: JSONObject
-        val nonce: String
+        // §6.2 items 13/14: reuse the request object already fetched and
+        // ES256-verified at capture time ([beginHandoffVerification]) —
+        // never re-fetch here. Same nonce, same verified fields, one fetch
+        // per handoff.
+        val requestObject: JSONObject = verified.json
+        Log.i(TAG, "M2 stage: using pre-verified handoff request object — origin=${verified.origin} signature_verified=true (no re-fetch)")
         // OpenID4VP request-object JSON, TOP LEVEL — response_uri/state/
         // client_id/response_mode live here (server.mjs ~line 230-270), NOT
         // inside zkagent.challenge (which carries only nonce/tier/expiry).
@@ -646,41 +933,21 @@ abstract class MainActivity : AppCompatActivity() {
         // `challenge`, so a live verifier's request object always looked
         // like it "carried no response_uri" even though it was present one
         // level up.
-        var requestObject: JSONObject = JSONObject()
-        if (handoff != null) {
-            Log.i(TAG, "M2 stage: handoff pending — fetching request_uri=${handoff.requestUri}")
-            try {
-                val fetched = HandoffClient.fetchRequest(handoff.requestUri)
-                Log.i(TAG, "M2 stage: handoff request fetched — http_status=${fetched.httpStatus} was_signed=${fetched.wasSigned} signature_verified=${fetched.signatureVerified}")
-                requestObject = fetched.json
-                val zkagent = fetched.json.optJSONObject("zkagent") ?: fetched.json
-                challenge = zkagent.optJSONObject("challenge") ?: JSONObject()
-                nonce = challenge.optString("nonce", "")
-                Log.i(TAG, "M2 stage: handoff challenge parsed — nonce_present=${nonce.isNotEmpty()} response_uri_present=${requestObject.has("response_uri")}")
-            } catch (e: HandoffClient.HandoffHttpException) {
-                Log.e(TAG, "M2 stage: handoff request fetch FAILED — HTTP ${e.httpStatus}", e)
-                runOnUiThread { emitReport(baseReport + "\nmint: local signature OK, but handoff request fetch FAILED — HTTP ${e.httpStatus}: ${e.message}") }
-                return
-            } catch (e: Exception) {
-                Log.e(TAG, "M2 stage: handoff request fetch FAILED", e)
-                runOnUiThread { emitReport(baseReport + "\nmint: local signature OK, but handoff request fetch FAILED: ${e.javaClass.simpleName}: ${e.message}") }
-                return
-            }
-        } else {
-            // No queued handoff — mint locally only (demonstrates the D30
-            // evidence path end-to-end without a live verifier). Nonce must
-            // still be present for the item-9 formula; a fresh random nonce
-            // stands in (never persisted, never reused).
-            Log.i(TAG, "M2 stage: no pending handoff — minting locally only, fresh random nonce")
-            val randomNonce = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
-            nonce = android.util.Base64.encodeToString(randomNonce, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
-            challenge = JSONObject().put("nonce", nonce).put("threshold", threshold)
-        }
+        val zkagent = verified.json.optJSONObject("zkagent") ?: verified.json
+        val challenge = zkagent.optJSONObject("challenge") ?: JSONObject()
+        val nonce = challenge.optString("nonce", "")
+        Log.i(TAG, "M2 stage: handoff challenge parsed — nonce_present=${nonce.isNotEmpty()} response_uri_present=${requestObject.has("response_uri")}")
 
+        // D38: pubDer is read at keyState.alias — the SAME per-origin key
+        // ensureKey/initSignature just used — never a second-guessed alias.
+        val pubDer = DeviceKey.currentPublicKeyDer(keyState.alias)
+        if (pubDer == null) {
+            Log.e(TAG, "M2 stage: could not read the public key bytes for alias — refusing to mint (D38 evidence requires pubkey)")
+            runOnUiThread { emitReport(baseReport + "\nmint: FAILED — could not read the device key's public key bytes (D38 evidence requires pubkey)") }
+            return
+        }
         val message = EvidenceSigner.messageFor(keyState.algorithm, claim, nonce, scopeDomain, zktag)
-        val pubDer = DeviceKey.currentPublicKeyDer()
-        val keyId = if (pubDer != null) EvidenceSigner.keyIdFor(pubDer) else "unknown"
-        val evidence = EvidenceSigner.sign(signature, message, keyState.algorithm, keyId)
+        val evidence = EvidenceSigner.sign(signature, message, keyState.algorithm, pubDer)
 
         val zktagHashPrefix = java.security.MessageDigest.getInstance("SHA-256").digest(zktag.toByteArray()).joinToString("") { "%02x".format(it) }.take(12)
 
@@ -688,7 +955,7 @@ abstract class MainActivity : AppCompatActivity() {
         // holds and what plug was actually chosen — never what was merely
         // requested — per "probe must assert what came back" (F2/KEY TEST:
         // this device silently substitutes P-256 for Ed25519).
-        val keyDetails = DeviceKey.currentKeyDetails()
+        val keyDetails = DeviceKey.currentKeyDetails(keyState.alias)
         val deviceKeyLine = if (keyDetails != null) {
             "device_key: alg=${keyDetails.jcaAlgorithm} curve=${keyDetails.curve} security_level=${keyDetails.securityLevel} " +
                 "origin=${keyDetails.origin} user_auth_required=${keyDetails.userAuthRequired} auth_validity=${keyDetails.authValiditySeconds}s\n"
@@ -697,49 +964,75 @@ abstract class MainActivity : AppCompatActivity() {
             "device_key: FAILED to assert stored key facts (KeyInfo query failed)\n"
         }
         val deviceKeyOriginLine = "device_key: ${if (keyState.reusedExistingKey) "reused existing alias" else "created this mint"}\n"
+        // D38 item 2: which VERIFIED REQUEST origin this per-origin key is
+        // scoped to (not to be confused with keyDetails.origin above, which
+        // is KeyInfo's GENERATED/IMPORTED provenance field — different
+        // "origin"). Already shown at consent time (handoffStatus); this is
+        // the same value-free string, now also in the mint report.
+        val keyScopeLine = "key_scope: ${verified.origin}\n"
         val evidencePlug = "${evidence.type}/${evidence.version}"
+        // "requested=" was misleading once D31's any-of evidence_required
+        // shipped: a verifier's evidence_required lists ACCEPTED
+        // alternatives, it never singles out sig-ed25519/1 as "requested" —
+        // DeviceKey.PREFERRED_EVIDENCE_TYPE is this DEVICE's own preference
+        // order (D36), not anything read off the request. Labelled
+        // accordingly; see evidenceRequiredLine below for what the verifier
+        // actually said it accepts.
         val evidencePlugLine = if (evidencePlug == DeviceKey.PREFERRED_EVIDENCE_TYPE) {
             "evidence_plug: $evidencePlug\n"
         } else {
-            "evidence_plug: requested=${DeviceKey.PREFERRED_EVIDENCE_TYPE} used=$evidencePlug reason=not selected by DeviceKey's preference order on this device — see device_key_tradeoff\n"
+            "evidence_plug: device_preference=${DeviceKey.PREFERRED_EVIDENCE_TYPE} used=$evidencePlug reason=not selected by DeviceKey's preference order on this device — see device_key_tradeoff\n"
         }
+        // Log-only parse of the request object's evidence_required shape
+        // (D31 any-of groups) — value-free, and NOT a behavioural input to
+        // which plug the device offers (D36: device preference order alone
+        // decides that). See RequestTrust.describeEvidenceRequired's doc.
+        val evidenceRequiredLine = "evidence_required: ${RequestTrust.describeEvidenceRequired(requestObject)}\n"
 
         var report = baseReport +
             "\nmint: OK\n" +
             deviceKeyLine +
             deviceKeyOriginLine +
+            keyScopeLine +
             evidencePlugLine +
+            evidenceRequiredLine +
             "device_key_algorithm: ${keyState.algorithm} (${keyState.securityLevel}, sig_alg=${keyState.signatureAlgorithm})\n" +
             "device_key_tradeoff: ${keyState.tradeoffNote}\n" +
             "evidence_type: ${evidence.type}/${evidence.version} key_id=${evidence.keyId}\n" +
             "zktag_sha256_prefix (value-free, never the raw zktag): $zktagHashPrefix\n" +
             "scope_domain: $scopeDomain\n"
 
-        if (handoff != null) {
-            try {
-                val presentation = HandoffClient.buildPresentation("B", claim, challenge, zktag, listOf(evidence))
-                val responseUri = requestObject.optString("response_uri", "").ifEmpty { null }
-                if (responseUri == null) {
-                    Log.w(TAG, "M2 stage: handoff request object carries no top-level response_uri — cannot direct_post")
-                    report += "handoff: FAILED — request object carries no response_uri\n"
+        // D38: handoff is guaranteed non-null here (guarded above) — mode B
+        // always has a pending handoff to answer now, so this is no longer
+        // conditional the way it was pre-D38.
+        try {
+            val presentation = HandoffClient.buildPresentation("B", claim, challenge, zktag, listOf(evidence))
+            val responseUri = requestObject.optString("response_uri", "").ifEmpty { null }
+            if (responseUri == null) {
+                Log.w(TAG, "M2 stage: handoff request object carries no top-level response_uri — cannot direct_post")
+                report += "handoff: FAILED — request object carries no response_uri\n"
+            } else {
+                val state = if (requestObject.has("state")) requestObject.getString("state") else null
+                Log.i(TAG, "M2 stage: handoff direct_post -> $responseUri (state_present=${state != null})")
+                val result = HandoffClient.postDirectPost(responseUri, state, presentation)
+                if (result.httpStatus !in 200..299) {
+                    Log.w(TAG, "M2 stage: handoff direct_post response NON-2xx http_status=${result.httpStatus} body=${result.body}")
                 } else {
-                    val state = if (requestObject.has("state")) requestObject.getString("state") else null
-                    Log.i(TAG, "M2 stage: handoff direct_post -> $responseUri (state_present=${state != null})")
-                    val result = HandoffClient.postDirectPost(responseUri, state, presentation)
-                    if (result.httpStatus !in 200..299) {
-                        Log.w(TAG, "M2 stage: handoff direct_post response NON-2xx http_status=${result.httpStatus} body=${result.body}")
-                    } else {
-                        Log.i(TAG, "M2 stage: handoff direct_post response http_status=${result.httpStatus} body=${result.body}")
-                    }
-                    report += "handoff: direct_post http_status=${result.httpStatus} -> ${result.body}\n"
+                    Log.i(TAG, "M2 stage: handoff direct_post response http_status=${result.httpStatus} body=${result.body}")
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "M2 stage: handoff direct_post FAILED", e)
-                report += "handoff: FAILED ${e.javaClass.simpleName}: ${e.message}\n"
+                report += "handoff: direct_post http_status=${result.httpStatus} -> ${result.body}\n"
             }
-            // Handoff has now definitively completed or failed — clear on
-            // the main thread (item 6 lifecycle discipline).
-            runOnUiThread { pendingHandoff = null }
+        } catch (e: Exception) {
+            Log.e(TAG, "M2 stage: handoff direct_post FAILED", e)
+            report += "handoff: FAILED ${e.javaClass.simpleName}: ${e.message}\n"
+        }
+        // Handoff has now definitively completed or failed — clear on the
+        // main thread (item 6 lifecycle discipline). verifiedRequest is
+        // cleared in lockstep — it has no meaning without a pendingHandoff.
+        runOnUiThread {
+            pendingHandoff = null
+            verifiedRequest = null
+            setModeGroupEnabled(true)
         }
         report += "\nverdict: PASS (minted)"
         runOnUiThread { emitReport(report) }
@@ -785,7 +1078,7 @@ abstract class MainActivity : AppCompatActivity() {
         val log = StringBuilder("\n===== DEVICE KEY SELF-TEST =====\n")
         try {
             val t0 = System.nanoTime()
-            val first = DeviceKey.ensureKey(applicationContext)
+            val first = DeviceKey.ensureKey(applicationContext, DeviceKey.PROBE_ALIAS) // D38: self-test targets PROBE_ALIAS, never a per-origin mint alias
             val ms0 = (System.nanoTime() - t0) / 1_000_000
             log.append("call_1 (generate-or-reuse): algorithm=${first.algorithm} level=${first.securityLevel} auth_mode=${first.authMode} winner_row=${first.winnerRowId} (${ms0}ms)\n")
             for (a in first.matrix) log.append("  matrix ${a.rowId}: ${if (a.ok) "OK level=${a.actualSecurityLevel}" else "FAILED ${a.exception}"}\n")
@@ -794,7 +1087,7 @@ abstract class MainActivity : AppCompatActivity() {
             log.append("call_1 initSignature: ${if (sig1 != null) "OK (non-null Signature)" else "FAILED (null)"}\n")
 
             val t1 = System.nanoTime()
-            val second = DeviceKey.ensureKey(applicationContext)
+            val second = DeviceKey.ensureKey(applicationContext, DeviceKey.PROBE_ALIAS)
             val ms1 = (System.nanoTime() - t1) / 1_000_000
             log.append("call_2 (must be REUSE, same process): algorithm=${second.algorithm} level=${second.securityLevel} auth_mode=${second.authMode} winner_row=${second.winnerRowId} matrix_size=${second.matrix.size} (${ms1}ms)\n")
             log.append("call_2 reuse check: ${if (second.winnerRowId == null && second.matrix.isEmpty()) "OK (reuse path, no re-probe)" else "UNEXPECTED (re-ran the generate matrix on a call that should have reused)"}\n")
