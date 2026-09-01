@@ -5,6 +5,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **`chiproof` 0.4.0 — attester-key evidence plug family (`sig-ed25519/1`,
+  `sig-p256/1`), PRD §6.2 items 1/9/11 + FR12/D30 — 165/165 tests passing.**
+  One shared preimage (`src/plugs/attester-sig.js`) drives both plugs so
+  their byte layouts cannot drift: `utf8(PLUG_TYPE + "\n") ‖
+  sha256(canonical(claim)) ‖ base64urlDecode(nonce) ‖ utf8(scopeDomain) ‖
+  utf8(zktag)`, domain-separated by the literal plug-type string so a
+  signature minted for one algorithm cannot verify as the other.
+  `sig-ed25519/1` (D30, the mode-B reference default) signs
+  `sha256(preimage)` — Ed25519 has no prehash step in the Node/JCA APIs;
+  `sig-p256/1` (candidate name, `Dn` pending, permitted by the §6.2 item 11
+  amendment because Ed25519 is unavailable as an AndroidKeyStore key on the
+  Pixel 6a, `docs/logs/M2-SESSION-POC.md` F2) signs the raw `preimage` with
+  `ECDSA-P256-with-SHA256`, whose native prehash does the same job — applying
+  sha256 in each algorithm's own native place is what keeps one preimage
+  definition true on both sides (orchestrator-recommended reading of item
+  9's layout for the P-256 case, not owner-decided — flagged for veto). Both:
+  `binds: {nonce, claim, scope, zktag: true}`, `linkability: 'signer'`,
+  `tierCeiling: 'B'`. P-256 signatures are DER-encoded (Node's default, and
+  what Android Keystore produces); no raw r‖s support added. New test suite
+  (`tests/integration/attester-sig.test.js`, 39 tests) covers both happy
+  paths, cross-algorithm replay in both directions, wrong
+  nonce/claim/scope/zktag each paired with a passing control, unknown
+  `key_id`, malformed signatures, wrong key type pinned per plug, a proof
+  that base64url-decoded nonce bytes (not the utf8 string) are what's
+  signed, and a throwing plug mapping to `ok:false` never `allowed:false`.
 - **`chiproof` M1 verifier core (buckets B1–B4) implemented and tested — 116/116
   passing, zero runtime deps.** Spec: `docs/product/m1-verifier-core-spec.md`.
   B1: the `ok`/`allowed` verdict invariant (`src/verdict.js`) structurally

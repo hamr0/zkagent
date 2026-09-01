@@ -15,6 +15,9 @@ export { InMemoryNonceStore } from './stores/memory.js';
 export { EvidenceRegistry, assertPlug, routeEvidence, normalizeRequire } from './evidence.js';
 export { signedReceipt, receiptMessage } from './plugs/signed-receipt.js';
 export { zkPassport, subscopeFromNonce, scopeField, paramCommitment } from './plugs/zk-passport.js';
+export {
+  sigEd25519, sigEd25519Message, sigP256, sigP256Message,
+} from './plugs/attester-sig.js';
 
 import { cannotCheck, realNo, yes } from './verdict.js';
 import {
