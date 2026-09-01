@@ -23,6 +23,29 @@
 
     </com.google.android.material.appbar.AppBarLayout>
 
+    <!-- §6.2 item 16 (D44) — "Scan" is the existing form+report screen,
+         unchanged; "Log" is the additional per-scan report log view. Tab
+         selection only toggles which of [main_layout]/[log_layout] is
+         visible — see MainActivity.onTabSelected doc. -->
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tab_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.tabs.TabItem
+            android:id="@+id/tab_scan"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/tab_scan" />
+
+        <com.google.android.material.tabs.TabItem
+            android:id="@+id/tab_log"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/tab_log" />
+
+    </com.google.android.material.tabs.TabLayout>
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -117,41 +140,20 @@
 
                 </com.google.android.material.textfield.TextInputLayout>
 
-                <!-- §6.2 item 4 — the ONLY place presentation mode is read from a
-                     UI control (MainActivity.lockModeAndArm()). Once "Lock & scan"
-                     is pressed this whole group is disabled and NFC dispatch is
-                     armed; the locked value is copied into an immutable session
-                     field and this control is never consulted again for that
-                     session — see MainActivity class doc / F5. -->
-                <RadioGroup
-                    android:id="@+id/mode_group"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
-
-                    <RadioButton
-                        android:id="@+id/mode_a"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:checked="true"
-                        android:text="@string/mode_a_label" />
-
-                    <RadioButton
-                        android:id="@+id/mode_b"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="24dp"
-                        android:text="@string/mode_b_label" />
-
-                </RadioGroup>
-
+                <!-- §6.2 item 4 (2026-09 real-device change, "remove the mode
+                     radio entirely") — mode is DERIVED, never a user choice: a
+                     verified handoff's tier sets it (D33/D34); a bare local scan
+                     with no verified request is mode A by definition. This
+                     TextView is the ONLY place mode is ever displayed — there is
+                     no control here to disagree with the executed mode (F5's bug
+                     class is eliminated by construction) — see MainActivity
+                     class doc / MainActivity.refreshModeStatus / lockModeAndArm. -->
                 <TextView
-                    android:id="@+id/mode_locked_banner"
+                    android:id="@+id/mode_status"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
+                    android:layout_marginTop="8dp"
                     android:textStyle="italic"
-                    android:visibility="gone"
                     tools:text="Locked: mode B — tap your document now" />
 
                 <Button
@@ -250,6 +252,32 @@
                     android:text="" />
 
             </LinearLayout>
+
+        </ScrollView>
+
+        <!-- §6.2 item 16 (D44) — the log tab: an additional CONSUMER of the
+             same value-free content emitReport() already writes to
+             report_view (MainActivity.emitReport), never a second write
+             site. Hidden unless the "Log" tab is selected. Same value-free
+             invariant as report_view — safe to screenshot. -->
+        <ScrollView
+            android:id="@+id/log_layout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/log_view"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingLeft="@dimen/activity_horizontal_margin"
+                android:paddingRight="@dimen/activity_horizontal_margin"
+                android:paddingTop="@dimen/activity_vertical_margin"
+                android:paddingBottom="@dimen/activity_vertical_margin"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"
+                android:textSize="12sp"
+                android:text="" />
 
         </ScrollView>
 

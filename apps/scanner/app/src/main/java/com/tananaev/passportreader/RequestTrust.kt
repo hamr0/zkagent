@@ -317,6 +317,32 @@ object RequestTrust {
     fun tierOf(json: JSONObject): String? =
         json.optJSONObject("zkagent")?.optString("tier")?.takeIf { it.isNotEmpty() }
 
+    // ------------------------------------------------ session expiry (D43 fix 3)
+
+    /** Extracts `zkagent.challenge.expires_at` (chiproof `issueChallenge`'s
+     * epoch-millis field, D20 — the same challenge object `MainActivity`
+     * already parses for `nonce`) from a VERIFIED request payload, or null
+     * if absent/malformed. Pure parsing only, exercisable by a plain JVM
+     * test without an Activity — same discipline as [tierOf]. Reading this
+     * from the already-verified request object (never a fresh network
+     * round-trip) is the ONLY way this app can know a handoff session has
+     * gone stale; there is no other local signal. */
+    fun expiresAtOf(json: JSONObject): Long? {
+        val challenge = json.optJSONObject("zkagent")?.optJSONObject("challenge") ?: return null
+        if (!challenge.has("expires_at")) return null
+        val expiresAt = challenge.optLong("expires_at", -1L)
+        return if (expiresAt > 0) expiresAt else null
+    }
+
+    /** Whether a challenge with [expiresAtMillis] is still usable at
+     * [nowMillis]. Matches chiproof's own boundary exactly
+     * (`packages/chiproof/src/challenge.js`: `now > expiresAt` is expired,
+     * exactly AT `expiresAt` is still valid) so this client-side check is
+     * never stricter or looser than the verifier's — a session this app
+     * treats as expired is one the verifier would refuse too, and vice
+     * versa. */
+    fun isExpired(expiresAtMillis: Long, nowMillis: Long): Boolean = nowMillis > expiresAtMillis
+
     // ------------------------------------------------- evidence_required (D31)
 
     /** Log-only, value-free parse of the request object's

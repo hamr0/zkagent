@@ -14,8 +14,6 @@
     <string name="pass">Pass</string>
     <string name="failed">Failed</string>
 
-    <string name="mode_a_label">Mode A — anonymous</string>
-    <string name="mode_b_label">Mode B — recognisable to this site</string>
     <string name="button_lock_and_scan">Lock mode &amp; scan</string>
     <string name="button_masterlist_probe">Run masterlist checks (no tap needed)</string>
     <string name="button_devicekey_probe">Run device key self-test (no tap needed)</string>
@@ -27,5 +25,12 @@
     <string name="button_scan_qr">Scan QR (cross-device fallback)</string>
     <string name="handoff_manual_hint">…or paste an av:// link / request_uri</string>
     <string name="handoff_qr_description">Photo of a QR code shown by the verifier, decoded locally on-device</string>
+
+    <!-- §6.2 item 16 (D44) — log tab -->
+    <string name="tab_scan">Scan</string>
+    <string name="tab_log">Log</string>
+
+    <!-- §6.2 item 15 (D43) — blocking acknowledgment dialogs -->
+    <string name="dialog_ok">OK</string>
 
 </resources>

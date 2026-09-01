@@ -216,17 +216,39 @@ object M0Probe {
 
     // ------------------------------------------------- chip authenticity (AA)
 
-    /** Active Authentication probe — Q18. Absence is a finding, not an error. */
-    fun tryActiveAuth(service: PassportService, sod: SODFile): Pair<Boolean, String> {
+    /** §6.2 item 16 (2026-09 real-device fix, "three states, not two"): a
+     * document's chip-authenticity mechanism (Chip Authentication via
+     * DG14+EAC-CA in [MainActivity.ReadTask], or Active Authentication via
+     * DG15+AA below — either satisfies "chip authenticity") is either
+     * cryptographically VERIFIED, genuinely NOT_SUPPORTED by this document
+     * (no DG14/DG15 declaring the capability at all — the real-device US
+     * passport case), or the capability is declared but the
+     * challenge-response protocol itself FAILED. NOT_SUPPORTED must never
+     * be conflated with FAILED, and neither may ever be conflated with
+     * VERIFIED: a document with no chip authentication at all is
+     * clone-replayable, a stated limitation (not hidden), never silently
+     * rendered as though the check ran and passed. */
+    enum class ChipAuthStatus { VERIFIED, NOT_SUPPORTED, FAILED }
+
+    /** Active Authentication probe — Q18. Two INDEPENDENT failure points,
+     * each its own try/catch, so "this document doesn't carry DG15 at all"
+     * (NOT_SUPPORTED) is never conflated with "DG15 is present but the
+     * challenge-response itself failed" (FAILED) — before this restructure
+     * both landed in the same catch block and were indistinguishable. */
+    fun tryActiveAuth(service: PassportService, sod: SODFile): Pair<ChipAuthStatus, String> {
+        val dg15 = try {
+            DG15File(service.getInputStream(PassportService.EF_DG15))
+        } catch (e: Exception) {
+            return ChipAuthStatus.NOT_SUPPORTED to "AA not supported (no DG15): ${e.javaClass.simpleName}"
+        }
         return try {
-            val dg15 = DG15File(service.getInputStream(PassportService.EF_DG15))
             val pub: PublicKey = dg15.publicKey
             val challenge = ByteArray(8).also { java.security.SecureRandom().nextBytes(it) }
             val sigAlg = if (pub.algorithm.contains("EC")) "SHA256withECDSA" else "SHA1withRSA/ISO9796-2"
             service.doAA(pub, sod.digestAlgorithm, sigAlg, challenge)
-            true to "AA succeeded (key=${pub.algorithm}, sig=$sigAlg)"
+            ChipAuthStatus.VERIFIED to "AA succeeded (key=${pub.algorithm}, sig=$sigAlg)"
         } catch (e: Exception) {
-            false to "AA unavailable or failed: ${e.javaClass.simpleName} ${e.message ?: ""}"
+            ChipAuthStatus.FAILED to "AA declared (DG15 present) but failed: ${e.javaClass.simpleName} ${e.message ?: ""}"
         }
     }
 

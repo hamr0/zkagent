@@ -268,4 +268,59 @@ class RequestTrustTest {
         val requestObject = JSONObject().put("zkagent", JSONObject().put("evidence_required", JSONArray(listOf("sig-ed25519/1"))))
         assertEquals("sig-ed25519/1", RequestTrust.describeEvidenceRequired(requestObject))
     }
+
+    // ------------------------------------ expiresAtOf / isExpired (2026-09-01
+    // real-device fix, "fix 3" — the consumed/expired handoff session)
+
+    private fun requestWithExpiresAt(expiresAt: Any?): JSONObject {
+        val challenge = JSONObject()
+        if (expiresAt != null) challenge.put("expires_at", expiresAt)
+        val zkagent = JSONObject().put("challenge", challenge)
+        return JSONObject().put("zkagent", zkagent)
+    }
+
+    @Test
+    fun `expiresAtOf - reads the challenge's expires_at epoch millis`() {
+        assertEquals(1756767359000L, RequestTrust.expiresAtOf(requestWithExpiresAt(1756767359000L)))
+    }
+
+    @Test
+    fun `expiresAtOf - absent expires_at field returns null`() {
+        assertNull(RequestTrust.expiresAtOf(requestWithExpiresAt(null)))
+    }
+
+    @Test
+    fun `expiresAtOf - absent challenge object returns null`() {
+        val requestObject = JSONObject().put("zkagent", JSONObject())
+        assertNull(RequestTrust.expiresAtOf(requestObject))
+    }
+
+    @Test
+    fun `expiresAtOf - absent zkagent object entirely returns null`() {
+        assertNull(RequestTrust.expiresAtOf(JSONObject()))
+    }
+
+    @Test
+    fun `expiresAtOf - non-positive or non-numeric expires_at returns null, never a garbage value`() {
+        assertNull(RequestTrust.expiresAtOf(requestWithExpiresAt(0L)))
+        assertNull(RequestTrust.expiresAtOf(requestWithExpiresAt(-1L)))
+        assertNull(RequestTrust.expiresAtOf(requestWithExpiresAt("not-a-number")))
+    }
+
+    @Test
+    fun `isExpired - strictly after expiresAt is expired`() {
+        assertTrue(RequestTrust.isExpired(expiresAtMillis = 1_000L, nowMillis = 1_001L))
+    }
+
+    @Test
+    fun `isExpired - exactly at expiresAt is NOT expired, matching chiproof's own boundary`() {
+        // packages/chiproof/src/challenge.js: `if (now > expiresAt) return realNo(...)`
+        // — strict greater-than, so AT expiresAt the challenge is still valid.
+        assertFalse(RequestTrust.isExpired(expiresAtMillis = 1_000L, nowMillis = 1_000L))
+    }
+
+    @Test
+    fun `isExpired - before expiresAt is not expired`() {
+        assertFalse(RequestTrust.isExpired(expiresAtMillis = 1_000L, nowMillis = 999L))
+    }
 }

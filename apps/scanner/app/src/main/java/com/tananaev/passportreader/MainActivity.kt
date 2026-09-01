@@ -30,9 +30,9 @@ import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
-import android.widget.RadioGroup
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.biometric.BiometricManager
@@ -41,6 +41,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.tabs.TabLayout
 import com.wdullaer.materialdatetimepicker.date.DatePickerDialog
 import net.sf.scuba.smartcards.CardService
 import org.apache.commons.io.IOUtils
@@ -60,6 +61,7 @@ import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * zkagent M2 reference scanner — PRD `docs/product/zkagent-prd.md` §6.2,
@@ -70,25 +72,28 @@ import java.util.Locale
  * see the per-item notes below and the conformance report.
  *
  * ---------------------------------------------------------------------
- * §6.2 item 4 (F5, the mode-radio bug) — STRUCTURAL fix, not a root-cause:
+ * §6.2 item 4 (F5, the mode-radio bug) — ELIMINATED BY CONSTRUCTION
+ * (2026-09 real-device change, "remove the mode radio entirely"):
  * ---------------------------------------------------------------------
  * F5 (`docs/logs/M2-SCAN-EVIDENCE.md`: the mode radio displayed "B" once
  * while a scan actually ran in mode A) was never root-caused in
- * `spikes/m2-scan`'s `MainActivity.kt` — a code read after the fact found
- * no cause. Rather than assume a rewrite fixes an unreproduced bug by
- * construction, this file removes the SURFACE the bug needs to exist:
- * [modeGroup.checkedRadioButtonId] is read from the UI EXACTLY ONCE in this
- * entire file, inside [lockModeAndArm], which runs BEFORE NFC foreground
- * dispatch is even enabled — grep `checkedRadioButtonId` against this file
- * and there is one call site. The result is copied into [lockedMode], an
- * immutable `val` set once per session and cleared only by [wipeSession];
- * every other place that needs the mode (the read report, the mint gate,
- * the evidence tier) reads [lockedMode], never the RadioGroup. Because the
- * RadioGroup is also disabled the instant it is read (`modeGroup.isEnabled
- * = false`), it is not just unread after that point, it is unwritable by
- * the user either — a UI/session-state mismatch of F5's shape cannot occur
- * because there is no window in which the control can change AND still be
- * consulted.
+ * `spikes/m2-scan`'s `MainActivity.kt`. The first rewrite of this file
+ * mitigated it structurally (read the radio exactly once, disable it
+ * immediately) rather than assuming a rewrite fixes an unreproduced bug by
+ * construction; that mitigation held (F5 was closed 2026-09-01, not
+ * reproduced). The owner's next call went further: mode is not a user
+ * choice at all. There is no RadioGroup/RadioButton anywhere in this file
+ * any more — [lockedMode] is DERIVED, never read from a UI control: a
+ * verified handoff's `zkagent.tier` sets it (D33/D34, via
+ * [tierOutcomeFor]); a bare local scan with no verified handoff is mode A
+ * BY DEFINITION (owner: "a bare local scan with no verified request is
+ * mode A by definition"). [lockModeAndArm] remains item 4's ONE call site
+ * that writes [lockedMode], but it has nothing left to READ from a
+ * control — a UI/session-state mismatch of F5's shape is now impossible
+ * for the strongest possible reason: the surface that could disagree with
+ * the executed mode does not exist. [modeStatusView] is a plain, non-
+ * interactive TextView showing the DERIVED mode (see [refreshModeStatus]);
+ * it is a display, never an input.
  *
  * ---------------------------------------------------------------------
  * §6.2 item 2/3 (D21 "always read, conditionally mint") — ordering:
@@ -133,27 +138,27 @@ import java.util.Locale
  * on a background thread — not later, inside the mint path, the way this
  * file used to. The verified result lives in [verifiedRequest], alongside
  * [pendingHandoff], for the rest of that handoff's lifetime. This is what
- * lets [lockModeAndArm] (item 4's ONE call site for [lockedMode]) preset and
- * lock the mode from the request's `zkagent.tier` BEFORE the user can touch
- * the mode radio — [lockedMode] still has exactly one writer, it is just fed
- * from [verifiedRequest] instead of [modeGroup] when a handoff is pending.
- * [applyHandoffVerificationOutcome] also calls `modeGroup.check(...)` on a
- * successful verify, so the RESULT is visible (D33: the app "sets" the
- * mode) the instant verification succeeds, not only once Lock is pressed —
- * this is a DISPLAY write, not a read: [modeGroup.checkedRadioButtonId] is
- * still read from the UI in exactly the one place item 4 names
- * ([lockModeAndArm]), and the control is disabled the whole time
- * ([beginHandoffVerification] disables it before this write ever happens),
- * so the user still can't touch it. A tier this preview can't map (C,
- * absent, invalid) clears the check instead of guessing — the actual
- * refusal is reported once the user tries to lock (item 13's fail-loud path).
- * [mintAndMaybeHandoff] later REUSES [verifiedRequest] rather than
- * re-fetching — same nonce, same verified fields, one fetch per handoff.
- * Any verification failure (origin mismatch, bad/missing/wrong-alg
+ * lets [lockModeAndArm] (item 4's ONE call site for [lockedMode]) derive and
+ * lock the mode from the request's `zkagent.tier` — [lockedMode] still has
+ * exactly one writer, it is just fed from [verifiedRequest] when a handoff
+ * is pending, or defaults to mode A when it is not (2026-09: there is no
+ * mode radio to fall back to reading any more — see the item 4 section
+ * above). [applyHandoffVerificationOutcome] calls [refreshModeStatus] on a
+ * successful verify, so the DERIVED mode is visible (D33: the app "sets"
+ * the mode) the instant verification succeeds, not only once Lock is
+ * pressed — this is a DISPLAY update, not a read of anything: there is no
+ * control left to read. A tier this preview can't map (C, absent, invalid)
+ * shows a neutral "pending" status instead of guessing — the actual
+ * refusal is reported once the user tries to lock (item 13's fail-loud path,
+ * UNCHANGED by the radio's removal: it now guards the derivation instead of
+ * the preselect). [mintAndMaybeHandoff] later REUSES [verifiedRequest]
+ * rather than re-fetching — same nonce, same verified fields, one fetch per
+ * handoff. Any verification failure (origin mismatch, bad/missing/wrong-alg
  * signature, no resolvable key) is a refusal: [pendingHandoff] and
- * [verifiedRequest] are cleared, the mode radio is re-enabled for manual
- * use (no handoff is pending any more), and the refusal is logged AND
- * reported — never a silent downgrade to trusting the fields anyway.
+ * [verifiedRequest] are cleared, the derived mode status reverts to its
+ * bare-scan default (no handoff is pending any more), and the refusal is
+ * logged AND reported — never a silent downgrade to trusting the fields
+ * anyway.
  */
 abstract class MainActivity : AppCompatActivity() {
 
@@ -174,15 +179,29 @@ abstract class MainActivity : AppCompatActivity() {
     // [emitReport] and the item 6 note there. Never written to disk. ----
     private var lastReportText: String? = null
 
+    // ---- §6.2 item 16 (D44): per-scan report log. An ADDITIONAL CONSUMER of
+    // [emitReport]'s single write path — see that function's doc. In-memory
+    // only; restored/saved across Activity recreation the same way
+    // [lastReportText] is (D35), cleared inside [wipeSession]'s
+    // `!keepMrzAndMode` branch alongside everything else that branch resets. ----
+    private val reportLog = ReportLog()
+
     private lateinit var passportNumberView: EditText
     private lateinit var expirationDateView: EditText
     private lateinit var birthDateView: EditText
-    private lateinit var modeGroup: RadioGroup
-    private lateinit var modeLockedBanner: TextView
+    // 2026-09 real-device fix: no RadioGroup/RadioButton any more — mode
+    // is DERIVED (see class doc, item 4 section) and this TextView is its
+    // ONLY display, doubling as the pre-lock "current derived mode"
+    // indicator and the post-lock "Locked: mode X" banner (see
+    // refreshModeStatus / lockModeAndArm).
+    private lateinit var modeStatusView: TextView
     private lateinit var lockButton: Button
+    private lateinit var tabLayout: TabLayout
     private lateinit var mainLayout: View
+    private lateinit var logLayout: View
     private lateinit var loadingLayout: View
     private lateinit var reportView: TextView
+    private lateinit var logView: TextView
     private lateinit var handoffStatus: TextView
     private lateinit var handoffManualInput: EditText
 
@@ -215,14 +234,30 @@ abstract class MainActivity : AppCompatActivity() {
         passportNumberView = findViewById(R.id.input_passport_number)
         expirationDateView = findViewById(R.id.input_expiration_date)
         birthDateView = findViewById(R.id.input_date_of_birth)
-        modeGroup = findViewById(R.id.mode_group)
-        modeLockedBanner = findViewById(R.id.mode_locked_banner)
+        modeStatusView = findViewById(R.id.mode_status)
         lockButton = findViewById(R.id.button_lock_and_scan)
+        tabLayout = findViewById(R.id.tab_layout)
         mainLayout = findViewById(R.id.main_layout)
+        logLayout = findViewById(R.id.log_layout)
         loadingLayout = findViewById(R.id.loading_layout)
         reportView = findViewById(R.id.report_view)
+        logView = findViewById(R.id.log_view)
         handoffStatus = findViewById(R.id.handoff_status)
         handoffManualInput = findViewById(R.id.handoff_manual_input)
+
+        // §6.2 item 16 (D44): tab selection only toggles which of
+        // [mainLayout]/[logLayout] is visible — no other state changes.
+        // [loadingLayout] is left alone: it only shows mid-read, an edge
+        // case not covered by items 15/16.
+        tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                val showLog = tab.position == 1
+                mainLayout.visibility = if (showLog) View.GONE else View.VISIBLE
+                logLayout.visibility = if (showLog) View.VISIBLE else View.GONE
+            }
+            override fun onTabUnselected(tab: TabLayout.Tab) {}
+            override fun onTabReselected(tab: TabLayout.Tab) {}
+        })
 
         // No SharedPreferences/DataStore read or write anywhere in this
         // activity — MRZ fields start empty every launch (NO-GO #9).
@@ -238,6 +273,13 @@ abstract class MainActivity : AppCompatActivity() {
         savedInstanceState?.getString(STATE_LAST_REPORT)?.let { text ->
             lastReportText = text
             reportView.text = text
+        }
+        // §6.2 item 16 (D44): the accumulated log gets the same in-memory,
+        // across-recreation retention as lastReportText above (D35) — never
+        // disk. Restored verbatim (ReportLog.restore never re-timestamps).
+        savedInstanceState?.getStringArrayList(STATE_LOG_ENTRIES)?.let { saved ->
+            reportLog.restore(saved)
+            logView.text = reportLog.rendered(titleSizePx = logTitleSizePx())
         }
 
         lockButton.setOnClickListener { lockModeAndArm() }
@@ -294,12 +336,31 @@ abstract class MainActivity : AppCompatActivity() {
             supportFragmentManager.beginTransaction().add(dialog, null).commit()
         }
 
+        refreshModeStatus()
         handleIncomingIntent(intent)
     }
 
-    private fun setModeGroupEnabled(enabled: Boolean) {
-        modeGroup.isEnabled = enabled
-        for (i in 0 until modeGroup.childCount) modeGroup.getChildAt(i).isEnabled = enabled
+    /** §6.2 item 4 (2026-09 real-device fix, "remove the mode radio
+     * entirely" — see class doc): the ONE place [modeStatusView]'s text is
+     * derived from current state, whenever that state changes in a way
+     * that could change what it should show — a captured-but-unverified
+     * handoff, a verified handoff (mapped tier or "pending" for one this
+     * build can't map), or no handoff at all (mode A by definition, the
+     * owner's own words). NEVER called while [lockedMode] is set — once
+     * locked, [lockModeAndArm] owns the text directly ("Locked: mode X —
+     * tap your document now"), and [wipeSession] hands control back here
+     * only once [lockedMode] is cleared. */
+    private fun refreshModeStatus() {
+        val verified = verifiedRequest
+        modeStatusView.text = when {
+            verified != null -> when (RequestTrust.tierOf(verified.json)) {
+                "A" -> "Mode: A — anonymous"
+                "B" -> "Mode: B — recognisable to this site"
+                else -> "Mode: pending — tap Lock & scan to see the outcome"
+            }
+            pendingHandoff != null -> "Mode: verifying the site's request…"
+            else -> "Mode: A — anonymous (no site request pending)"
+        }
     }
 
     /** §6.2 item 13 (D33): the mode a pending, VERIFIED handoff request
@@ -324,12 +385,11 @@ abstract class MainActivity : AppCompatActivity() {
     }
 
     // ---------------------------------------------------------------- item 4
-    /** The ONE call site in this file that reads [modeGroup] OR
-     * [verifiedRequest] to decide mode. Disables the control the same
-     * instant it is consulted, then arms NFC dispatch. §6.2 item 13 (D33):
-     * when a handoff is pending, [lockedMode] comes from the verified
-     * request's `zkagent.tier` instead of the RadioGroup — never both, and
-     * never a second call site. */
+    /** The ONE call site in this file that writes [lockedMode]. §6.2 item 13
+     * (D33): when a handoff is pending, it comes from the verified request's
+     * `zkagent.tier`; otherwise (2026-09: no mode radio left to read — see
+     * class doc) it defaults to mode A by definition. Arms NFC dispatch once
+     * derived — never a second call site. */
     private fun lockModeAndArm() {
         if (lockedMode != null) return // already locked this session
         val passportRaw = passportNumberView.text?.toString()
@@ -348,29 +408,78 @@ abstract class MainActivity : AppCompatActivity() {
                 Snackbar.make(passportNumberView, "Still verifying the handoff request — try again in a moment", Snackbar.LENGTH_SHORT).show()
                 return
             }
+            // 2026-09-01 real-device fix ("fix 3" — a spent/aged handoff
+            // session inviting a document tap that cannot succeed): the
+            // EARLIEST possible check, before the user is even asked to tap
+            // — see SESSION_EXPIRED_MESSAGE's doc and the belt-and-
+            // suspenders re-check in [continueAfterRead]. A "consumed"
+            // (already-answered) session cannot reach here at all: every
+            // definitive mint outcome clears [pendingHandoff]/
+            // [verifiedRequest] (see `mintAndMaybeHandoff`'s doc), so the
+            // only remaining "no usable session" condition this app can
+            // detect locally is EXPIRY — read straight off the challenge
+            // this request object already carries, never a network call.
+            val expiresAt = RequestTrust.expiresAtOf(verified.json)
+            if (expiresAt != null && RequestTrust.isExpired(expiresAt, System.currentTimeMillis())) {
+                Log.e(TAG, "M2 stage: handoff REFUSED — verification session expired before lock (expires_at=$expiresAt)")
+                emitReport(
+                    "handoff: REFUSED — verification session expired before lock (expires_at=$expiresAt)",
+                    ReportLog.DisclosureSummary(
+                        site = siteTitleFor(verified.origin),
+                        result = "Refused — verification session expired",
+                        sent = "nothing left this device",
+                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                    ),
+                )
+                showBlockingOutcomeDialog(SESSION_EXPIRED_MESSAGE, isAccessEstablishmentFailure = false)
+                return
+            }
             when (val outcome = tierOutcomeFor(verified)) {
                 is TierOutcome.Ok -> mode = outcome.mode
                 is TierOutcome.Unsupported -> {
                     Log.e(TAG, "M2 stage: pending handoff requests tier C — not supported in this build (item 13)")
-                    emitReport("handoff: REFUSED — tier C requested, not supported in this build (no tier-C flow)")
+                    val reason = "handoff: REFUSED — tier C requested, not supported in this build (no tier-C flow)"
+                    emitReport(
+                        reason,
+                        ReportLog.DisclosureSummary(
+                            site = siteTitleFor(verified.origin),
+                            result = "Refused — the site asked for a verification tier this app does not support",
+                            sent = "nothing left this device",
+                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                        ),
+                    )
+                    showBlockingOutcomeDialog(reason, isAccessEstablishmentFailure = false)
                     return
                 }
                 is TierOutcome.Invalid -> {
                     Log.e(TAG, "M2 stage: pending handoff request has absent/invalid tier (got: ${outcome.got}) — refusing, no default mode (item 13)")
-                    emitReport("handoff: REFUSED — request tier absent or invalid (got: ${outcome.got}), no default mode")
+                    val reason = "handoff: REFUSED — request tier absent or invalid (got: ${outcome.got}), no default mode"
+                    emitReport(
+                        reason,
+                        ReportLog.DisclosureSummary(
+                            site = siteTitleFor(verified.origin),
+                            result = "Refused — the site's request did not specify a valid verification mode",
+                            sent = "nothing left this device",
+                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                        ),
+                    )
+                    showBlockingOutcomeDialog(reason, isAccessEstablishmentFailure = false)
                     return
                 }
             }
-            modeGroup.check(if (mode == PresentationMode.B) R.id.mode_b else R.id.mode_a)
         } else {
-            mode = if (modeGroup.checkedRadioButtonId == R.id.mode_b) PresentationMode.B else PresentationMode.A
+            // §6.2 item 4 (2026-09 real-device change, "remove the mode
+            // radio entirely"): no control to read any more — a bare local
+            // scan with no verified handoff is mode A BY DEFINITION (owner:
+            // "a bare local scan with no verified request is mode A by
+            // definition"). Mode B is reachable ONLY via a verified
+            // handoff's tier, above.
+            mode = PresentationMode.A
         }
 
         lockedMode = mode
-        setModeGroupEnabled(false)
         lockButton.isEnabled = false
-        modeLockedBanner.visibility = View.VISIBLE
-        modeLockedBanner.text = "Locked: mode ${lockedMode} — tap your document now"
+        modeStatusView.text = "Locked: mode ${lockedMode} — tap your document now"
         armNfcDispatch()
     }
 
@@ -403,6 +512,7 @@ abstract class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         lastReportText?.let { outState.putString(STATE_LAST_REPORT, it) }
+        outState.putStringArrayList(STATE_LOG_ENTRIES, ArrayList(reportLog.entriesSnapshot()))
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -455,14 +565,15 @@ abstract class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------- items 13/14
     /** Fetches and verifies [handoff]'s request object ([RequestTrust]) on a
      * background thread, the INSTANT the link is captured — see class doc.
-     * The mode radio and Lock button are held off until this resolves, so
-     * there is no window where the user could lock a session against an
-     * unverified/wrong tier. */
+     * The Lock button is held off until this resolves, so there is no
+     * window where the user could lock a session against an
+     * unverified/wrong tier (2026-09: there is no mode radio left to hold
+     * off — [refreshModeStatus] shows "verifying…" instead). */
     private fun beginHandoffVerification(handoff: HandoffClient.PendingHandoff) {
         pendingHandoff = handoff
         verifiedRequest = null
         handoffStatus.text = "Handoff request received — verifying signature and origin…"
-        setModeGroupEnabled(false)
+        refreshModeStatus()
         lockButton.isEnabled = false
         Log.i(TAG, "M2 stage: handoff captured, verifying request object before mode/lock become available (D33/D34/D37)")
         Thread {
@@ -536,45 +647,69 @@ abstract class MainActivity : AppCompatActivity() {
                 val rawTier = RequestTrust.tierOf(outcome.request.json)
                 handoffStatus.text = "Handoff verified — origin: ${outcome.request.origin}, requested tier: ${rawTier ?: "<absent>"}. Fill in your document details and lock to answer it."
                 // §6.2 item 13 (D33): SHOW the mode the request set the instant
-                // verification succeeds — a display write, not the read item 4
-                // guards (see class doc addendum above). lockModeAndArm() is
-                // still the only place that turns this into lockedMode. C/
-                // absent/invalid tiers clear the check rather than guess; the
-                // fail-loud refusal happens when the user tries to lock.
-                when (rawTier) {
-                    "A" -> modeGroup.check(R.id.mode_a)
-                    "B" -> modeGroup.check(R.id.mode_b)
-                    else -> modeGroup.clearCheck()
-                }
+                // verification succeeds (2026-09: via refreshModeStatus — there
+                // is no control left to write to, only a display). C/absent/
+                // invalid tiers show a neutral "pending" status rather than
+                // guessing; the fail-loud refusal happens when the user tries
+                // to lock. lockModeAndArm() remains the only place that turns
+                // this into lockedMode.
+                refreshModeStatus()
                 lockButton.isEnabled = true
-                // Mode radio stays disabled: item 13 forbids user override once a handoff is pending.
             }
             is RequestTrust.Outcome.Refused -> {
                 Log.e(TAG, "M2 stage: handoff REFUSED — ${outcome.reason}")
-                emitReport("handoff: REFUSED — ${outcome.reason}")
-                pendingHandoff = null
-                verifiedRequest = null
+                // §6.2 item 16 (D46): the handoff's origin was never
+                // VERIFIED (that is exactly what failed here), so the entry
+                // title is the fixed no-site label, not the unconfirmed
+                // origin the failed request claimed — an unverified origin
+                // is never shown as though it were trusted (siteTitleFor's
+                // doc / D37/D42).
+                emitReport(
+                    "handoff: REFUSED — ${outcome.reason}",
+                    ReportLog.DisclosureSummary(
+                        site = SITE_NO_HANDOFF,
+                        result = "Refused — the site's request could not be verified",
+                        sent = "nothing left this device",
+                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                    ),
+                )
                 handoffStatus.text = "Handoff refused (${outcome.reason}) — you may still scan manually."
-                setModeGroupEnabled(true)
-                lockButton.isEnabled = true
+                // §6.2 item 15 (D43): the state transition (clearing
+                // pendingHandoff/verifiedRequest, reverting the derived mode
+                // display via wipeSession) happens on dialog dismissal, not
+                // immediately — see showBlockingOutcomeDialog's doc.
+                showBlockingOutcomeDialog("Handoff refused: ${outcome.reason}", isAccessEstablishmentFailure = false)
             }
         }
     }
 
-    /** §6.2 item 6: MRZ + [lockedMode] are kept ONLY on an access-establishment
-     * failure. Every other case (success, or a later-stage failure) wipes both.
-     * §6.2 item 13: if a VERIFIED handoff is still pending across a retry, the
-     * mode radio stays locked/disabled — a failed read must not reopen manual
-     * mode selection out from under a still-pending handoff. */
+    /** §6.2 item 6: MRZ + [lockedMode] are kept on an access-establishment
+     * failure OR (2026-09) a transient chip-communication failure — see
+     * [FailureTransition]'s three-bucket doc. Every other case (success, or
+     * a later-stage failure) wipes both. §6.2 item 13: if a VERIFIED
+     * handoff is still pending across a retry, the derived mode display
+     * stays as it was for that handoff — a failed read must not silently
+     * revert to the bare-scan default out from under a still-pending
+     * handoff (2026-09: [refreshModeStatus] already handles this
+     * correctly, since it re-derives from [pendingHandoff]/
+     * [verifiedRequest], not from a separately-tracked enabled/disabled
+     * flag the way the removed mode radio needed). */
     private fun wipeSession(keepMrzAndMode: Boolean) {
         if (!keepMrzAndMode) {
             passportNumberView.text?.clear()
             expirationDateView.text?.clear()
             birthDateView.text?.clear()
             lockedMode = null
-            modeLockedBanner.visibility = View.GONE
             lockButton.isEnabled = true
-            setModeGroupEnabled(pendingHandoff == null || verifiedRequest == null)
+            refreshModeStatus()
+            // §6.2 item 16 (D45): the log's lifetime is DECOUPLED from this
+            // branch — a per-scan session wipe, successful or not, MUST NOT
+            // clear it. See ReportLog's class doc for why (D44's literal
+            // clear-on-wipe rule self-contradicted "successive scans
+            // accumulate": this call fires on every completed read,
+            // including a successful one, so the log never held more than
+            // one entry). The log now empties only when the app process
+            // does.
         }
     }
 
@@ -588,10 +723,133 @@ abstract class MainActivity : AppCompatActivity() {
      * that never called `Log.i`. Value-free by construction — callers pass
      * only verdict booleans, step names, counts, hashes, algorithm names,
      * timings; never MRZ/DG1 field values or the raw zktag. */
-    private fun emitReport(text: String) {
+    /** @param attemptId identifies a scan/mint attempt so its eventual
+     *   terminal outcome can REPLACE its own "In progress" entry — see
+     *   [ReportLog.append]'s doc (2026-09-01 real-device fix). Null for
+     *   every call that is not part of a pending/terminal pair.
+     * @param pending true ONLY for the one "In progress" report a mint
+     *   attempt emits while awaiting biometric authorization. */
+    private fun emitReport(text: String, summary: ReportLog.DisclosureSummary, attemptId: String? = null, pending: Boolean = false) {
         reportView.text = text
         lastReportText = text
+        // §6.2 item 16 (D46): the log tab is an ADDITIONAL CONSUMER of this
+        // one write site — never a second write site. [text] is exactly
+        // what reportView shows, unmodified; [summary] is the value-free,
+        // plain-language disclosure summary ReportLog titles and leads the
+        // entry with — see ReportLog's class doc. Extending THIS call site
+        // (rather than adding a second one) is the mechanism D46 itself
+        // requires — [attemptId]/[pending] are the same discipline applied
+        // to the 2026-09-01 stale-in-progress-entry fix.
+        reportLog.append(text, summary, attemptId = attemptId, pending = pending)
+        logView.text = reportLog.rendered(titleSizePx = logTitleSizePx())
         Log.i(TAG, "\n===== M2 REPORT (value-free) =====\n$text\n===== END =====")
+    }
+
+    /** §6.2 item 16 (2026-09-01, second real-device fix — "one point bigger,
+     * if it would remain light"): the log entry title line's target text
+     * size, in raw pixels, for [ReportLog.rendered]'s `titleSizePx`. Derived
+     * from [logView]'s OWN currently-configured text size (never a
+     * hardcoded number, so this stays correct if the base size ever
+     * changes) plus exactly one sp's worth of pixels at the device's
+     * current font scale (`scaledDensity`, not `density` — an
+     * `AbsoluteSizeSpan(..., dip = false)` call site expects raw pixels,
+     * and computing the "+1" through `scaledDensity` is what makes it a
+     * true "+1 sp", correct for a user with a non-default system font
+     * scale, rather than a dp value that would drift from sp at any other
+     * scale). NORMAL weight only — no bold; the owner asked for a size
+     * bump, not `StyleSpan(Typeface.BOLD)`. */
+    private fun logTitleSizePx(): Int {
+        val onePointInPx = resources.displayMetrics.scaledDensity
+        return (logView.textSize + onePointInPx).roundToInt()
+    }
+
+    /** §6.2 item 16 (D46): the log entry title — the verified request
+     * origin's `host:port` (`scope_domain`, D37/D42), or the fixed,
+     * value-free label for a scan with no VERIFIED handoff. Also used for a
+     * handoff whose verification itself failed: an unverified/unconfirmed
+     * origin is never shown as though it were a trusted site (D37/D42's
+     * whole point is that origin trust requires verification — an entry
+     * title is not exempt from that). [origin] is always a caller-supplied
+     * value already resolved at the point of use (e.g. `verified.origin`),
+     * never re-read from mutable state here, so the title can't drift from
+     * what the entry actually describes. */
+    private fun siteTitleFor(origin: String?): String {
+        if (origin == null) return SITE_NO_HANDOFF
+        val uri = runCatching { URI(origin) }.getOrNull() ?: return SITE_NO_HANDOFF
+        val host = uri.host ?: return SITE_NO_HANDOFF
+        return if (uri.port != -1) "$host:${uri.port}" else host
+    }
+
+    // 2026-09 real-device fix, owner decision ("Mode is redundant"): the
+    // plain-block Mode line and its modeLabel() source were REMOVED —
+    // Sent/Shared/Identity already state everything "mode A"/"mode B"
+    // means in plain language (Sent: nothing left this device === mode A;
+    // Identity: new/known-only-here === mode B), so a separate Mode line
+    // only restated one of them. Standing fact this rests on: D21 is
+    // "always read, conditionally mint" — mode never changes what is READ,
+    // only what is SENT, so "mode A" must never be allowed to imply a
+    // lesser read. Mode STAYS in the ▸ technical: line (chipAuthTechnical's
+    // sibling, `mode: $mode` in continueAfterRead's baseReport) exactly as
+    // before — only the plain-block line and DisclosureSummary.mode were
+    // removed. The DERIVED mode display on the main screen
+    // (refreshModeStatus / mode_status TextView, CHANGE 2) is UNRELATED and
+    // unaffected — that is a different display for a different purpose.
+
+    /** §6.2 item 16 (2026-09 real-device fix, "chip authenticity, three
+     * states"): the plain-language value for the log entry's `Chip auth`
+     * line. Reported to the owner for approval — see [ChipAuthStatus]'s
+     * three states and why NOT_SUPPORTED must never read as "false". */
+    private fun chipAuthLabel(status: M0Probe.ChipAuthStatus): String = when (status) {
+        // Owner-revised wording (clone phrasing rejected as alarming to a
+        // non-technical reader on every US-passport-shaped NOT_SUPPORTED
+        // scan) — the three-state DISTINCTION itself (M0Probe.ChipAuthStatus,
+        // the two independent try/catch blocks that stop conflating a
+        // missing capability with a failed protocol) is unchanged; only
+        // this text changed. "absent" must never render as "false".
+        M0Probe.ChipAuthStatus.VERIFIED -> "Verified — this document's chip proved it is genuine"
+        M0Probe.ChipAuthStatus.NOT_SUPPORTED -> "Not supported — this document has no chip authenticity check"
+        M0Probe.ChipAuthStatus.FAILED -> "Not verified — the chip check did not pass"
+    }
+
+    /** §6.2 item 15 (D43, extended 2026-09 to cover SUCCESS too — "the one
+     * outcome the user most wants confirmed was the only one that didn't
+     * confirm itself"): the ONE place a blocking, value-free TERMINAL-
+     * OUTCOME dialog is shown — a failure (the original D43 case) or a
+     * confirmed mint success ([MintConfirmation]). Same mechanism for both,
+     * deliberately not forked into two implementations. [message] is the
+     * same value-free text already passed to [emitReport] (or a close
+     * paraphrase of it) — never a new PII surface. The state transition
+     * happens ONLY on dismissal, via the SAME `wipeSession` branch item 6
+     * already defines ([FailureTransition.keepsMrzAndMode] pins which of
+     * the THREE buckets applies — access-establishment failure, transient
+     * chip-communication failure (2026-09), or reset; a success dialog
+     * always resolves to the plain reset branch, the SAME
+     * `wipeSession(keepMrzAndMode = false)` every other terminal outcome
+     * uses — no separate post-success policy). A handoff-specific pointer
+     * reset (pendingHandoff/verifiedRequest, which [wipeSession] itself
+     * does not own — see its doc) happens first when the session is NOT
+     * being kept, so [wipeSession] restores the derived mode display
+     * correctly (2026-09: there is no longer a mode RADIO to re-enable —
+     * see [refreshModeStatus]). Not cancelable: only OK dismisses (no
+     * Snackbar, no outside-tap, no back-press dismissal), per D43.
+     * @param isTransientChipCommunicationFailure bucket 2 (2026-09) — see
+     *   [FailureTransition]'s doc. Defaults false; every call site except
+     *   the one real read-failure path that can classify it leaves this at
+     *   the default; always false for a success confirmation. */
+    private fun showBlockingOutcomeDialog(message: String, isAccessEstablishmentFailure: Boolean, isTransientChipCommunicationFailure: Boolean = false) {
+        val keepMrzAndMode = FailureTransition.keepsMrzAndMode(isAccessEstablishmentFailure, isTransientChipCommunicationFailure)
+        AlertDialog.Builder(this)
+            .setMessage(message)
+            .setCancelable(false)
+            .setPositiveButton(R.string.dialog_ok) { dialog, _ ->
+                dialog.dismiss()
+                if (!keepMrzAndMode) {
+                    pendingHandoff = null
+                    verifiedRequest = null
+                }
+                wipeSession(keepMrzAndMode = keepMrzAndMode)
+            }
+            .show()
     }
 
     // ------------------------------------------------------------- session
@@ -612,7 +870,7 @@ abstract class MainActivity : AppCompatActivity() {
         private var accessFailure = false
         private val timeline = M0Probe.Timeline()
         private var accessProtocol = "unknown"
-        private var chipAuthField = "absent"
+        private var chipAuthStatus = M0Probe.ChipAuthStatus.NOT_SUPPORTED
         private var passiveAuthVerdict: M0Probe.Verdict? = null
         private var masterlistReport = ""
         private var trustedKeystoreCerts: java.security.KeyStore? = null
@@ -663,22 +921,48 @@ abstract class MainActivity : AppCompatActivity() {
 
                 // Chip authenticity probe (D21 payload field), best-effort —
                 // absence is a finding, not a session failure.
-                var chipAuthOk = false
+                //
+                // 2026-09 real-device fix ("three states, not two"): the DG14
+                // READ (does this document carry the file at all — NOT_SUPPORTED
+                // if not) and the doEACCA() CHALLENGE-RESPONSE ITSELF (FAILED if
+                // the file/security-info IS present but the protocol errors)
+                // are now two INDEPENDENT try/catch blocks — before this
+                // restructure both landed in the same catch and were
+                // indistinguishable, exactly the "absent" vs "failed"
+                // conflation the owner flagged.
+                var caStatus = M0Probe.ChipAuthStatus.NOT_SUPPORTED
                 try {
                     val dg14In = service.getInputStream(PassportService.EF_DG14)
                     val dg14Encoded = IOUtils.toByteArray(dg14In)
                     val dg14File = org.jmrtd.lds.icao.DG14File(ByteArrayInputStream(dg14Encoded))
-                    for (si in dg14File.securityInfos) {
-                        if (si is org.jmrtd.lds.ChipAuthenticationPublicKeyInfo) {
-                            service.doEACCA(si.keyId, org.jmrtd.lds.ChipAuthenticationPublicKeyInfo.ID_CA_ECDH_AES_CBC_CMAC_256, si.objectIdentifier, si.subjectPublicKey)
-                            chipAuthOk = true
+                    val caInfos = dg14File.securityInfos.filterIsInstance<org.jmrtd.lds.ChipAuthenticationPublicKeyInfo>()
+                    caStatus = if (caInfos.isEmpty()) {
+                        M0Probe.ChipAuthStatus.NOT_SUPPORTED
+                    } else {
+                        try {
+                            for (si in caInfos) {
+                                service.doEACCA(si.keyId, org.jmrtd.lds.ChipAuthenticationPublicKeyInfo.ID_CA_ECDH_AES_CBC_CMAC_256, si.objectIdentifier, si.subjectPublicKey)
+                            }
+                            M0Probe.ChipAuthStatus.VERIFIED
+                        } catch (e: Exception) {
+                            Log.i(TAG, "M2 stage: CA declared (DG14 present) but failed (${e.javaClass.simpleName})")
+                            M0Probe.ChipAuthStatus.FAILED
                         }
                     }
                 } catch (e: Exception) {
-                    Log.i(TAG, "M2 stage: CA unavailable (${e.javaClass.simpleName})")
+                    Log.i(TAG, "M2 stage: CA not supported (no DG14) (${e.javaClass.simpleName})")
                 }
                 val aa = M0Probe.tryActiveAuth(service, sodFile)
-                chipAuthField = if (chipAuthOk || aa.first) "passed" else "absent"
+                // Either mechanism verifying is enough to call chip authenticity
+                // VERIFIED (unchanged combining rule); otherwise FAILED beats
+                // NOT_SUPPORTED (a genuine protocol failure is a stronger signal
+                // than "this mechanism just isn't present") — the combined
+                // status is never NOT_SUPPORTED unless BOTH mechanisms are.
+                chipAuthStatus = when {
+                    caStatus == M0Probe.ChipAuthStatus.VERIFIED || aa.first == M0Probe.ChipAuthStatus.VERIFIED -> M0Probe.ChipAuthStatus.VERIFIED
+                    caStatus == M0Probe.ChipAuthStatus.FAILED || aa.first == M0Probe.ChipAuthStatus.FAILED -> M0Probe.ChipAuthStatus.FAILED
+                    else -> M0Probe.ChipAuthStatus.NOT_SUPPORTED
+                }
                 timeline.mark("chip_auth_probed")
 
                 // Chip session no longer needed past this point — close before
@@ -720,19 +1004,49 @@ abstract class MainActivity : AppCompatActivity() {
             mainLayout.visibility = View.VISIBLE
             loadingLayout.visibility = View.GONE
             if (result != null) {
-                wipeSession(keepMrzAndMode = accessFailure)
-                if (accessFailure) {
-                    Snackbar.make(passportNumberView, R.string.error_read, Snackbar.LENGTH_LONG).show()
-                } else {
-                    Snackbar.make(passportNumberView, result.toString(), Snackbar.LENGTH_LONG).show()
+                // 2026-09 real-device fix ("fix — a hand tremor should not
+                // cost a retype"): bucket 2 of FailureTransition's now-three-
+                // bucket rule — see its doc for the conservative classifier.
+                // Only evaluated when this ISN'T already an access-
+                // establishment failure (that bucket already keeps MRZ+mode
+                // for its own reason; no need to also ask whether it looks
+                // like a tag-loss).
+                val transientChipFailure = !accessFailure && FailureTransition.isTransientChipCommunicationFailure(result)
+                // §6.2 item 15 (D43): the report renders immediately (so it
+                // is never missed, even before the dialog is dismissed), but
+                // the state transition (wipeSession) happens only on OK —
+                // see showBlockingOutcomeDialog's doc. No Snackbar for this
+                // outcome any more.
+                val reason = when {
+                    accessFailure -> getString(R.string.error_read)
+                    transientChipFailure -> TRANSIENT_READ_FAILURE_MESSAGE
+                    else -> "Document read failed: ${result.javaClass.simpleName}: ${result.message}"
                 }
-                emitReport("verdict: FAIL\nfailure: ${result.javaClass.simpleName}: ${result.message}\n$masterlistReport")
+                emitReport(
+                    "verdict: FAIL\nfailure: ${result.javaClass.simpleName}: ${result.message}\n$masterlistReport",
+                    ReportLog.DisclosureSummary(
+                        site = siteTitleFor(verifiedRequest?.origin),
+                        result = when {
+                            accessFailure -> "Read failed — could not establish access to the document"
+                            transientChipFailure -> "Read interrupted — the document moved or the connection dropped"
+                            else -> "Read failed — the document could not be read"
+                        },
+                        sent = "nothing left this device",
+                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                    ),
+                )
+                showBlockingOutcomeDialog(
+                    reason,
+                    isAccessEstablishmentFailure = accessFailure,
+                    isTransientChipCommunicationFailure = transientChipFailure,
+                )
                 return
             }
             // Any completed read (success or a real masterlist "no") wipes the
-            // session — only an access-establishment failure keeps it (F3).
+            // session — only an access-establishment failure (or, as of
+            // 2026-09, a transient chip-communication failure) keeps it (F3).
             wipeSession(keepMrzAndMode = false)
-            continueAfterRead(mode, passiveAuthVerdict!!, chipAuthField, accessProtocol, masterlistReport, dg1File)
+            continueAfterRead(mode, passiveAuthVerdict!!, chipAuthStatus, accessProtocol, masterlistReport, dg1File)
         }
     }
 
@@ -744,15 +1058,26 @@ abstract class MainActivity : AppCompatActivity() {
     private fun continueAfterRead(
         mode: PresentationMode,
         verdict: M0Probe.Verdict,
-        chipAuthField: String,
+        chipAuthStatus: M0Probe.ChipAuthStatus,
         accessProtocol: String,
         masterlistReport: String,
         dg1File: DG1File,
     ) {
+        // 2026-09 real-device fix: the technical D21 payload field now has a
+        // genuine third value ("failed") where before it only ever said
+        // "passed"/"absent" — see M0Probe.ChipAuthStatus's doc. Single
+        // source: this string and the plain-language chipAuthLabel() line
+        // below are both derived from the SAME chipAuthStatus, never two
+        // independently-tracked variables that could drift.
+        val chipAuthTechnical = when (chipAuthStatus) {
+            M0Probe.ChipAuthStatus.VERIFIED -> "passed"
+            M0Probe.ChipAuthStatus.FAILED -> "failed"
+            M0Probe.ChipAuthStatus.NOT_SUPPORTED -> "absent"
+        }
         val baseReport = buildString {
             append("mode: $mode\n")
             append("access_protocol: $accessProtocol\n")
-            append("chip_auth (D21 payload field): $chipAuthField\n")
+            append("chip_auth (D21 payload field): $chipAuthTechnical\n")
             append(masterlistReport).append("\n")
             append("passive_auth: $verdict\n")
         }
@@ -761,7 +1086,20 @@ abstract class MainActivity : AppCompatActivity() {
         // note on why the branch below now goes through emitReport.
         val mayMint = MintGate.mayMint(mode == PresentationMode.B, verdict)
         if (!mayMint) {
-            emitReport(baseReport + "\nmint_gate: NOT MET — evidence: [] (D27${if (mode == PresentationMode.B) ", item 3: masterlist/passive-auth gate not satisfied" else ""})\nverdict: ${if (verdict.ok) "PASS (read)" else "FAIL (could not check)"}")
+            emitReport(
+                baseReport + "\nmint_gate: NOT MET — evidence: [] (D27${if (mode == PresentationMode.B) ", item 3: masterlist/passive-auth gate not satisfied" else ""})\nverdict: ${if (verdict.ok) "PASS (read)" else "FAIL (could not check)"}",
+                ReportLog.DisclosureSummary(
+                    site = siteTitleFor(verifiedRequest?.origin),
+                    result = when {
+                        !verdict.ok -> "Read finished, but the document could not be verified"
+                        mode == PresentationMode.A -> "Read OK — nothing sent"
+                        else -> "Read OK, but this document is not accepted for age verification"
+                    },
+                    chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                    sent = "nothing left this device",
+                    shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                ),
+            )
             return
         }
 
@@ -774,11 +1112,78 @@ abstract class MainActivity : AppCompatActivity() {
         val origin = verifiedRequest?.origin
         if (mode == PresentationMode.B && origin == null) {
             Log.e(TAG, "M2 stage: mode B mint REFUSED — no verified request origin to scope the attester key to (D38)")
-            emitReport(baseReport + "\nmint: REFUSED — mode B requires a verified request origin to scope the attester key to (D38); no handoff is pending")
+            emitReport(
+                baseReport + "\nmint: REFUSED — mode B requires a verified request origin to scope the attester key to (D38); no handoff is pending",
+                ReportLog.DisclosureSummary(
+                    site = SITE_NO_HANDOFF,
+                    result = "Refused — mode B needs an active site request to continue",
+                    chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                    sent = "nothing left this device",
+                    shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                ),
+            )
+            showBlockingOutcomeDialog(
+                "Mode B requires a verified handoff request to scope the device key to — no handoff is pending.",
+                isAccessEstablishmentFailure = false,
+            )
             return
         }
 
-        emitReport(baseReport + "\nmint_gate: MET — requesting biometric/device-credential authorization before minting (item 2)\n")
+        // 2026-09-01 real-device fix (owner's Pixel 6a run, "fix 3" — a spent/
+        // aged handoff session inviting an unwinnable second tap): belt-and-
+        // suspenders re-check right before minting, in case the session aged
+        // out DURING the chip read (the earlier, cheaper check is up front in
+        // [lockModeAndArm] — see its doc). Both checks read the SAME
+        // `zkagent.challenge.expires_at` field off the already-verified
+        // request object via [RequestTrust.expiresAtOf]/[isExpired] — no
+        // network round-trip, nothing invented.
+        val verifiedForExpiry = verifiedRequest
+        if (mode == PresentationMode.B && verifiedForExpiry != null) {
+            val expiresAt = RequestTrust.expiresAtOf(verifiedForExpiry.json)
+            if (expiresAt != null && RequestTrust.isExpired(expiresAt, System.currentTimeMillis())) {
+                Log.e(TAG, "M2 stage: mode B mint REFUSED — verification session expired before minting (expires_at=$expiresAt)")
+                emitReport(
+                    baseReport + "\nmint: REFUSED — verification session expired before minting could complete (expires_at=$expiresAt)",
+                    ReportLog.DisclosureSummary(
+                        site = siteTitleFor(verifiedForExpiry.origin),
+                        result = "Refused — verification session expired",
+                        chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                        sent = "nothing left this device",
+                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                    ),
+                )
+                showBlockingOutcomeDialog(SESSION_EXPIRED_MESSAGE, isAccessEstablishmentFailure = false)
+                return
+            }
+        }
+
+        // §6.2 item 16 (D46): [site] is derived ONCE here, from the SAME
+        // verified origin [origin] this mint is already scoped to (D38/D42)
+        // — never re-read from mutable state downstream — and threaded
+        // through the mint pipeline the same way zktag/scopeDomain already
+        // are (see the Thread block below's doc).
+        val site = siteTitleFor(origin)
+        // 2026-09-01 real-device fix ("fix 2" — the stale "In progress"
+        // entry): one fresh id per mint attempt, threaded through every
+        // emitReport call below (Thread block, promptAndMint,
+        // mintAndMaybeHandoff) as a parameter, the same discipline already
+        // used for site/zktag/scopeDomain — never re-derived downstream, so
+        // the eventual terminal outcome (whichever of the several possible
+        // endings it turns out to be) always replaces THIS SAME "In
+        // progress" entry, never appends a second one. See ReportLog.append's doc.
+        val attemptId = java.util.UUID.randomUUID().toString()
+        emitReport(
+            baseReport + "\nmint_gate: MET — requesting biometric/device-credential authorization before minting (item 2)\n",
+            ReportLog.DisclosureSummary(
+                site = site,
+                result = "In progress — waiting for you to authorize with biometrics or a device PIN",
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = "nothing yet",
+                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing yet"),
+            ),
+            attemptId = attemptId,
+            pending = true,
+        )
         Thread {
             // D38 amendment (2026-09-01 live-run finding, owner decision:
             // "isolate" — see DeviceKey class doc): the attester key alias
@@ -802,7 +1207,20 @@ abstract class MainActivity : AppCompatActivity() {
             val verified = verifiedRequest
             if (handoff == null || verified == null) {
                 Log.e(TAG, "M2 stage: pending handoff / verifiedRequest disappeared before zktag derivation — refusing (D38)")
-                runOnUiThread { emitReport(baseReport + "\nmint: FAILED — no verified request object to mint against (D38)") }
+                runOnUiThread {
+                    emitReport(
+                        baseReport + "\nmint: FAILED — no verified request object to mint against (D38)",
+                        ReportLog.DisclosureSummary(
+                            site = SITE_NO_HANDOFF,
+                            result = "Failed — the site's request disappeared before this could finish",
+                            chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                            sent = "nothing left this device",
+                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                        ),
+                        attemptId = attemptId,
+                    )
+                    showBlockingOutcomeDialog("No verified handoff request to mint against.", isAccessEstablishmentFailure = false)
+                }
                 return@Thread
             }
             // scope_domain comes from ONE source — the VERIFIED request's own
@@ -813,14 +1231,40 @@ abstract class MainActivity : AppCompatActivity() {
                 .getOrNull()
             if (scopeDomain == null) {
                 Log.e(TAG, "M2 stage: verified origin has no parseable host — refusing to mint")
-                runOnUiThread { emitReport(baseReport + "\nmint: FAILED — verified origin has no parseable host") }
+                runOnUiThread {
+                    emitReport(
+                        baseReport + "\nmint: FAILED — verified origin has no parseable host",
+                        ReportLog.DisclosureSummary(
+                            site = site,
+                            result = "Failed — could not identify the site's address",
+                            chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                            sent = "nothing left this device",
+                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                        ),
+                        attemptId = attemptId,
+                    )
+                    showBlockingOutcomeDialog("The verified handoff request's origin has no parseable host.", isAccessEstablishmentFailure = false)
+                }
                 return@Thread
             }
             val candidates = M0Probe.deriveCandidates(dg1File, null, null, domain = scopeDomain)
             val zktag = candidates["document_number"]
             if (zktag == null) {
                 Log.w(TAG, "M2 stage: no document_number field to derive zktag from (D9)")
-                runOnUiThread { emitReport(baseReport + "\nmint: FAILED — no document_number field to derive from (D9)") }
+                runOnUiThread {
+                    emitReport(
+                        baseReport + "\nmint: FAILED — no document_number field to derive from (D9)",
+                        ReportLog.DisclosureSummary(
+                            site = site,
+                            result = "Failed — this document type is not supported for site verification",
+                            chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                            sent = "nothing left this device",
+                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                        ),
+                        attemptId = attemptId,
+                    )
+                    showBlockingOutcomeDialog("This document has no document-number field to derive a zktag from.", isAccessEstablishmentFailure = false)
+                }
                 return@Thread
             }
             // origin is guaranteed non-null here for mode B (checked above,
@@ -831,18 +1275,42 @@ abstract class MainActivity : AppCompatActivity() {
                 DeviceKey.ensureKey(applicationContext, alias)
             } catch (e: Exception) {
                 Log.e(TAG, "M2 stage: DeviceKey.ensureKey threw", e)
-                runOnUiThread { emitReport(baseReport + "\nmint: FAILED — device key generation threw ${e.javaClass.simpleName}: ${e.message}") }
+                runOnUiThread {
+                    emitReport(
+                        baseReport + "\nmint: FAILED — device key generation threw ${e.javaClass.simpleName}: ${e.message}",
+                        ReportLog.DisclosureSummary(
+                            site = site,
+                            result = "Failed — could not create a device key for this site",
+                            chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                            sent = "nothing left this device",
+                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                        ),
+                        attemptId = attemptId,
+                    )
+                    showBlockingOutcomeDialog("Device key generation failed: ${e.javaClass.simpleName}: ${e.message}", isAccessEstablishmentFailure = false)
+                }
                 return@Thread
             }
-            runOnUiThread { promptAndMint(keyState, baseReport, zktag, scopeDomain) }
+            runOnUiThread { promptAndMint(keyState, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus) }
         }.start()
     }
 
-    private fun promptAndMint(keyState: DeviceKey.KeyState, baseReport: String, zktag: String, scopeDomain: String) {
+    private fun promptAndMint(keyState: DeviceKey.KeyState, baseReport: String, zktag: String, scopeDomain: String, site: String, attemptId: String, mode: PresentationMode, chipAuthStatus: M0Probe.ChipAuthStatus) {
         val sig = DeviceKey.initSignature(keyState)
         if (sig == null) {
             Log.w(TAG, "M2 stage: DeviceKey.initSignature returned null — no usable device key/signature")
-            emitReport(baseReport + "\nmint: FAILED — no usable device key/signature (see algorithm matrix in logcat)")
+            emitReport(
+                baseReport + "\nmint: FAILED — no usable device key/signature (see algorithm matrix in logcat)",
+                ReportLog.DisclosureSummary(
+                    site = site,
+                    result = "Failed — no usable device key or signature is available on this device",
+                    chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                    sent = "nothing left this device",
+                    shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                ),
+                attemptId = attemptId,
+            )
+            showBlockingOutcomeDialog("No usable device key or signature is available on this device.", isAccessEstablishmentFailure = false)
             return
         }
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
@@ -868,11 +1336,22 @@ abstract class MainActivity : AppCompatActivity() {
                     // [authorizedSig] later on another thread does not risk
                     // the auth window expiring the way a validity-duration
                     // key would.
-                    Thread { mintAndMaybeHandoff(keyState, authorizedSig, baseReport, zktag, scopeDomain) }.start()
+                    Thread { mintAndMaybeHandoff(keyState, authorizedSig, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus) }.start()
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    emitReport(baseReport + "\nmint: REFUSED — biometric/device-credential error $errorCode: $errString\nverdict: PASS (read only, no mint)")
+                    emitReport(
+                        baseReport + "\nmint: REFUSED — biometric/device-credential error $errorCode: $errString\nverdict: PASS (read only, no mint)",
+                        ReportLog.DisclosureSummary(
+                            site = site,
+                            result = "Cancelled — biometric/device-credential authorization did not complete",
+                            chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                            sent = "nothing left this device",
+                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                        ),
+                        attemptId = attemptId,
+                    )
+                    showBlockingOutcomeDialog("Biometric/device-credential authorization error $errorCode: $errString", isAccessEstablishmentFailure = false)
                 }
 
                 override fun onAuthenticationFailed() {
@@ -903,8 +1382,10 @@ abstract class MainActivity : AppCompatActivity() {
      *   here, so there is exactly one derivation per mint, not two that
      *   could drift apart.
      * @param scopeDomain likewise, the same verified-origin host already
-     *   used to derive [keyState]'s alias. */
-    private fun mintAndMaybeHandoff(keyState: DeviceKey.KeyState, signature: Signature, baseReport: String, zktag: String, scopeDomain: String) {
+     *   used to derive [keyState]'s alias.
+     * @param site likewise, [siteTitleFor] of the same verified origin —
+     *   the §6.2 item 16 (D46) log-entry title. */
+    private fun mintAndMaybeHandoff(keyState: DeviceKey.KeyState, signature: Signature, baseReport: String, zktag: String, scopeDomain: String, site: String, attemptId: String, mode: PresentationMode, chipAuthStatus: M0Probe.ChipAuthStatus) {
         // D38: a mode-B mint always has a pending, VERIFIED handoff by the
         // time it reaches here — continueAfterRead's D38 guard refuses
         // before this function is ever entered otherwise (no verified
@@ -915,7 +1396,20 @@ abstract class MainActivity : AppCompatActivity() {
         val verified = verifiedRequest
         if (handoff == null || verified == null) {
             Log.e(TAG, "M2 stage: reached mint with no pending handoff / verifiedRequest — refusing to proceed (D38)")
-            runOnUiThread { emitReport(baseReport + "\nmint: local signature OK, but handoff: REFUSED — no verified request object to mint against (D38)") }
+            runOnUiThread {
+                emitReport(
+                    baseReport + "\nmint: local signature OK, but handoff: REFUSED — no verified request object to mint against (D38)",
+                    ReportLog.DisclosureSummary(
+                        site = SITE_NO_HANDOFF,
+                        result = "Failed — the site's request disappeared before this could finish",
+                        chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                        sent = "nothing left this device",
+                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                    ),
+                    attemptId = attemptId,
+                )
+                showBlockingOutcomeDialog("No verified handoff request to mint against.", isAccessEstablishmentFailure = false)
+            }
             return
         }
         val threshold = 18
@@ -943,7 +1437,20 @@ abstract class MainActivity : AppCompatActivity() {
         val pubDer = DeviceKey.currentPublicKeyDer(keyState.alias)
         if (pubDer == null) {
             Log.e(TAG, "M2 stage: could not read the public key bytes for alias — refusing to mint (D38 evidence requires pubkey)")
-            runOnUiThread { emitReport(baseReport + "\nmint: FAILED — could not read the device key's public key bytes (D38 evidence requires pubkey)") }
+            runOnUiThread {
+                emitReport(
+                    baseReport + "\nmint: FAILED — could not read the device key's public key bytes (D38 evidence requires pubkey)",
+                    ReportLog.DisclosureSummary(
+                        site = site,
+                        result = "Failed — could not read your device key to sign the proof",
+                        chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                        sent = "nothing left this device",
+                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                    ),
+                    attemptId = attemptId,
+                )
+                showBlockingOutcomeDialog("Could not read the device key's public key bytes.", isAccessEstablishmentFailure = false)
+            }
             return
         }
         val message = EvidenceSigner.messageFor(keyState.algorithm, claim, nonce, scopeDomain, zktag)
@@ -1005,40 +1512,187 @@ abstract class MainActivity : AppCompatActivity() {
         // D38: handoff is guaranteed non-null here (guarded above) — mode B
         // always has a pending handoff to answer now, so this is no longer
         // conditional the way it was pre-D38.
+        //
+        // §6.2 item 16 (D46): [deliveryResult] tracks which of the four
+        // delivery sub-outcomes actually happened, so the log entry's
+        // Result line is accurate per outcome — the local signature always
+        // succeeds by the time we reach this block, but "sent" only means
+        // the site actually received it (HTTP 2xx). A transport failure
+        // must never be reported as "Verified".
+        var deliveryResult: DeliveryResult
         try {
             val presentation = HandoffClient.buildPresentation("B", claim, challenge, zktag, listOf(evidence))
             val responseUri = requestObject.optString("response_uri", "").ifEmpty { null }
             if (responseUri == null) {
                 Log.w(TAG, "M2 stage: handoff request object carries no top-level response_uri — cannot direct_post")
                 report += "handoff: FAILED — request object carries no response_uri\n"
+                deliveryResult = DeliveryResult.NoResponseUri
             } else {
                 val state = if (requestObject.has("state")) requestObject.getString("state") else null
                 Log.i(TAG, "M2 stage: handoff direct_post -> $responseUri (state_present=${state != null})")
                 val result = HandoffClient.postDirectPost(responseUri, state, presentation)
                 if (result.httpStatus !in 200..299) {
                     Log.w(TAG, "M2 stage: handoff direct_post response NON-2xx http_status=${result.httpStatus} body=${result.body}")
+                    deliveryResult = DeliveryResult.Rejected(result.httpStatus)
                 } else {
                     Log.i(TAG, "M2 stage: handoff direct_post response http_status=${result.httpStatus} body=${result.body}")
+                    deliveryResult = DeliveryResult.Accepted
                 }
                 report += "handoff: direct_post http_status=${result.httpStatus} -> ${result.body}\n"
             }
         } catch (e: Exception) {
             Log.e(TAG, "M2 stage: handoff direct_post FAILED", e)
             report += "handoff: FAILED ${e.javaClass.simpleName}: ${e.message}\n"
+            deliveryResult = DeliveryResult.TransportFailed
         }
         // Handoff has now definitively completed or failed — clear on the
         // main thread (item 6 lifecycle discipline). verifiedRequest is
         // cleared in lockstep — it has no meaning without a pendingHandoff.
+        // 2026-09-01 real-device fix ("fix 3"): this is what makes a spent
+        // session actually GO AWAY — a single-use challenge/nonce that
+        // reached direct_post (Accepted, Rejected, or the site simply never
+        // got it — NoResponseUri/TransportFailed) cannot be meaningfully
+        // resubmitted by THIS app either way (there is no retry UI), so
+        // clearing on every one of the four outcomes — not only Accepted —
+        // is the safer choice: it never leaves the mode locked to a session
+        // this app has already given up on, which is exactly the "invites
+        // another document tap that cannot succeed" defect from the owner's
+        // Pixel 6a run.
         runOnUiThread {
             pendingHandoff = null
             verifiedRequest = null
-            setModeGroupEnabled(true)
+            refreshModeStatus()
         }
         report += "\nverdict: PASS (minted)"
-        runOnUiThread { emitReport(report) }
+
+        // §6.2 item 16 (D46/D48): Sent/Shared describe what a successful
+        // LOCAL sign produces — this is true regardless of delivery outcome,
+        // the device did sign a claim over the site's requested predicate
+        // and nothing else. Only the Result line (and, for a delivery
+        // failure, a corrected Sent/Shared line) changes per
+        // [deliveryResult], so a transport failure is never reported as a
+        // success.
+        val identity = if (keyState.reusedExistingKey) {
+            // D47/D48, owner-confirmed verbatim — "only here" is
+            // load-bearing (D38/D39 per-(origin,zktag) key isolation: this
+            // site recognizes the returning user, no other site can). MUST
+            // NOT be simplified/shortened out.
+            "known — recognized only here from previous visit"
+        } else {
+            "new — minted fresh for this site"
+        }
+        // §6.2 item 16 (D48): the Shared line is a QUESTION -> ANSWER record
+        // of the SIGNED claim, read from the SAME [claim] map that gets
+        // canonicalized and signed above (`claim["threshold"]`,
+        // `claim["over_threshold"]`) — never a separate constant, never the
+        // literal 18 duplicated here. This is the correct SOURCE even though
+        // D48 ultimately wants the threshold read from the verified request
+        // object: nothing in the request object or the app carries a real
+        // threshold or a computed over/under answer today (escalated and
+        // owner-acknowledged; tracked as an open PRD question, not this
+        // round's job to close) — the signed claim map is the single source
+        // of truth for what was ACTUALLY SENT, so this rendering is a
+        // faithful, by-construction record of the disclosure today, and
+        // becomes correct automatically the moment a real threshold/answer
+        // exist, with no change to this rendering code.
+        val disclosedThreshold = claim["threshold"]
+        val disclosedAnswer = claim["over_threshold"]
+        // §6.2 item 16 (D48): the predicate label is "age > <N>" — the
+        // owner's exact shape, so this line and the Sent line below can
+        // never drift from each other (both built from the same
+        // disclosedPredicate string, sourced from the same claim map).
+        val disclosedPredicate = "age > $disclosedThreshold"
+        val sharedClaim = ReportLog.DisclosureSummary.Claim(predicate = disclosedPredicate, answer = "$disclosedAnswer")
+        val sentClaimLine = "a site-only pseudonym + a signed claim ($disclosedPredicate: $disclosedAnswer)"
+        // §6.2 item 16 (D24, D48): stated in every claim, per D24's bare-mode
+        // requirement — this app's evidence plugs (sig-ed25519/1,
+        // sig-p256/1) prove WHO signed the claim (the device/key), never
+        // that the claim's content is true; no ZK circuit ties it to the
+        // document. Subordinate technical note, not part of the
+        // plain-language block.
+        val claimProofNote = "claim_proof: self-asserted by the device — not independently proven (D24)"
+        val summary = when (deliveryResult) {
+            is DeliveryResult.Accepted -> ReportLog.DisclosureSummary(
+                site = site,
+                result = "Verified — the site accepted you",
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = sentClaimLine,
+                shared = ReportLog.DisclosureSummary.Shared.Disclosed(listOf(sharedClaim)),
+                identity = identity,
+                technicalNote = claimProofNote,
+            )
+            is DeliveryResult.Rejected -> ReportLog.DisclosureSummary(
+                site = site,
+                result = "Signed OK, but the site rejected the response (HTTP ${deliveryResult.httpStatus})",
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = "a signed proof was prepared, but the site did not accept it",
+                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing the site kept — it rejected the response"),
+                identity = identity,
+                technicalNote = claimProofNote,
+            )
+            DeliveryResult.NoResponseUri -> ReportLog.DisclosureSummary(
+                site = site,
+                result = "Signed OK, but there was no site address to send it to",
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = "nothing reached the site",
+                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                identity = identity,
+                technicalNote = claimProofNote,
+            )
+            DeliveryResult.TransportFailed -> ReportLog.DisclosureSummary(
+                site = site,
+                result = "Signed OK, but sending the result to the site failed",
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = "nothing reached the site — delivery failed",
+                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                identity = identity,
+                technicalNote = claimProofNote,
+            )
+        }
+        runOnUiThread {
+            emitReport(report, summary, attemptId = attemptId)
+            // 2026-09 real-device fix ("confirm success too" — the owner's
+            // three follow-up scans were all genuine successes with nothing
+            // telling him to go back to the browser): ONLY a genuinely
+            // accepted delivery confirms itself with a blocking modal — see
+            // MintConfirmation's doc for why the other three DeliveryResult
+            // outcomes must never reach here. Minimal, owner-specified
+            // wording: just the outcome, nothing this dialog's own log
+            // entry (right above) already says in full. Dismissal follows
+            // the SAME plain-reset branch every other terminal outcome
+            // uses — no separate post-success policy.
+            if (MintConfirmation.confirmsSuccess(deliveryAccepted = deliveryResult is DeliveryResult.Accepted)) {
+                showBlockingOutcomeDialog(MINT_CONFIRMED_MESSAGE, isAccessEstablishmentFailure = false)
+            }
+        }
+    }
+
+    /** §6.2 item 16 (D46): which of the four ways `mintAndMaybeHandoff`'s
+     * `direct_post` attempt can end, so the log entry's Result line is
+     * accurate per outcome rather than a fixed "Verified" regardless of
+     * whether the site actually received anything. */
+    private sealed class DeliveryResult {
+        object Accepted : DeliveryResult() // HTTP 2xx
+        data class Rejected(val httpStatus: Int) : DeliveryResult() // non-2xx
+        object NoResponseUri : DeliveryResult()
+        object TransportFailed : DeliveryResult() // network/other exception
     }
 
     // -------------------------------------------------------- masterlist UI
+    /** §6.2 item 16 (D46): the debug-only probe buttons below are NOT a
+     * document scan — no site is involved and nothing is ever disclosed to
+     * one — so they get this fixed, minimal summary rather than the
+     * SITE_NO_HANDOFF label's scan-shaped semantics or an invented site
+     * name. [failed] is whether the probe's own text contains a failure
+     * marker, read from the SAME string already built for [reportView] —
+     * never a second judgment about what happened. */
+    private fun diagnosticSummary(failed: Boolean, label: String) = ReportLog.DisclosureSummary(
+        site = SITE_NO_HANDOFF,
+        result = if (failed) "Diagnostic failed — $label" else "Diagnostic OK — $label",
+        sent = "nothing left this device",
+        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+    )
+
     private fun runMasterlistProbe() {
         val log = StringBuilder("\n===== MASTERLIST PROBE =====\n")
         try {
@@ -1065,7 +1719,8 @@ abstract class MainActivity : AppCompatActivity() {
             log.append("PROBE FAILED: ${e.javaClass.simpleName}: ${e.message}\n")
         }
         log.append("===== END =====")
-        runOnUiThread { emitReport(log.toString()) }
+        val text = log.toString()
+        runOnUiThread { emitReport(text, diagnosticSummary(failed = text.contains("PROBE FAILED") || text.contains("INVALID RUN"), label = "masterlist checks")) }
     }
 
     /** Debug-only, zero-tap: exercises [DeviceKey.ensureKey]'s generate ->
@@ -1100,7 +1755,8 @@ abstract class MainActivity : AppCompatActivity() {
             log.append("PROBE FAILED: ${e.javaClass.simpleName}: ${e.message}\n")
         }
         log.append("===== END =====")
-        runOnUiThread { emitReport(log.toString()) }
+        val text = log.toString()
+        runOnUiThread { emitReport(text, diagnosticSummary(failed = text.contains("PROBE FAILED") || text.contains("MISMATCH") || text.contains("UNEXPECTED"), label = "device key self-test")) }
     }
 
     private fun convertDate(input: String?): String? {
@@ -1127,5 +1783,33 @@ abstract class MainActivity : AppCompatActivity() {
     companion object {
         private val TAG = MainActivity::class.java.simpleName
         private const val STATE_LAST_REPORT = "m2_last_report"
+        private const val STATE_LOG_ENTRIES = "m2_log_entries"
+        // §6.2 item 16 (D46): the exact, owner-specified fixed label for a
+        // log entry with no verified handoff — never a blank field or a
+        // fabricated origin.
+        private const val SITE_NO_HANDOFF = "Local scan (no site)"
+        // 2026-09-01 real-device fix ("fix 3"), owner's words for the intent
+        // ("verifier session expired or something") — exact user-facing copy,
+        // not yet owner-approved (report requested back explicitly). Used by
+        // both the up-front check ([lockModeAndArm]) and the belt-and-
+        // suspenders re-check right before minting ([continueAfterRead]), so
+        // the two can never say something different for the same condition.
+        private const val SESSION_EXPIRED_MESSAGE = "Verification session expired — reopen the link from the site."
+        // 2026-09 real-device fix ("fix — a hand tremor should not cost a
+        // retype"), bucket 2 of FailureTransition's three-bucket rule. Not
+        // yet owner-approved (report requested back explicitly): tells the
+        // user what to DO, not just that something failed.
+        private const val TRANSIENT_READ_FAILURE_MESSAGE = "Reading was interrupted — hold the document still against your phone and try again."
+        // 2026-09 real-device fix ("confirm success too"). Owner-specified
+        // shape: minimal, just the outcome — no restated site/predicate/
+        // identity detail (that already lives in the log entry and
+        // report). Not yet owner-approved (report requested back
+        // explicitly): reuses the exact Result-line wording for this same
+        // outcome, so there is only one phrase to approve, not two.
+        // Owner-supplied wording, deliberately DIFFERENT from the Result
+        // line for this same outcome ("Verified — the site accepted you")
+        // — the two are not meant to match; do not propagate one into the
+        // other.
+        private const val MINT_CONFIRMED_MESSAGE = "ID scanned successfully"
     }
 }

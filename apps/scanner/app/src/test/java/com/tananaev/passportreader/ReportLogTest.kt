@@ -1,0 +1,510 @@
+package com.tananaev.passportreader
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * §6.2 item 16 (D44/D45/D46/D48) — pure append/clear/restore/render
+ * semantics for [ReportLog], independent of the Android UI plumbing around
+ * it. `MainActivity` wiring (single `emitReport` write path, and where the
+ * claim/predicate data is actually sourced from — see that file's own doc)
+ * is not re-tested here; this suite only pins how [ReportLog] renders
+ * whatever [ReportLog.DisclosureSummary] it is given.
+ */
+class ReportLogTest {
+
+    private val notDisclosedNothing = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing")
+
+    private fun summary(
+        site: String = "127.0.0.1:8787",
+        result: String = "Verified — the site accepted you",
+        sent: String = "a site-only pseudonym + a signed claim (age > 18: true)",
+        shared: ReportLog.DisclosureSummary.Shared = ReportLog.DisclosureSummary.Shared.Disclosed(
+            listOf(ReportLog.DisclosureSummary.Claim("age > 18", "true")),
+        ),
+        identity: String? = "new — minted fresh for this site",
+        chipAuthenticity: String? = null,
+    ) = ReportLog.DisclosureSummary(site, result, sent, shared, identity, chipAuthenticity = chipAuthenticity)
+
+    @Test
+    fun `append renders a title line with timestamp and site, then the summary, then the technical block`() {
+        val log = ReportLog()
+        log.append("mode: B\nmint: OK\nverdict: PASS (minted)", summary(), nowMillis = 0L) // epoch — TZ-dependent, only structure asserted
+        val entries = log.entriesSnapshot()
+        assertEquals(1, entries.size)
+        val entry = entries[0]
+        assertTrue("title line has a timestamp and the site", entry.lines()[0].matches(Regex("""^\d{2}:\d{2}:\d{2} · 127\.0\.0\.1:8787$""")))
+        assertTrue(entry.contains("Result    Verified — the site accepted you"))
+        assertTrue(entry.contains("Sent      a site-only pseudonym + a signed claim (age > 18: true)"))
+        assertTrue(entry.contains("Shared    age > 18: true"))
+        assertTrue(entry.contains("Identity  new — minted fresh for this site"))
+        assertTrue("technical block is present and subordinated", entry.contains("▸ technical:"))
+        assertTrue("technical block carries the exact report text, not a curated subset", entry.contains("  mode: B"))
+        assertTrue(entry.contains("  mint: OK"))
+        assertTrue(entry.contains("  verdict: PASS (minted)"))
+    }
+
+    @Test
+    fun `identity line is omitted when the summary carries none`() {
+        val log = ReportLog()
+        log.append("verdict: FAIL", summary(identity = null), nowMillis = 0L)
+        assertFalse(log.entriesSnapshot()[0].contains("Identity"))
+    }
+
+    @Test
+    fun `a mode-A no-site entry uses the fixed label and reports nothing sent`() {
+        val log = ReportLog()
+        log.append(
+            "mode: A\nverdict: PASS (read)",
+            summary(
+                site = "Local scan (no site)",
+                result = "Read OK — nothing sent",
+                sent = "nothing left this device",
+                shared = notDisclosedNothing,
+                identity = null,
+            ),
+            nowMillis = 0L,
+        )
+        val entry = log.entriesSnapshot()[0]
+        assertTrue(entry.lines()[0].endsWith("· Local scan (no site)"))
+        assertTrue(entry.contains("Result    Read OK — nothing sent"))
+        assertTrue(entry.contains("Sent      nothing left this device"))
+        assertTrue(entry.contains("Shared    nothing"))
+        assertFalse(entry.contains("Identity"))
+    }
+
+    @Test
+    fun `a failure entry never claims success`() {
+        val log = ReportLog()
+        log.append(
+            "verdict: FAIL\nfailure: IOException: timeout",
+            summary(
+                site = "Local scan (no site)",
+                result = "Read failed — could not establish access to the document",
+                sent = "nothing left this device",
+                shared = notDisclosedNothing,
+                identity = null,
+            ),
+            nowMillis = 0L,
+        )
+        val entry = log.entriesSnapshot()[0]
+        assertTrue(entry.contains("Result    Read failed"))
+        assertFalse("a failed entry must never say Verified/PASS in its plain-language Result line", entry.lines().first { it.startsWith("Result") }.contains("Verified"))
+    }
+
+    // §6.2 item 16 (D45): successive scans accumulate — this is the specific
+    // behaviour D45 restored after the literal D44 clear-on-wipe rule was
+    // found to wipe the log on its own success path (see ReportLog's class
+    // doc). append() itself never clears; MainActivity is what must not
+    // call clear() from wipeSession any more (verified there, not here).
+    @Test
+    fun `successive scans accumulate, oldest first, without clearing between them`() {
+        val log = ReportLog()
+        log.append("scan 1 report", summary(site = "site-a.test", result = "Read OK — nothing sent", shared = notDisclosedNothing), nowMillis = 0L)
+        log.append("scan 2 report", summary(site = "site-b.test", result = "Verified — the site accepted you"), nowMillis = 1000L)
+        log.append("scan 3 report", summary(site = "Local scan (no site)", result = "Read failed — the document could not be read", shared = notDisclosedNothing), nowMillis = 2000L)
+        val entries = log.entriesSnapshot()
+        assertEquals(3, entries.size)
+        assertTrue(entries[0].contains("site-a.test") && entries[0].contains("scan 1 report"))
+        assertTrue(entries[1].contains("site-b.test") && entries[1].contains("scan 2 report"))
+        assertTrue(entries[2].contains("Local scan (no site)") && entries[2].contains("scan 3 report"))
+    }
+
+    // §6.2 item 16 (D48): Shared is a QUESTION -> ANSWER record of the
+    // actual signed claim — predicate label "age > <threshold>", answer
+    // ALWAYS the literal boolean (owner: "true/false always", never
+    // "yes"/"no") — sourced by MainActivity from the signed claim map; this
+    // test pins the RENDERING of that already-sourced Claim, matching
+    // D48's worked value (threshold=18, over_threshold=true -> "age > 18: true").
+    @Test
+    fun `a successful mint entry renders the age-gt-N claim as predicate colon boolean, plus the D24 claim-proof technical note`() {
+        val log = ReportLog()
+        log.append(
+            "mode: B\nmint: OK\nverdict: PASS (minted)",
+            ReportLog.DisclosureSummary(
+                site = "127.0.0.1:8787",
+                result = "Verified — the site accepted you",
+                sent = "a site-only pseudonym + a signed claim (age > 18: true)",
+                shared = ReportLog.DisclosureSummary.Shared.Disclosed(listOf(ReportLog.DisclosureSummary.Claim("age > 18", "true"))),
+                identity = "new — minted fresh for this site",
+                technicalNote = "claim_proof: self-asserted by the device — not independently proven (D24)",
+            ),
+            nowMillis = 0L,
+        )
+        val entry = log.entriesSnapshot()[0]
+        assertTrue("Shared states the actual predicate and its actual boolean answer", entry.contains("Shared    age > 18: true"))
+        assertTrue("the existing negation line is preserved, after the claim", entry.contains("Not your name, date of birth, document number, or nationality."))
+        assertTrue("the negation line comes strictly after the claim line", entry.indexOf("age > 18: true") < entry.indexOf("Not your name"))
+        assertTrue("the D24 claim-proof note is present, subordinate, under the technical block", entry.contains("▸ technical:"))
+        assertTrue(entry.substringAfter("▸ technical:").contains("claim_proof: self-asserted by the device — not independently proven (D24)"))
+    }
+
+    // A different threshold/answer must render as-is, never coerced toward
+    // "18"/"true" — proves the rendering is a faithful pass-through of
+    // whatever DisclosureSummary carries, not a hardcoded template. Also
+    // proves the boolean answer is never translated to "yes"/"no".
+    @Test
+    fun `Shared renders whatever predicate and boolean answer it is given, not a fixed age-18-true template`() {
+        val log = ReportLog()
+        log.append(
+            "mode: B\nmint: OK",
+            ReportLog.DisclosureSummary(
+                site = "site-c.test",
+                result = "Verified — the site accepted you",
+                sent = "a site-only pseudonym + a signed claim (age > 21: false)",
+                shared = ReportLog.DisclosureSummary.Shared.Disclosed(listOf(ReportLog.DisclosureSummary.Claim("age > 21", "false"))),
+                identity = "new — minted fresh for this site",
+            ),
+            nowMillis = 0L,
+        )
+        val entry = log.entriesSnapshot()[0]
+        assertTrue(entry.contains("Shared    age > 21: false"))
+        assertFalse(entry.contains("age > 18"))
+        assertFalse("boolean answer is never translated to yes/no", entry.contains(": yes") || entry.contains(": no"))
+    }
+
+    // §6.2 item 16 (D48/Q34): the reshape must generalize to more than one
+    // claim without any production code constructing one today — this list
+    // is built DIRECTLY IN THE TEST, proving the renderer (not production
+    // logic) handles multiple predicates, one per line, in order, with the
+    // negation line still coming last exactly once.
+    @Test
+    fun `a multi-claim list renders one predicate-answer pair per line, negation line last`() {
+        val log = ReportLog()
+        log.append(
+            "mode: C\nmint: OK",
+            ReportLog.DisclosureSummary(
+                site = "site-multi.test",
+                result = "Verified — the site accepted you",
+                sent = "a site-only pseudonym + a signed claim",
+                shared = ReportLog.DisclosureSummary.Shared.Disclosed(
+                    listOf(
+                        ReportLog.DisclosureSummary.Claim("age > 18", "true"),
+                        ReportLog.DisclosureSummary.Claim("expiry > 3 months", "false"),
+                    ),
+                ),
+                identity = "new — minted fresh for this site",
+            ),
+            nowMillis = 0L,
+        )
+        val entry = log.entriesSnapshot()[0]
+        val sharedLine = entry.lines().first { it.startsWith("Shared") }
+        val continuationLine = entry.lines()[entry.lines().indexOf(sharedLine) + 1]
+        val negationLine = entry.lines()[entry.lines().indexOf(sharedLine) + 2]
+        assertEquals("Shared    age > 18: true", sharedLine)
+        assertEquals("          expiry > 3 months: false", continuationLine)
+        assertTrue("negation line comes after every claim, exactly once", negationLine.trim() == "Not your name, date of birth, document number, or nationality.")
+        assertEquals(1, Regex("Not your name").findAll(entry).count())
+    }
+
+    // §6.2 item 16 (D48): an empty disclosure — NotDisclosed — MUST NOT
+    // render an empty "Shared" label or a stray colon; it renders the
+    // supplied plain-language reason and nothing else (no negation line,
+    // no claim syntax).
+    @Test
+    fun `NotDisclosed renders the plain reason with no stray label, colon, or negation line`() {
+        val log = ReportLog()
+        log.append(
+            "mint_gate: NOT MET — evidence: [] (D27)",
+            summary(sent = "nothing left this device", shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"), identity = null),
+            nowMillis = 0L,
+        )
+        val entry = log.entriesSnapshot()[0]
+        val sharedLine = entry.lines().first { it.startsWith("Shared") }
+        assertEquals("Shared    nothing", sharedLine)
+        assertFalse("no stray colon on a non-disclosing entry", sharedLine.contains(":"))
+        assertFalse("no negation line when nothing was disclosed", entry.contains("Not your name"))
+        assertFalse("no claim syntax leaks onto a non-disclosing entry", entry.contains("age >"))
+    }
+
+    // A per-outcome NotDisclosed reason other than the literal word
+    // "nothing" (e.g. a delivery rejection) must still render plainly, with
+    // no claim and no negation line — proves NotDisclosed is not hardcoded
+    // to one fixed string.
+    @Test
+    fun `NotDisclosed renders a different plain reason verbatim, still with no claim or negation line`() {
+        val log = ReportLog()
+        log.append(
+            "handoff: direct_post http_status=409",
+            summary(
+                sent = "a signed proof was prepared, but the site did not accept it",
+                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing the site kept — it rejected the response"),
+                identity = "new — minted fresh for this site",
+            ),
+            nowMillis = 0L,
+        )
+        val entry = log.entriesSnapshot()[0]
+        assertTrue(entry.contains("Shared    nothing the site kept — it rejected the response"))
+        assertFalse(entry.contains("Not your name"))
+        assertFalse(entry.contains("age >"))
+    }
+
+    // §6.2 item 16 (D47/D48): the two owner-confirmed Identity strings,
+    // verbatim — "only here" is load-bearing in the reused-key string and
+    // MUST NOT be simplified out; the spelling is "recognized" (z).
+    @Test
+    fun `Identity renders the two owner-confirmed strings verbatim`() {
+        val log = ReportLog()
+        log.append("mint: OK (new key)", summary(identity = "new — minted fresh for this site"), nowMillis = 0L)
+        log.append("mint: OK (reused key)", summary(identity = "known — recognized only here from previous visit"), nowMillis = 1000L)
+        val entries = log.entriesSnapshot()
+        assertTrue(entries[0].contains("Identity  new — minted fresh for this site"))
+        assertTrue(entries[1].contains("Identity  known — recognized only here from previous visit"))
+        assertTrue("\"only here\" is load-bearing per D48, must not be dropped", entries[1].contains("only here"))
+        assertFalse("owner's spelling is \"recognized\" with a z, not \"recognised\"", entries[1].contains("recognised"))
+    }
+
+    @Test
+    fun `clear empties the log`() {
+        // Pins the clearing primitive itself, independent of whether any
+        // caller invokes it — as of D45, MainActivity's wipeSession() no
+        // longer does.
+        val log = ReportLog()
+        log.append("a report", summary(), nowMillis = 0L)
+        assertEquals(1, log.entriesSnapshot().size)
+        log.clear()
+        assertTrue(log.entriesSnapshot().isEmpty())
+        assertEquals("", log.rendered())
+    }
+
+    @Test
+    fun `restore replaces entries verbatim without re-rendering`() {
+        val log = ReportLog()
+        log.append("stale entry", summary(), nowMillis = 0L)
+        val saved = listOf("09:00:00 · site-a.test\n\nResult    restored one", "09:00:05 · site-b.test\n\nResult    restored two")
+        log.restore(saved)
+        assertEquals(saved, log.entriesSnapshot())
+    }
+
+    // §6.2 item 16 (2026-09-01 real-device fix, "fix 1"): the log view must
+    // show the NEWEST entry first — [entriesSnapshot] (storage/D35 restore
+    // shape) stays oldest-first; only [rendered] (display) is reversed.
+    @Test
+    fun `rendered shows the newest entry first, joined with a blank line`() {
+        val log = ReportLog()
+        log.append("alpha", summary(site = "alpha.test"), nowMillis = 0L)
+        log.append("beta", summary(site = "beta.test"), nowMillis = 1000L)
+        log.append("gamma", summary(site = "gamma.test"), nowMillis = 2000L)
+        val rendered = log.rendered()
+        val gammaIndex = rendered.indexOf("gamma.test")
+        val betaIndex = rendered.indexOf("beta.test")
+        val alphaIndex = rendered.indexOf("alpha.test")
+        assertTrue("newest (gamma) renders before beta", gammaIndex in 0 until betaIndex)
+        assertTrue("beta renders before oldest (alpha)", betaIndex < alphaIndex)
+        assertTrue(rendered.contains("\n\n"))
+    }
+
+    // §6.2 item 16 (2026-09-01, second real-device fix — "one point bigger,
+    // if it would remain light"): the title line size bump.
+    //
+    // NOT TESTED HERE, and deliberately: `rendered(titleSizePx = ...)`
+    // builds an `android.text.SpannableStringBuilder`, and this module's
+    // plain-JVM unit-test sandbox (`unitTests.isReturnDefaultValues = true`
+    // in build.gradle.kts) makes that class a no-op stub — empirically
+    // confirmed while building this: `SpannableStringBuilder("x").toString()`
+    // returns `null` and `.length` returns `0` under this sandbox, so a
+    // test that called `rendered(titleSizePx = N)` and asserted on its
+    // content would not be exercising real behaviour, it would be
+    // asserting on stub defaults — worse than no test, since it could
+    // "pass" for the wrong reason or fail for a reason unrelated to a real
+    // regression. What IS real and IS tested below is the pure
+    // [ReportLog.titleLineRanges] computation `rendered` uses to decide
+    // WHERE to apply the span; that whichever exists (span or no span),
+    // `rendered()`'s content contract (unstyled call = plain String,
+    // #verified by every other test in this file) is unaffected, since the
+    // styled path only ADDS a span over an already-correct string it never
+    // otherwise mutates (see `rendered`'s implementation — it builds the
+    // SpannableStringBuilder from the exact same `joined` string the plain
+    // path returns). Actual on-screen styling needs a real device or an
+    // instrumented/Robolectric test, neither of which this suite runs.
+
+    @Test
+    fun `titleLineRanges - a single entry's range covers exactly its title line, not the body`() {
+        val entry = "09:00:00 · site-a.test" + "\n\n" + "Result    Verified — the site accepted you"
+        val ranges = ReportLog.titleLineRanges(listOf(entry))
+        assertEquals(1, ranges.size)
+        val range = ranges[0]
+        assertEquals("09:00:00 · site-a.test", entry.substring(range.first, range.last + 1))
+        assertFalse("the range must not bleed into the body", entry.substring(range.first, range.last + 1).contains("Result"))
+    }
+
+    @Test
+    fun `titleLineRanges - multiple entries, each range lands on the correct title within the joined text`() {
+        val entries = listOf(
+            "09:00:02 · site-b.test" + "\n\n" + "Result    second",
+            "09:00:01 · site-a.test" + "\n\n" + "Result    first",
+        )
+        val joined = entries.joinToString("\n\n")
+        val ranges = ReportLog.titleLineRanges(entries)
+        assertEquals(2, ranges.size)
+        assertEquals("09:00:02 · site-b.test", joined.substring(ranges[0].first, ranges[0].last + 1))
+        assertEquals("09:00:01 · site-a.test", joined.substring(ranges[1].first, ranges[1].last + 1))
+    }
+
+    @Test
+    fun `titleLineRanges - empty entry list yields no ranges`() {
+        assertTrue(ReportLog.titleLineRanges(emptyList()).isEmpty())
+    }
+
+    // Storage order — what onSaveInstanceState persists and restores across
+    // Activity recreation (D35) — MUST stay oldest-first even though display
+    // is now reversed; a round-trip through entriesSnapshot()/restore() must
+    // keep coming back byte-identical in the SAME (oldest-first) order.
+    @Test
+    fun `entriesSnapshot stays oldest first and round-trips through restore unchanged`() {
+        val log = ReportLog()
+        log.append("alpha", summary(site = "alpha.test"), nowMillis = 0L)
+        log.append("beta", summary(site = "beta.test"), nowMillis = 1000L)
+        val snapshot = log.entriesSnapshot()
+        assertTrue("storage order is oldest first", snapshot[0].contains("alpha.test") && snapshot[1].contains("beta.test"))
+
+        val restored = ReportLog()
+        restored.restore(snapshot)
+        assertEquals(snapshot, restored.entriesSnapshot())
+        // and the restored log still displays newest-first, same as the original
+        assertTrue(restored.rendered().indexOf("beta.test") < restored.rendered().indexOf("alpha.test"))
+    }
+
+    // §6.2 item 16 (2026-09-01 real-device fix, "fix 2" — the stale
+    // "In progress" entry): a mint attempt's terminal outcome must REPLACE
+    // its own in-progress entry, not append a second one — one scan, one
+    // entry.
+    @Test
+    fun `a terminal outcome replaces its own in-progress entry — one attempt, one entry`() {
+        val log = ReportLog()
+        log.append(
+            "mode: B\nmint_gate: MET",
+            summary(result = "In progress — waiting for you to authorize with biometrics or a device PIN", sent = "nothing yet", shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing yet")),
+            attemptId = "attempt-1",
+            pending = true,
+            nowMillis = 0L,
+        )
+        assertEquals(1, log.entriesSnapshot().size)
+        assertTrue(log.entriesSnapshot()[0].contains("In progress"))
+
+        log.append(
+            "mode: B\nmint: OK\nverdict: PASS (minted)",
+            summary(),
+            attemptId = "attempt-1",
+            nowMillis = 5000L,
+        )
+        val entries = log.entriesSnapshot()
+        assertEquals("the terminal outcome REPLACED the pending entry, never appended a second one", 1, entries.size)
+        assertTrue(entries[0].contains("Verified — the site accepted you"))
+        assertFalse("the stale In progress text is gone", entries[0].contains("In progress"))
+    }
+
+    // A scan interrupted mid-flight (app backgrounded/killed before the
+    // terminal outcome ever arrives) must NOT be silently erased — its
+    // "In progress" entry keeps showing, since nothing here ever REMOVES an
+    // entry, only replaces one already known to be superseded.
+    @Test
+    fun `an in-progress entry with no terminal outcome still shows`() {
+        val log = ReportLog()
+        log.append(
+            "mode: B\nmint_gate: MET",
+            summary(result = "In progress — waiting for you to authorize with biometrics or a device PIN", sent = "nothing yet", shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing yet")),
+            attemptId = "attempt-interrupted",
+            pending = true,
+            nowMillis = 0L,
+        )
+        // A later, UNRELATED entry (a different attempt, or none at all —
+        // e.g. a diagnostic probe) must not clobber the interrupted one.
+        log.append("mode: A\nverdict: PASS (read)", summary(shared = notDisclosedNothing), nowMillis = 1000L)
+        val entries = log.entriesSnapshot()
+        assertEquals(2, entries.size)
+        assertTrue("the interrupted attempt's In progress entry survives, untouched", entries[0].contains("In progress"))
+    }
+
+    // Two DIFFERENT attempt ids must never be confused with each other —
+    // an unrelated report (no attemptId, e.g. a probe button) between a
+    // pending entry and its real terminal outcome must not accidentally
+    // replace the pending entry.
+    @Test
+    fun `an unrelated entry between a pending entry and its resolution does not replace the pending entry`() {
+        val log = ReportLog()
+        log.append(
+            "mode: B\nmint_gate: MET",
+            summary(result = "In progress — waiting for you to authorize with biometrics or a device PIN", shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing yet")),
+            attemptId = "attempt-2",
+            pending = true,
+            nowMillis = 0L,
+        )
+        log.append("===== MASTERLIST PROBE =====", summary(site = "Local scan (no site)", shared = notDisclosedNothing), nowMillis = 500L) // no attemptId — a probe
+        assertEquals(2, log.entriesSnapshot().size)
+
+        log.append("mode: B\nmint: OK", summary(), attemptId = "attempt-2", nowMillis = 5000L)
+        val entries = log.entriesSnapshot()
+        assertEquals("the probe appended; the terminal outcome replaced ONLY attempt-2's entry", 2, entries.size)
+        assertTrue(entries[0].contains("Verified — the site accepted you"))
+        assertTrue(entries[1].contains("MASTERLIST PROBE"))
+    }
+
+    // §6.2 item 16 (2026-09 real-device fix, "chip status in the plain
+    // block"): renders as a label+value line, same shape as
+    // Result/Sent/Shared/Identity, placed right after Result. (A `Mode`
+    // line was here too — owner decision removed it as redundant with
+    // Sent/Shared/Identity; there is no DisclosureSummary.mode field any
+    // more, see that class's doc.)
+
+    @Test
+    fun `Chip auth renders as a label-value line right after Result`() {
+        val log = ReportLog()
+        log.append(
+            "mode: B\nchip_auth (D21 payload field): passed",
+            summary(chipAuthenticity = "Verified — this document's chip proved it is genuine"),
+            nowMillis = 0L,
+        )
+        val entry = log.entriesSnapshot()[0]
+        val lines = entry.lines()
+        val resultIndex = lines.indexOfFirst { it.startsWith("Result") }
+        assertEquals("Chip auth Verified — this document's chip proved it is genuine", lines[resultIndex + 1])
+    }
+
+    // CRITICAL per the owner: three states, not two. NOT_SUPPORTED must
+    // never read as though the check ran and returned false — a document
+    // (e.g. the real-device US passport) with no chip authentication at
+    // all is a stated limitation, not a failed check. Owner-revised
+    // wording (2026-09, second round): the original "clone" phrasing was
+    // rejected as alarming to a non-technical reader appearing on every
+    // US-passport-shaped scan.
+
+    @Test
+    fun `chip auth VERIFIED state renders honestly`() {
+        val log = ReportLog()
+        log.append("x", summary(chipAuthenticity = "Verified — this document's chip proved it is genuine"), nowMillis = 0L)
+        val entry = log.entriesSnapshot()[0]
+        assertTrue(entry.contains("Chip auth Verified — this document's chip proved it is genuine"))
+    }
+
+    @Test
+    fun `chip auth NOT_SUPPORTED state never reads as false or as a failure`() {
+        val log = ReportLog()
+        log.append("x", summary(chipAuthenticity = "Not supported — this document has no chip authenticity check"), nowMillis = 0L)
+        val entry = log.entriesSnapshot()[0]
+        val chipAuthLine = entry.lines().first { it.startsWith("Chip auth") }
+        assertEquals("Chip auth Not supported — this document has no chip authenticity check", chipAuthLine)
+        assertFalse("must never render the bare word false for a not-supported document", chipAuthLine.contains("false", ignoreCase = true))
+        assertFalse("must never read as though the check failed", chipAuthLine.contains("did not pass"))
+    }
+
+    @Test
+    fun `chip auth FAILED state is distinct from NOT_SUPPORTED - the third state`() {
+        val log = ReportLog()
+        log.append("x", summary(chipAuthenticity = "Not verified — the chip check did not pass"), nowMillis = 0L)
+        val entry = log.entriesSnapshot()[0]
+        val chipAuthLine = entry.lines().first { it.startsWith("Chip auth") }
+        assertEquals("Chip auth Not verified — the chip check did not pass", chipAuthLine)
+        assertFalse("FAILED must read differently from NOT_SUPPORTED, never the same text", chipAuthLine.contains("no chip authenticity check"))
+    }
+
+    @Test
+    fun `Chip auth is omitted entirely when never determined for this entry`() {
+        val log = ReportLog()
+        log.append("x", summary(chipAuthenticity = null), nowMillis = 0L)
+        val entry = log.entriesSnapshot()[0]
+        assertFalse(entry.contains("Chip auth"))
+    }
+}
