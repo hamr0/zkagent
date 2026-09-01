@@ -1,9 +1,281 @@
-# zkagent — PRD v1.23 — 2026-09-01, owner-approved
+# zkagent — PRD v1.32 — 2026-09-01, owner-approved
 
 **Status**: Draft. D1–D8 signed 2026-07-26; D9 closed 2026-08-31 on M0 evidence — the mode-B derivation field is the **document number**. **No promise in this document survives a miss at M0 — which ran 2026-08-29 and held (`docs/logs/M0-EVIDENCE.md`).**
 **Project**: `zkagent` · **Published package**: `chiproof` · **Owner**: hamr · **Repo**: zkagent (sibling of 8een)
 **Parent standards**: `AGENT_RULES.md` (POC-first, dependency hierarchy, prove-don't-assert, security invariants). When anything here disagrees with AGENT_RULES, AGENT_RULES wins.
-**Version history**: §15. This revision (v1.23 — 2026-09-01, owner-approved) records two owner
+**Version history**: §15. This revision (v1.32 — 2026-09-01, owner-approved) records **D51**,
+from the owner's live run of the current build on the Pixel 6a. **Positive finding:** a scan
+produced `attester=matched` — the first `matched` of the session, confirming D38's first-sight
+attester binding on real hardware (a returning document at the same origin re-presented the same
+key and was recognised), alongside D50's D39 confirmation. **Evidence, from a separate scan in the
+same run:** a mid-read failure, `net.sf.scuba.smartcards.CardServiceException: Tag was lost` inside
+`DefaultFileSystem.readBinary`, surfacing as `IOException: Unexpected exception` — the card
+physically moved during the read; the verifier confirms a transaction was created and never
+received a presentation. **Three owner-approved amendments and one declined alternative:**
+**(1)** item 15/D43 gains a THIRD failure-transition bucket — a TRANSIENT chip-communication
+failure (tag lost / link dropped mid-read) MUST keep the MRZ and mode, like the
+access-establishment bucket, so the user can hold the document still and retry with no re-entry;
+the general rule stated is whether the ENTERED DATA IS STILL GOOD (wrong for access-establishment,
+merely interrupted for a mid-read tag loss); the pending handoff MUST survive this retry, with
+D50's session-expiry refusal taking precedence if the session expired meanwhile; classification
+MUST be conservative — an unclassifiable exception falls through to RESET, since a wrong "keep"
+leaves document data on screen the user did not expect, worse than a wrong "reset." Dialog wording
+not yet owner-approved. **(2)** the mode radio is REMOVED; mode is now DERIVED — a verified
+handoff's tier determines it, a bare local scan with no verified request is mode A by definition,
+and the radio control is replaced by plain text showing the derived mode (amends items 4, 13/D33,
+14/D34). This eliminates F5's bug class by construction (a control that can disagree with the
+executed mode cannot disagree if it is not a control) and removes the last way to violate item 4's
+one-source-of-truth requirement. D33/D34's "sets and locks the mode radio" MECHANISM is superseded
+by derivation; the REQUIREMENT it enforced — an absent/invalid tier fails loudly, no default — now
+guards the derivation instead and is UNCHANGED; tier C remains refused in this build. **(3)** item
+16/D47/D49 gains mode and chip-authenticity status in the plain-language log block, alongside
+Result/Sent/Shared/Identity; `chip_auth` stays unchanged in the `▸ technical:` line. Chip
+authenticity has THREE states — verified, NOT SUPPORTED by this document, and failed — and the
+absent case MUST read honestly and MUST NOT render as "false," tying to the project's standing,
+stated (not hidden) position that a document without chip authentication is clone-replayable (the
+US passport is exactly this case) and mode-B uniqueness only holds where `chip_auth` is true.
+Exact strings not yet owner-approved. **(4) Declined, recorded because the rejection matters:** the
+owner was asked whether to relax item 6/F1's `onStop()` MRZ wipe so entered details survive an
+app-switch, and DECLINED — privacy behaviour is REAFFIRMED unchanged; the friction was the tag-loss
+reset (fixed by (1) above), not the app-switch, and retaining document data in memory while
+backgrounded would weaken F1's posture for convenience. Recorded so this alternative is not
+re-proposed as an obvious improvement later. §6.2 (items 4, 6, 13, 15, 16, exit-criteria table),
+§10 (D51 added) are annotated.
+The prior revision (v1.31 — 2026-09-01, owner-approved) does two things: it
+corrects D50's defect-3 causal claim, which was wrong, and it fixes several stale
+cross-references found in a same-day conflict sweep across this branch's many stacked
+supersede-in-place amendments (v1.23 through v1.30). **Correction to D50, defect 3:** the owner's
+original claim — that a successful mint left the handoff pending and the mode locked to a
+still-spent session, inviting a doomed second tap, and that this caused two `SW=0x6982` chip-access
+failures — is NOT supported by the code. Verified directly at HEAD: `MainActivity.kt:1033-1034`
+(pre-existing, already present before any of this session's work) clears `pendingHandoff = null`
+and `verifiedRequest = null` once a handoff "definitively completed or failed" — on ALL delivery
+outcomes, not only success — and `wipeSession(keepMrzAndMode = false)` clears `lockedMode` after
+every completed read. The app therefore did NOT leave a consumed session pending, and a stray tap
+could not have reached the chip read through a stale session. The two observed
+`AccessDeniedException SW=0x6982` failures were genuine chip-access failures after the owner
+re-typed the MRZ and re-locked — the dialog's message was accurate and the app's STATE was not
+wrong. The logcat evidence quoted in D50 stands, accurate; the mechanism inferred from it was not,
+and is corrected on sight rather than left to look authoritative, per this project's own standard.
+**What defect 3 actually is:** new protection, not a bug fix. Nothing previously checked handoff
+session expiry at any point in the code — a session could age out (still formally "pending," never
+cleared by mere elapsed time, only cleared on definitive completion per the finding above) during a
+physical chip read and fail at `direct_post` with no prior warning to the user. That gap is real
+and the up-front-refusal fix stands on its own merits, independent of the corrected mechanism. The
+"same class as this branch's scope-constant/threshold-constant findings" comparison drawn in D50 no
+longer applies to this defect — those were two sides silently agreeing on a shared wrong constant;
+this is a genuinely missing check, not a coincidental agreement — and is corrected accordingly.
+**Q37 resolved by implementation, not design debate:** the challenge expiry
+(`zkagent.challenge.expires_at`) is reachable from the already-verified request object with no
+verifier round-trip, and "consumed" needs no separate detection because clearing already removes a
+used session from state the moment it is used (per the finding above) — closed, §11. **Conflict
+sweep (Task 2), findings and fixes:** (1) §10's D48 row still referenced the superseded **Q33** by
+number in its "Interim sourcing" clause after Q33 was split into Q35/Q36 at v1.29 — corrected in
+place to name Q35 (request-carried threshold) and Q36 (real computed answer) specifically. (2) The
+§6.2 item 16 code block under D47 (the two owner-approved worked-example log entries) predates
+D48's predicate/answer requirement, D49's boolean-list format, and D50's newest-first/single-entry
+rules — it is annotated as the historical, still-correct source for `Result`/`Sent`/`Identity`/the
+title-line format, with the `Shared` line and entry-count/ordering details now governed by the
+later amendments and the Exit-criteria row, so it cannot be mistaken for the current full
+rendering. (3) Checked and found consistent, no fix needed: item 16's original "MUST NOT change
+report content" clause (explicitly superseded by D46) and original clear-on-session-wipe rule
+(explicitly superseded by D45) are both unambiguous; the stacked top-revision-narrative paragraphs
+(v1.16 through v1.30) form a consistent, non-duplicated chain with exactly one "This revision" at
+any time; D48's threshold-from-request MUST and Q35's framing are coherent; the Exit-criteria rows
+for items 15 and 16 matched the current state of those items (item 15's row is corrected under this
+same revision, see below). §6.2 (items 15, 16, exit-criteria table), §10 (D50 defect-3 corrected,
+D48 cross-reference corrected), §11 (Q37 closed) are annotated.
+The prior revision (v1.30 — 2026-09-01, owner-approved) records **D50**,
+from the owner's live run of §6.2 items 15/16 on the Pixel 6a with both real documents
+(2026-09-01). **Positive finding first:** both documents minted successfully
+(`ok=true allowed=true reason=evidence-verified evidence=["sig-p256/1"]`), each producing
+`attester=bound_first_sight` with a DIFFERENT key — the first device-level confirmation of D39's
+per-(origin, zktag) key isolation on real hardware. **Three defects, owner-approved to fix now,
+inside items 15/16 (amendments, not new items, not new questions):** (1) the log view MUST list
+the newest entry first — a rendering-order change only, the stored order still round-trips through
+`onSaveInstanceState` (D35) unchanged. (2) the mint gate's biometric-authorization request and the
+scan's terminal outcome each call `emitReport`, producing two log entries per scan (a stale
+"In progress" entry that never resolves) — fixed by requiring exactly ONE log entry per scan
+attempt, the terminal outcome REPLACING the in-progress entry in the log accumulator, with every
+`emitReport` call still reaching logcat (the single-write-path invariant is UNCHANGED, this must
+not be fixed by suppressing a write); an in-progress entry with no terminal outcome (backgrounded
+mid-scan) MUST still be shown, never silently erased. (3) the substantive one: after a successful
+mint the app leaves the handoff pending and the mode locked to a session whose nonce is already
+spent, then invites a second, doomed tap — observed live (mint at 22:00:30, then two
+`AccessDeniedException SW=0x6982` chip-access failures at 22:01:16/22:01:37; verifier log confirms
+nothing reached it between the two attempts) — another instance of two internally-consistent sides
+(app's "handoff pending" vs. verifier's "nonce spent") disagreeing about something neither can see
+alone, the same class as this branch's scope-constant and threshold-constant findings. Fixed by
+amending item 15/D43: the pending handoff and its verified request are CLEARED once a presentation
+is delivered and accepted (`direct_post` 2xx); a tap/mint arriving with a mode locked to a handoff
+but no usable session is refused UP FRONT with a blocking dialog, ideally before any tap, stating
+the verifier session is no longer valid, with D43's non-access-failure reset on dismissal; an
+EXPIRED session (challenge expiry passed) is equally unusable, not only a consumed one; the
+access-establishment-failure path (`SW 0x6300`→`0x6985` keeps MRZ, F3) is UNCHANGED — it behaved
+correctly in this run. Dead-session dialog wording is NOT yet owner-approved (owner's stated intent:
+"verifier session expired or something") — implementer's chosen strings return for approval like
+every other user-facing string. **Opens Q37** (§11, not resolved, no approach chosen): whether
+"consumed" and "expired" can be distinguished device-side without a verifier round-trip, and where
+the challenge expiry is reachable from. §6.2 (items 15, 16, exit-criteria table), §10 (D50 added),
+§11 (Q37 opened) are annotated.
+The prior revision (v1.29 — 2026-09-01, owner-approved) corrects **Q33**,
+which was opened on an incomplete reading of the code, and splits it into two fresh questions,
+**Q35** (descendant of Q33, part a) and **Q36** (descendant of Q33, part b) — Q33's own text is
+kept in place and marked superseded, not deleted, per this doc's convention (matching how D42
+handled Q29's descendant Q30). Three code findings, verified directly against the live source,
+correct Q33's premise: **(1)** the request-object threshold Q33 said was absent already exists and
+is signed and nonce-bound — `chiproof`'s `issueChallenge` places `threshold` inside the challenge
+(`packages/chiproof/src/challenge.js:73-76,152-175`), riding in the ES256-signed request object at
+`zkagent.challenge.threshold`, asserted equal to 18 by the spike's own test
+(`spikes/m2-handoff/tests/roundtrip.test.mjs:86`), and the nonce is minted over
+`(tier, verbs, threshold, max_scan_age, expires_at)` so any post-mint edit returns `nonce_forged`
+(`packages/chiproof/src/challenge.js:225-240`) — yet the scanner parses that same object at
+`MainActivity.kt:1197-1198` and reads ONLY `nonce`, and the comment at `MainActivity.kt:1191`
+asserting the challenge "carries only nonce/tier/expiry" is itself a defect, factually wrong.
+**(2)** D11's enforcement already exists and has been running all along —
+`packages/chiproof/src/index.js:233-236` rejects `threshold_mismatch` when `claim.threshold`
+diverges from the challenge's or the verifier's configured threshold, and `under_threshold` when
+`claim.over_threshold !== true`; nothing about this area requires building enforcement. **(3)** the
+2026-09-01 device runs that returned `allowed=true` did so only because two independently
+hardcoded constants happened to agree — the scanner's `threshold = 18` (`MainActivity.kt:1181`)
+and chiproof's default of 18 which the spike verifier inherits by passing none
+(`packages/chiproof/src/index.js:76`; `spikes/m2-handoff/server.mjs:143`) — the same shape as this
+branch's other scope-constant bugs, except worse: nothing in the code expresses the coupling at
+all, so the two sides agree by coincidence rather than by a shared import. Owner: "Split it into
+two." **Q35** is scoped as a one-line read (no protocol change, no new field, no verifier work)
+that closes D48's unmet threshold-from-request MUST; **Q36** remains genuine open design work
+(computing a real DOB-vs-threshold answer) with nothing chosen. D48's Q33 cross-reference is
+superseded in place to point at Q35 specifically. No §6.2 item added — owner's standing instruction
+is that these promote to §6.2 only when he decides to build them inside M2. §10 (D48
+cross-reference superseded), §11 (Q33 superseded/split, Q35/Q36 opened) are annotated.
+The prior revision (v1.28 — 2026-09-01, owner-approved) records **D49**,
+amending D48's `Shared` specification twice, and appends a structural clarification to the still-
+OPEN **Q34** without closing it. Owner: "true/false always #2 agreed #3 questions answers, same
+shape \"age > 18: true, expiry > 3 months: false, expired: true\"." **First amendment:** the answer
+half of each `Shared` line MUST be the literal boolean `true`/`false`, never "yes"/"no" — it is the
+direct mirror of the signed predicate boolean, so the log cannot drift from the payload by
+paraphrasing it; D48's `age above 18: yes` example is superseded by `age > 18: true`, reconciling
+the doc TO the implementation (which already rendered booleans), not the reverse. **Second
+amendment:** `Shared` MUST render as a LIST of `<predicate>: <boolean>` lines, one per disclosed
+claim — not one formatted sentence — followed by the existing negation line; today's list holds
+exactly one element (the age predicate); an empty list (mode A, an unmet mint gate, a refusal, any
+non-delivered outcome) MUST render the plain "nothing shared" wording, never an empty label or
+stray colon; the list MUST NOT be populated with any claim beyond the one that exists today —
+expiry and every other attribute remain **Q34**, unbuilt. The predicate shape accommodates both
+comparison form (`age > 18`, `expiry > 3 months`) and bare boolean form (`expired`), per the
+owner's three worked examples. Also recorded, owner-approved and not a new decision: the
+`▸ technical:` block's compliance note is approved verbatim as `claim_proof: self-asserted by the
+device — not independently proven (D24)`, set only where a claim was actually signed — currently
+the only place the log states the claim is unverified, tying to **Q33**. **Q34 append, question
+stays OPEN:** the owner's examples settle the rendering/data SHAPE for multiple claims (a list of
+predicate→boolean pairs, the same shape as today's single age claim) but decide nothing about
+WHICH claims exist, their buckets, which tiers may carry them, or cumulative-disclosure cost — all
+of that remains open, still needing its own design pass and riskiest-assumption POC. Implementation
+fact recorded: `DisclosureSummary.shared` modelled one claim as a single string, which would have
+needed reshaping rather than extending once Q34 lands, so the list shape is adopted now — a
+structural change only, adding no claim. §6.2 (item 16, exit-criteria table), §10 (D49 added), §11
+(Q34 appended) are annotated.
+The prior revision (v1.27 — 2026-09-01, owner-approved) opens two new
+questions and clarifies D48, without deciding either question. **Q33** records a code-inspection
+finding: `apps/scanner/.../MainActivity.kt:1181-1182` hardcodes `threshold = 18` and asserts
+`over_threshold: true` unconditionally on every mint — the chip's date of birth is used only to
+derive the BAC/PACE access key, no DOB-versus-threshold comparison exists, and no request object
+carries a `threshold` field — so D11's threshold-comparison requirement is unimplemented and the
+device evidence captured 2026-09-01 is not evidence about age; both app and verifier behaved
+correctly by their own contracts (the same self-consistent-but-wrong shape as this branch's other
+cross-contract bugs). Owner: "Both — question now, item when you decide to build it" — recorded as
+an open question now, promoted to a §6.2 item only if/when the owner decides to build it inside M2;
+no §6.2 item added this revision. Cross-referenced from D48, since D48's requirement that `Shared`'s
+threshold come from the verified request object is currently unmet as a direct consequence. **Q34**
+records a new owner direction, not a decision: "i expect to land all things that comes with the id
+make it available, expiry date ie. > 3 months > 6 months > 1 year and other things that are usually
+verified/requested across mode a, b and c" — a general claim vocabulary beyond age, expressed as
+bucketed/predicate claims. Recorded with four considerations for whoever answers it (generalizing
+D11's reject-wrong-predicate rule, the data-minimisation reasoning of D40/Q11 applying per claim and
+compounding across claims, FR6's anonymity-set framing, and per-tier disclosure limits across modes
+A/B/C), needing its own design pass and riskiest-assumption POC before anything is built — nothing
+chosen. **D48 clarified, not changed:** owner explained the `Shared` line's purpose — "what i meant
+is to surface what questions was asked and how it was answered above 18: true note where above 18 is
+requester and true was the answer, combined with not known and known that's a complete pic of
+request to the user" — it is a question→answer record of the exchange that, with `Identity`'s
+known/new state, gives the user the complete picture of a request. Interim sourcing recorded, tied
+to Q33: until real per-request threshold/answer evaluation lands, both halves of `Shared` MUST be
+rendered from the actual signed claim map (never a separately-typed string), so the log stays
+faithful by construction and becomes correct automatically once Q33 is resolved. §10 (D48
+annotated) and §11 (Q33, Q34 opened) are annotated.
+The prior revision (v1.26 — 2026-09-01, owner-approved) records **D48**,
+closing the residual D47 left open and adding one substantive requirement, in the same session.
+Owner: "new — minted fresh for this site, known - recognized only here from previous visit (or
+shorter), age above 18 yes shared" and "agreed on 1 and 2 and 3 above." **Identity residual
+closed:** the reused-key case now has owner-confirmed copy, **"known — recognized only here from
+previous visit"**, alongside the already-confirmed new-key copy; "only here" is load-bearing — the
+plain-language statement of D38/D39's per-(origin, zktag) key isolation — and MUST NOT be
+simplified out. **New `Shared` requirement:** the line MUST render the actual disclosed predicate
+and its actual answer (`age above <threshold>: <answer> — and nothing else.`), with the threshold
+read from the verified request object (not hardcoded) and the answer the actual asserted value
+(never assumed true); any non-disclosing path MUST say so plainly and MUST NOT render an age claim
+— restating D47's outcome-accuracy rule at the field most likely to violate it. The disclosed age
+predicate is explicitly carved out of item 5's forbidden-fields list — it is what the user chose to
+present, not a document field — while the rest of item 5 stays UNCHANGED. Three implementation
+clarifications also recorded, owner-approved, not separately numbered: the `▸ technical:` line
+carries the full unmodified report text; the two debug-only probe buttons render a distinct
+"Diagnostic OK/failed" summary under the no-site label; and the no-site label also covers a failed
+request-object verification, never rendering an unverified origin as a trusted site name (D37 at
+the UI layer). §6.2 (item 16, exit-criteria table), §10 (D48 added), §15 are annotated.
+The prior revision (v1.25 — 2026-09-01, owner-approved) closes **Q32** in one
+owner decision, **D47**, made per NO-GO #10 (PRD amended first, `apps/scanner/` code brought in
+line second). Both halves of Q32 are resolved. First, the no-site title: owner CONFIRMED
+**"Local scan (no site)"** as the exact wording for a bare mode-A entry's title — the flag in D46
+noting it was "a specification made here, not itself owner-confirmed wording" is superseded, not
+deleted; that string is now owner-confirmed. Second, the disclosure-summary shape: owner chose,
+from three concrete renderings, a **plain-language-first, technical-detail-subordinate** shape — a
+four-field block (`Result` / `Sent` / `Shared` / `Identity`) under the existing title line, followed
+by a subordinate `▸ technical:` line carrying the machine-shaped detail (mode, evidence plug,
+`key_id`, `chip_auth`, transaction id) that item 16/D46 already required to exist. `Identity` is the
+plain-language restatement of the D38/D39 per-(origin, zktag) attester-key state (new key/alias
+minted for this pairing vs. an existing one reused); only the "new" case's exact copy is
+owner-approved, the "reused" case's copy is left at the same register, unconfirmed verbatim.
+Stated as a REQUIREMENT: the four lines MUST be accurate per actual outcome, not a fixed template —
+a success, a refusal, a masterlist "no", an unmet mint gate, an access-establishment failure, and a
+bare mode-A read must each read as what they are, never overstate what was sent, and never read as
+success on a failure path; mode A MUST state plainly that nothing left the device (`evidence: []`,
+D27). Everything D46 already fixed as UNCHANGED and binding — the value-free constraint (item 5),
+the single-`emitReport()`-write-path invariant, the display-only timestamp, and the
+accessibility-snapshot note — remains UNCHANGED under this amendment too. §6.2 (item 16, exit-criteria
+table), §10 (D47 added), and §11 (Q32 closed) are annotated.
+The prior revision (v1.24 — 2026-09-01, owner-approved) records two further
+owner decisions from the same session, made per NO-GO #10 (the scope gate — PRD amended first,
+`apps/scanner/` code corrected to match second; uncommitted app work already implements a wider
+shape than the prior PRD text, which this revision now catches up to). **D45** amends §6.2 item 16
+in the part the owner did not intend: item 16 as written both said the log "lists the reports of
+successive scans in the session" and required it "cleared whenever a session wipe occurs that does
+not keep MRZ/mode" (item 6) — self-contradicting, since `MainActivity.kt` calls
+`wipeSession(keepMrzAndMode = false)` at the completed-read call site on EVERY completed read,
+including a successful one, so the literal rule wiped the log on the very success path it existed
+to record and successive scans never accumulated. Owner chose accumulation: the log's lifetime is
+now decoupled from `wipeSession()`'s per-scan `!keepMrzAndMode` branch — a per-scan wipe MUST NOT
+clear it. Retention is otherwise unchanged and restated: in-memory only, never persisted to disk,
+survives Activity recreation via `onSaveInstanceState` (D35), gone only when the app process is
+gone. **D46** records the owner's second, scope-widening call ("logs should be safe and not a
+source of threat, but should be there for user to know how it went, what went out and the result,
+how much it disclosed, successful or not"; "titled by timestamp, titled by website"): each log
+entry MUST carry, besides its existing display-only local wall-clock timestamp, a title
+identifying the verified request origin/`scope_domain` (D37, D42) the scan was for, with a bare
+local scan (no verified handoff, mode A) titled by the fixed value-free label "Local scan (no
+site)"; and the log MUST be legible to a non-engineer about outcome — what went out, to whom, what
+was disclosed, whether it succeeded — which SUPERSEDES item 16's "MUST NOT change report content"
+clause to the extent that a value-free disclosure summary is now REQUIRED, while the rest of that
+clause (no MRZ/names/document fields/key bytes/signatures/nonces/fingerprints/chain contents, the
+single-`emitReport()`-write-path invariant, and the accessibility-snapshot note) stays UNCHANGED
+and binding; the origin/site name is explicitly NOT a document field. Opens **Q32** (§11): the
+exact shape/wording of the disclosure summary is not owner-decided, stated at the level the owner
+gave it. Also records a small, non-numbered clarification to **D43**: the three failure classes
+item 15 names are confirmed EXAMPLES of its general rule, not an exhaustive list — mint-path
+failures (key generation, missing verified request/origin/document-number, no usable device key or
+signature, biometric/device-credential error) are in scope and the implementation's wider coverage
+is kept. §6.2 (items 15, 16, exit-criteria table), §10 (D43 annotated, D45/D46 added), and §11
+(Q32 opened) are annotated.
+The prior revision (v1.23 — 2026-09-01, owner-approved) recorded two owner
 decisions from a live run where a mistyped document number produced a transient overlay the owner
 could not act on. **D43** ("errors that leave the app waiting on the user MUST block until
 acknowledged") — owner: "when wrong data in, it is not pop up to dismiss but overlay notification
@@ -419,6 +691,20 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
    attributed to the default-A radio state being left selected, not a capture bug.** **See item 13
    below (D33): when a handoff request is pending, mode is no longer read from the RadioGroup at
    all — it is preset and locked from the request's `zkagent.tier`.**
+   **Amended 2026-09-01, owner decision (D51 — the mode radio is REMOVED; mode is DERIVED, not
+   chosen; original clauses above kept, not deleted):** mode is no longer a user choice at all. A
+   verified handoff's tier determines it; a bare local scan with no verified request is mode A by
+   definition. The RadioGroup control is replaced by plain TEXT displaying the derived mode — there
+   is nothing left for the user to set. **Security reasoning, stated because it is the general
+   rule:** this eliminates F5's entire bug class BY CONSTRUCTION — a UI control that can disagree
+   with the executed mode cannot disagree with it if it is not a control — and it closes the last
+   remaining way to violate this item's one-source-of-truth requirement (mode read once, at chip
+   session start, never re-read from UI afterward). **What survives, UNCHANGED and still binding:**
+   item 13/D33's requirement that a pending request with an ABSENT or INVALID tier fails LOUDLY
+   with no default now guards the DERIVATION rather than a preselect, but the requirement itself is
+   untouched; tier C remains refused in this build (unchanged). D33/D34's "sets and locks the mode
+   radio" MECHANISM is superseded by derivation — the control it locked no longer exists — but the
+   REQUIREMENT that mechanism enforced is not superseded, see item 13's own amendment below.
 5. **No document-field rendering.** MUST NOT render DG1/MRZ/any personal field on any screen, any
    mode (F4 — the M0-inherited `ResultActivity` leaked partial DG1 text into an accessibility
    snapshot this session). `ResultActivity` MUST be removed, not deprioritized. Mode A screens
@@ -432,6 +718,15 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
    in-memory across Activity recreation (`onSaveInstanceState` Bundle), never persisted to disk.
    Already implemented; this records approval, not new behavior. MRZ/session-material wipe rules
    above are unchanged.
+   **Considered and DECLINED 2026-09-01, owner decision (D51 — item 6/F1's `onStop()` wipe is
+   REAFFIRMED, not relaxed):** the owner was asked whether to relax the `onStop()` MRZ wipe above
+   so entered details would survive an app-switch (having found the reset annoying in a live run).
+   He DECLINED: the wipe rule above stays exactly as written, unchanged. **Reasoning, recorded so
+   this alternative is not re-proposed as an obvious improvement later:** the actual friction was
+   the tag-loss reset case, not the app-switch case — fixed instead by D51's item 15 amendment
+   (a transient chip-communication failure now keeps the MRZ/mode for retry). Retaining document
+   data in memory while the app is backgrounded, purely for convenience, would weaken F1's privacy
+   posture for a problem that had a better, narrower fix.
 7. **Masterlist.** MUST bundle the full BSI CMS SignedData (`DE_ML_*.ml`) and verify the CMS
    signature and signer chain (`CSCA Master List Signer` ← `csca-germany`) at load, before the
    integrity check; a signature/chain failure is an integrity failure ⇒ `ok:false` (owner decision
@@ -544,6 +839,15 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
     selection, so there is no window where the user can pick a mode the request might override.
     Once verification succeeds, the app sets and shows the verified tier. `lockedMode` remains
     written from exactly one call site (`lockModeAndArm`) regardless of which path fed it.
+    **Amended 2026-09-01, owner decision (D51 — the mode radio this item preselects/locks no
+    longer exists; original clauses above kept, not deleted):** see item 4's D51 amendment — the
+    RadioGroup is removed entirely and replaced by plain text showing the derived mode. This item's
+    MECHANISM ("sets and locks the mode radio for user override") is superseded, since there is no
+    longer a radio to lock. This item's REQUIREMENT is NOT superseded and remains binding, now
+    guarding the derivation step instead of a preselect: a pending request whose `zkagent.tier` is
+    ABSENT or not one of A/B/C MUST still fail LOUDLY (log + report), with no default; when no
+    handoff is pending, the derived mode is A by definition (no manual selection exists to fall
+    back to). Tier C remains refused in this build, unchanged.
 14. **Request-object JWS verification before trusting any field** (new 2026-09-01, owner decision
     D34, "C yes, it should verify"). The scanner MUST verify the request object's JWS signature
     against a pinned/provisioned set of trusted request-signer keys before trusting ANY field
@@ -587,6 +891,77 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
     cancelled"). General rule: transient UI for transient facts, blocking UI for state that
     requires the user to act — an error that leaves the app waiting must not be able to go
     unnoticed.
+    **Owner-agreed 2026-09-01 ("keep it as is") — clarifies D43's scope, not a new decision:** the
+    three failure classes named above (read failure, access-establishment failure, handoff
+    refusal) are EXAMPLES of item 15's general rule — "an error that leaves the app waiting must
+    not be able to go unnoticed" — not an exhaustive list. The implementation additionally applies
+    blocking acknowledgment to **mint-path failures**: key generation failure, a missing verified
+    request or an unparseable origin/document-number field, no usable device key or signature, and
+    a biometric/device-credential error. These are IN SCOPE and KEPT — any outcome that leaves the
+    app waiting on the user, wherever it occurs in the read-then-mint pipeline, is covered by this
+    item, not only the three named examples.
+    **Amended 2026-09-01, owner decision (D50 — consumed/expired handoff session; original clauses
+    above kept, not deleted):** a live run found that after a successful mint, the app left the
+    handoff pending and the mode locked to a session whose nonce was already spent, then invited a
+    second tap that could not possibly succeed — observed as two `AccessDeniedException
+    SW=0x6982 SECURITY STATUS NOT SATISFIED` chip-access failures after a successful mint, with the
+    verifier log confirming nothing reached it between the two attempts. The dialog's message was
+    accurate for what it caught (a chip-access failure), but the STATE was wrong — the app had set
+    up a failure it could have predicted before any tap. **MUST:** the pending handoff and its
+    verified request are CLEARED once a presentation has been delivered and accepted (`direct_post`
+    2xx), so a spent session cannot be reused. **MUST:** a tap or mint attempt arriving with a mode
+    locked to a handoff but no usable session (consumed OR expired — a challenge past its expiry is
+    equally unusable, not only a spent one) is refused UP FRONT with a blocking dialog stating the
+    verifier session is no longer valid, ideally before the user is asked to tap, with D43's
+    existing non-access-failure reset on dismissal (this is a refusal, not an access-establishment
+    failure, so it does NOT keep the MRZ per F3). **UNCHANGED, restated:** the access-establishment
+    failure path itself (`SW 0x6300`→`0x6985`, keeps MRZ, F3) behaved correctly in this run and is
+    not touched by this amendment. **Dialog wording NOT yet owner-approved:** owner's stated intent
+    is "verifier session expired or something" — the implementer's chosen exact strings return for
+    approval, as with every other user-facing string this session. **Open, not decided — see Q37
+    (§11):** whether "consumed" and "expired" can be distinguished device-side without a verifier
+    round-trip, and where the challenge expiry is reachable from; no approach proposed here.
+    **Corrected 2026-09-01 (original D50 text above kept, not deleted):** the causal claim above —
+    that a successful mint left the handoff pending on an already-spent session, inviting a doomed
+    second tap — is not supported by the code. `MainActivity.kt:1033-1034` (pre-existing, already
+    present before this session's work) clears `pendingHandoff`/`verifiedRequest` on ALL delivery
+    outcomes, and `wipeSession(keepMrzAndMode = false)` clears `lockedMode` after every completed
+    read; a consumed session could not have been left reachable for a stray tap. The two observed
+    `SW=0x6982` failures were genuine chip-access failures after the owner re-typed the MRZ and
+    re-locked — the dialog was accurate and the state was not wrong. **What this item actually
+    requires, restated:** NEW protection against a session AGING OUT (past its challenge expiry)
+    while still formally pending — never cleared by elapsed time alone, only on definitive
+    completion — so a document tap after expiry-but-before-delivery would otherwise fail at
+    `direct_post` with no prior warning. The two MUSTs above stand, reframed: clearing the pending
+    handoff on an accepted delivery (`direct_post` 2xx) is confirmed ALREADY the case in existing
+    code, not a new fix; refusing a tap/mint UP FRONT against an EXPIRED session is the genuinely
+    new protection this item adds. **Q37 (§11) is now CLOSED, resolved by implementation, not
+    design debate:** the challenge expiry (`zkagent.challenge.expires_at`) is reachable from the
+    already-verified request object with no verifier round-trip; "consumed" needs no separate
+    detection because clearing already removes a used session from state the moment it is used.
+    **Amended 2026-09-01, owner decision (D51 — a third failure-transition bucket: transient
+    chip-communication failure; original clauses above kept, not deleted):** evidence from a live
+    run: `net.sf.scuba.smartcards.CardServiceException: Tag was lost` inside
+    `DefaultFileSystem.readBinary`, surfacing as `IOException: Unexpected exception` — the document
+    physically moved during the read; the verifier confirms a transaction was created and never
+    received a presentation. **MUST:** a TRANSIENT chip-communication failure (tag lost mid-read,
+    or the NFC link otherwise drops before the read completes) MUST keep the MRZ and mode, exactly
+    like the access-establishment bucket (item 6/F3), so the user can hold the document still and
+    retry with NO re-entry — a third bucket alongside the existing two (access-establishment keeps;
+    everything else resets). **General rule, stated because it generalises:** the discriminator
+    across all three buckets is whether THE ENTERED DATA IS STILL GOOD. An access-establishment
+    failure means the details may be wrong; a mid-read tag loss means the details were right and
+    the read was merely physically interrupted — resetting in that case discards correct input for
+    a physical mishap that has nothing to do with the data entered. **MUST:** the pending handoff
+    MUST survive this retry — the user should not need to re-tap the site's link — and D50's
+    session-expiry refusal takes precedence if the session expires during the retry window.
+    **MUST be conservative:** classification of an ambiguous or unrecognised exception MUST fall
+    through to the RESET bucket, never to this new KEEP bucket — a wrong "keep" leaves document
+    data on screen the user did not expect (a privacy-relevant mistake), which is worse than a
+    wrong "reset" (a UX-only mistake); this new bucket is a narrow, conservatively-classified
+    carve-out from the general reset rule, not a default. **Dialog wording NOT yet
+    owner-approved** — the implementer's chosen string returns for approval like every other
+    user-facing string this session.
 16. **Per-scan report log view** (new 2026-09-01, owner decision D44, "the feedback of what
     happened every scan at the bottom of the app should go to another tab as logs, same output
     with timestamp"). The value-free report currently rendered into `reportView` MUST also
@@ -605,6 +980,214 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
     caution on raw-field screens does not apply here because the content is value-free by
     construction — noted explicitly so the log view is never later treated as a place to add raw
     fields.
+    **Amended 2026-09-01, owner decision (D45 — original clause above kept, not deleted):** the
+    clause above is self-contradicting as written — it says the log "lists the reports of
+    successive scans in the session" while also requiring it be "cleared whenever a session wipe
+    occurs that does not keep MRZ/mode" (item 6). **Why this is wrong, verified in code:**
+    `MainActivity.kt` calls `wipeSession(keepMrzAndMode = false)` at the completed-read call site
+    on EVERY completed read, including a successful one — so the literal clear rule wiped the log
+    on the very success path it existed to record, and successive scans never accumulated; at most
+    one entry survived at a time. Owner chose accumulation over the literal clear rule: **the
+    log's lifetime is now decoupled from `wipeSession()`'s per-scan `!keepMrzAndMode` branch — a
+    per-scan session wipe, successful or not, MUST NOT clear the log.** Everything else about
+    retention in the clause above is UNCHANGED and restated so it is not lost: in-memory only for
+    the session, never persisted to disk (item 6/F1, D35), surviving Activity recreation via
+    `onSaveInstanceState` (D35), gone only when the app process is gone.
+    **Amended 2026-09-01, owner decision (D46 — original clause above kept, not deleted):** owner:
+    "logs should be safe and not a source of threat, but should be there for user to know how it
+    went, what went out and the result, how much it disclosed, successful or not" and "titled by
+    timestamp, titled by website." Each log entry MUST carry, in addition to its existing local
+    wall-clock timestamp (display-only, unchanged — MUST NOT enter any proof/evidence path,
+    contrast D28's midnight-UTC `current_date` coarsening which IS a payload field), a title
+    identifying the SITE the scan was for: the verified request origin / `scope_domain` (D37,
+    D42). A scan with no verified handoff (mode A, no pending handoff request — a bare local scan)
+    MUST use the fixed, value-free label **"Local scan (no site)"** rather than a blank field or a
+    fabricated origin (specification recorded here as the implementation-level string; not itself
+    owner-confirmed wording — flagged in §11 Q32). The log MUST also be legible to a non-engineer
+    about outcome: what went out, to whom (the site title above), what was disclosed, and whether
+    the scan succeeded. **This SUPERSEDES the clause above's "MUST NOT change report content" to
+    the extent that a value-free disclosure summary answering those questions is now REQUIRED** —
+    the rest of that clause stands UNCHANGED and remains binding: no MRZ, names, document fields,
+    key bytes, signatures, nonces, fingerprints, or chain contents (item 5's grep-provable
+    constraint). The origin/site name required above is NOT a document field and is safe to show —
+    stated explicitly so it is never confused with one, and so this amendment is never read as
+    license to add any other raw field. The single-write-path constraint in the clause above is
+    UNCHANGED and remains binding: every report write MUST still route through the one logged
+    `emitReport()` call site; the log view is an additional consumer of it, never a second write
+    site — this is the same defect class this session already fixed once (a UI-only write with no
+    logging made a completed run look identical to a hang). The accessibility-snapshot note in the
+    clause above is UNCHANGED and restated: value-free by construction, so the caution does not
+    apply to this view — stated explicitly so the log view is never later treated as a place to
+    add raw fields, now or under this disclosure-summary requirement. **Open, not decided — Q32
+    (§11):** the exact shape/wording of the disclosure summary (e.g. a fixed set of labeled fields
+    vs. free text) is not specified by the owner; this item states the requirement at the level
+    the owner gave it.
+    **Amended 2026-09-01, owner decision (D47 — closes Q32; original clauses above kept, not
+    deleted):** owner approved the exact disclosure-summary shape, ending Q32. Each log entry MUST
+    render as a four-field plain-language block — **`Result`**, **`Sent`**, **`Shared`**,
+    **`Identity`** — followed by a subordinate **`▸ technical:`** line carrying the existing
+    machine-shaped detail (mode, evidence plug, `key_id`, `chip_auth`, transaction id), all under
+    the entry's title line (timestamp + verified site, or "Local scan (no site)"). Owner-approved
+    rendering, verbatim, for the two worked examples:
+
+    ```
+    14:22:07 · 127.0.0.1:8787
+
+    Result    Verified — the site accepted you
+    Sent      a site-only pseudonym + proof you're over 18
+    Shared    your age threshold, and nothing else.
+              Not your name, date of birth, document
+              number, or nationality.
+    Identity  new — minted fresh for this site
+
+    ▸ technical: mode B · evidence sig-p256/1 ·
+      key_id c303cf3f… · chip_auth true · tx HVLKlhbU…
+
+    14:19:41 · Local scan (no site)
+
+    Result    Read OK — nothing sent
+    Sent      nothing left this device
+    Shared    nothing
+
+    ▸ technical: mode A · evidence [] (D27)
+    ```
+    **Annotation, added 2026-09-01 in a conflict sweep, not a new decision:** the block above is
+    the original D47-owner-approved rendering and remains the correct source for the
+    `Result`/`Sent`/`Identity` field text, the title-line format, and the `▸ technical:` line's
+    existence — it predates D48's predicate/answer requirement, D49's boolean-list `Shared` format,
+    and D50's newest-first/single-entry-per-scan rules, so its `Shared` line and its
+    ordering/entry-count are historical, not the current rendering; the Exit-criteria row for item
+    16 is the current, authoritative full shape.
+
+    `Identity` is the plain-language restatement of the D38/D39 per-(origin, zktag) attester-key
+    state: whether this presentation created a new key/alias for this (origin, zktag) pair or
+    reused one already bound from a prior visit. Only the "new" copy above is owner-approved
+    verbatim ("new — minted fresh for this site"); the "reused" case's exact copy is not yet
+    owner-specified — implement it at this same plain-language register and confirm wording before
+    or during item 16's implementation (residual, not reopening Q32 as a numbered question).
+
+    **REQUIREMENT, not decoration:** the plain-language lines MUST be accurate per actual outcome,
+    not a fixed template blindly filled in. A success, a request/handoff refusal, a masterlist
+    "no" (issuer not on the trust list), an unmet mint gate (item 12 failure classes), an
+    access-establishment failure, and a bare mode-A read are genuinely different disclosures and
+    MUST read differently — each stating plainly and correctly what happened, not a reworded copy
+    of the success case. The log MUST NOT claim something was sent when nothing left the device,
+    and MUST NOT read as success on any failure path. Mode A MUST state plainly that nothing left
+    the device (`evidence: []`, D27) — the second worked example above ("Read OK — nothing sent" /
+    "Sent: nothing left this device" / "Shared: nothing") is the reference case for this.
+
+    Everything D46 stated as UNCHANGED remains UNCHANGED and binding, restated once more so it is
+    not lost under this amendment: the value-free constraint (item 5 — no MRZ, names, document
+    fields, date of birth, document number, nationality, key bytes, raw signatures, nonces,
+    fingerprints, or chain contents); the origin/site name is explicitly NOT a document field and
+    stays safe to show; the single-`emitReport()`-write-path invariant — the log view (including
+    this richer rendering) is an additional consumer of that one call site, never a second write
+    site, and if an entry needs fields the current single string does not carry, the fix is to
+    extend what flows through that ONE call site, never to add a second write path; the timestamp
+    stays display-only and MUST NOT enter any proof/evidence path; and the accessibility-snapshot
+    note stays UNCHANGED — value-free by construction, so the caution on raw-field screens does not
+    apply, restated so this richer rendering is never later treated as a place to add raw fields.
+
+    **The no-site label is now CONFIRMED, closing the last open half of Q32:** owner confirmed
+    **"Local scan (no site)"** as the exact wording (2026-09-01) — this supersedes the flag in the
+    D46 paragraph above stating it was "a specification made here, not itself owner-confirmed
+    wording"; that flag is superseded, not deleted, and no longer applies.
+    **Amended 2026-09-01, owner decision (D48 — closes the D47 residual; original clauses above
+    kept, not deleted):** owner: "new — minted fresh for this site, known - recognized only here
+    from previous visit (or shorter), age above 18 yes shared" and "agreed on 1 and 2 and 3 above."
+    **`Identity` reused-key wording is now CONFIRMED**, closing D47's open residual ("the 'reused'
+    case's exact copy is not yet owner-specified"): the two confirmed strings are newly minted key
+    — **"new — minted fresh for this site"** (unchanged, confirmed at D47) — and reused key —
+    **"known — recognized only here from previous visit"**. **"Only here" is load-bearing, not
+    decorative**: it is the plain-language statement of D38/D39's per-(origin, zktag) key
+    isolation — this site recognizes the returning user, and no other site can, because the key is
+    scoped to (origin, zktag), not to the device. Implementers MUST NOT simplify or shorten this
+    phrase out. **`Shared` REQUIREMENT (new, substantive):** D47's worked example rendered `Shared`
+    as the fixed sentence "your age threshold, and nothing else." — that was illustrative
+    formatting, not the requirement itself. `Shared` MUST instead state the actual disclosed
+    predicate and its actual answer, in the shape `age above <threshold>: <answer> — and nothing
+    else.`, followed by the existing negation line ("Not your name, date of birth, document
+    number, or nationality."). Owner's worked value ("age above 18 yes shared") →
+    `age above 18: yes — and nothing else.`. Three sub-requirements: (1) the threshold number MUST
+    be read from the verified request object at presentation time, NOT hardcoded — 18 is the value
+    the current test request happens to carry, not a protocol constant; a request asking a
+    different threshold renders that number. (2) the answer MUST be the actual value asserted for
+    that scan, never assumed true — a scan that asserted `no` or failed the predicate MUST render
+    that outcome, not a blind "yes." (3) on any path where nothing was disclosed (mode A, an unmet
+    mint gate, a refusal, any failure), `Shared` MUST say so plainly and MUST NOT render an age
+    claim at all — this is D47's outcome-accuracy rule, restated here because the `Shared` line is
+    exactly where it is easiest to violate by defaulting to the success template. **The disclosed
+    age predicate is explicitly NOT a document field** under item 5's forbidden-fields list — it is
+    the claim the user deliberately chose to present, and showing it back to the user in their own
+    on-device log is the point of the feature, not a leak; item 5's constraint on raw document
+    fields (MRZ, names, DOB, document number, nationality, key bytes, signatures, nonces,
+    fingerprints, chain contents) is otherwise UNCHANGED and remains binding — this age-predicate
+    exception is narrow and specific to this one field, not a general opening.
+    **Three implementation clarifications, owner-approved ("agreed on 1 and 2 and 3 above"),
+    recorded as clarifications not new decisions:** (a) the `▸ technical:` line carries the
+    complete, unmodified existing report text, indented, rather than the terse one-line summary
+    shown in D47's worked example — no debugging detail is lost; the terse form in D47 was
+    illustrative formatting only. (b) the two debug-only probe buttons (masterlist self-test,
+    device-key self-test) render as a distinct "Diagnostic OK/failed" summary titled under the
+    no-site label — they are not scans, disclose nothing to any site, and MUST NOT be rendered as
+    if they were a scan outcome. (c) `siteTitleFor()` (or equivalent) MUST render the fixed
+    **"Local scan (no site)"** label for a handoff whose request-object verification FAILED, not
+    only for a bare mode-A scan with no pending request — an unverified or attacker-claimed origin
+    MUST NOT ever be rendered as a trusted site name in the log title. This is D37's
+    origin-verification requirement enforced at the UI layer, stated here as a security property of
+    the log view, not merely a UI/cosmetic detail.
+    **Amended 2026-09-01, owner decision (D49 — amends D48's `Shared` specification; original
+    clauses above kept, not deleted):** owner: "true/false always #2 agreed #3 questions answers,
+    same shape \"age > 18: true, expiry > 3 months: false, expired: true\"." **Boolean literal, not
+    paraphrase:** the answer half of each `Shared` line MUST be the literal boolean `true`/`false`
+    — never "yes"/"no" — as the direct mirror of the signed predicate boolean; the log MUST NOT
+    paraphrase the payload. D48's worked example `age above 18: yes` is superseded (kept above, not
+    deleted) by `age > 18: true`; the doc is reconciled TO the implementation, which already
+    rendered booleans, not the reverse. **List, not sentence:** `Shared` MUST render as a list of
+    `<predicate>: <boolean>` lines, one per disclosed claim, rather than one formatted sentence; the
+    negation line ("Not your name, date of birth, document number, or nationality.") follows the
+    list. **Predicate shape accommodates both forms** shown in the owner's three worked examples —
+    comparison predicates (`age > 18`, `expiry > 3 months`) and bare boolean predicates with no
+    operator (`expired`). **Constraints for today's single-element list:** the list holds exactly
+    one element (the age predicate) until Q34 is resolved; an empty list (mode A, an unmet mint
+    gate, a refusal, or any other non-delivered outcome) MUST render the plain "nothing shared"
+    wording already required by D47/D48's outcome-accuracy rule, and MUST NOT render an empty label
+    or a stray colon; the list MUST NOT be populated with any claim beyond the one that exists
+    today — expiry and every other attribute remain **Q34** (§11), unbuilt. **Also recorded,
+    owner-approved, not a new decision:** the `▸ technical:` block's compliance note is approved
+    verbatim as `claim_proof: self-asserted by the device — not independently proven (D24)`, set
+    only on outcomes where a claim was actually signed; this is currently the only place the log
+    states the claim is unverified, tying directly to **Q33** (§11).
+    **Amended 2026-09-01, owner decision (D50 — log ordering and duplicate in-progress entries;
+    original clauses above kept, not deleted):** a live run on the Pixel 6a found two defects.
+    **(1) Ordering:** the log view MUST list the NEWEST entry first. This is a RENDERING-order
+    change only — the stored order MUST keep round-tripping correctly through
+    `onSaveInstanceState` (D35 retention) exactly as before; ordering is a display property, not a
+    storage one. **(2) Duplicate in-progress entry:** the mint gate calls `emitReport` when it
+    requests biometric authorization, producing an entry reading `Result  In progress`; the
+    terminal outcome then calls `emitReport` again, APPENDING a second entry — one scan produces
+    two entries and the first never resolves. **MUST:** exactly ONE log entry per scan attempt; the
+    terminal outcome REPLACES that scan's in-progress entry. **MUST NOT** be fixed by suppressing
+    the in-progress `emitReport` call — every write MUST still reach logcat, since an unlogged
+    UI-only write is exactly the defect this item's single-write-path invariant exists to prevent;
+    the replacement belongs in the log accumulator, not in withholding the write. **Edge case,
+    required:** an in-progress entry with NO terminal outcome (e.g. app backgrounded mid-scan) MUST
+    still be shown — a genuinely interrupted scan MUST NOT be silently erased.
+    **Amended 2026-09-01, owner decision (D51 — mode and chip-authenticity status join the
+    plain-language block; original clauses above kept, not deleted):** each log entry MUST state,
+    in plain language alongside `Result`/`Sent`/`Shared`/`Identity`, both the presentation MODE
+    (now derived, D51's item 4 amendment) and the document's CHIP-AUTHENTICITY status; `chip_auth`
+    itself stays unchanged in the `▸ technical:` line — this is a plain-language restatement
+    alongside it, not a replacement of it. **Critical constraint:** chip authenticity has THREE
+    states, not two — **verified**, **NOT SUPPORTED by this document**, and **failed** — and the
+    absent/not-supported case MUST read honestly as its own state and MUST NOT be rendered as
+    "false," which would misrepresent an absent capability as a failed check. This ties to the
+    project's standing, stated-not-hidden position: a document without chip authentication is
+    clone-replayable (the US passport is exactly this case, per M0 evidence), and mode-B uniqueness
+    and blocking only hold where `chip_auth` is true (D21, D29, FR11) — the log MUST make this
+    visible to the user in plain language, not bury it only in the technical line. **Exact strings
+    NOT yet owner-approved** — the implementer's chosen wording for all three states returns for
+    approval like every other user-facing string this session.
 
 **Exit criteria**
 
@@ -612,11 +1195,11 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
 |---|---|
 | Three `M2-SCAN-EVIDENCE.md` checkpoints, re-run on the real build, Pixel 6a, both documents | Reinstall zktag stability; on-device masterlist two-bucket rule with both negatives; mode A emits no zktag after a mode-B presentation |
 | Handoff roundtrip | Passes against the `spikes/m2-handoff` verifier over `av://`/`direct_post`, including a mode-B presentation accepted under D31's any-of evidence set |
-| Mode-radio bug (F5) | **Closed 2026-09-01**: not reproduced under the structural fix (item 4); attributed to the default-A radio state, not a capture bug |
-| Mode preselection (item 13) | A pending handoff request's `zkagent.tier` sets and locks the mode radio; an absent/invalid tier fails loudly, no default |
+| Mode-radio bug (F5) | **Closed 2026-09-01**: not reproduced under the structural fix (item 4); attributed to the default-A radio state, not a capture bug. **Superseded 2026-09-01 (D51): the mode radio is removed entirely — mode is derived (verified handoff tier, or mode A by default with no pending request) and shown as plain text, eliminating this entire bug class by construction, not merely fixing the observed instance** |
+| Mode preselection (item 13) | A pending handoff request's `zkagent.tier` sets and locks the mode radio; an absent/invalid tier fails loudly, no default. **Superseded 2026-09-01 (D51): there is no longer a mode radio to lock — mode is DERIVED from the verified tier (or mode A by default), shown as plain text; the absent/invalid-tier-fails-loudly-no-default requirement is UNCHANGED and now guards the derivation step; tier C remains refused** |
 | Request-object verification (item 14) | An unsigned or unverifiable request object is refused (log + report) at every tier, not only C |
-| Blocking acknowledgment (item 15) | An outcome ending a scan attempt (read failure, access-establishment failure, handoff refusal) is shown as a modal dialog, not a Snackbar, and only dismisses on OK; the state transition (keep-MRZ vs reset) happens on dismissal |
-| Log view (item 16) | Successive scan reports accumulate, timestamped, in the log view; content is byte-identical to what `emitReport()` already produces; the log is empty after any wipe that does not keep MRZ/mode |
+| Blocking acknowledgment (item 15) | An outcome ending a scan attempt — read failure, access-establishment failure, handoff refusal, **and mint-path failures** (key generation, missing verified request/origin/document-number, no usable device key or signature, biometric/device-credential error) — the named classes are examples, not exhaustive (D43 clarification) — is shown as a modal dialog, not a Snackbar, and only dismisses on OK; the state transition (keep-MRZ vs reset) happens on dismissal. **A pending handoff/request is already cleared on every definitive delivery outcome, confirmed pre-existing behavior; a tap/mint against a handoff session that has EXPIRED (past its challenge expiry) while still formally pending is refused UP FRONT with a blocking dialog before any tap, as NEW protection against a silent `direct_post` failure — not, as originally recorded, a fix for a consumed session being left reachable (corrected 2026-09-01, D50); the access-establishment-failure path itself is unchanged.** **A third bucket — transient chip-communication failure (tag lost / link dropped mid-read) — also keeps MRZ/mode for a no-re-entry retry, with the pending handoff surviving the retry and D50's expiry refusal taking precedence if the session expires meanwhile; classification is conservative, falling through to RESET when unclear (D51)** |
+| Log view (item 16) | Successive scan reports accumulate, timestamped, **newest first** (D50, rendering order only — stored order still round-trips via D35), in the log view **for the life of the app session**; a per-scan session wipe (successful or not) MUST NOT clear it (D45) — the log is gone only when the app process ends. **Exactly ONE entry per scan attempt — a terminal outcome REPLACES that scan's in-progress entry, never appends a second one; an in-progress entry with no terminal outcome is still shown, not erased; every `emitReport` write still reaches logcat (D50)**. Each entry is titled by the verified site (`scope_domain`, D37/D42) or the owner-CONFIRMED "Local scan (no site)" label for mode A **or a failed request-object verification** (D46, D47, D48c), and renders as the four-field plain-language block `Result`/`Sent`/`Shared`/`Identity` plus a subordinate `▸ technical:` line carrying the complete unmodified report text (D47, D48a). `Identity` reads **"new — minted fresh for this site"** or **"known — recognized only here from previous visit"** per the D38/D39 per-(origin,zktag) key state (D48). `Shared` renders as a LIST of `<predicate>: <boolean>` lines (today exactly one: `age > 18: true`/`false`, comparison or bare-boolean predicate form, literal `true`/`false` never "yes"/"no", D49), followed by the negation line, with predicate/answer taken from the verified request and the actual scan outcome, never hardcoded or assumed (D48/D49); an empty list renders plain "nothing shared" wording, never an empty label or stray colon (D49) — each entry accurate to the actual outcome (a success, a refusal, a masterlist "no", an unmet mint gate, an access-establishment failure, a bare mode-A read, a diagnostic probe (D48b), and a refused consumed/expired handoff attempt (D50) each read distinctly), never claiming disclosure that didn't happen or reading as success on a failure path — while staying value-free except for the disclosed claim predicate(s) themselves (D46/D48/D49, item 5). **Also states, in plain language, the derived MODE and a THREE-state chip-authenticity status (verified / not supported by this document / failed — never rendering "not supported" as "false"), alongside the unchanged `chip_auth` field in `▸ technical:` (D51)** |
 
 ## 7. Riskiest-assumption register (what M0 must answer)
 
@@ -717,6 +1300,13 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
 | D42 | *(2026-09-01, owner decision, closes Q29's descendant Q30 — scope granularity)* **The zktag/evidence signing scope is host-only; D37's origin-consistency check stays the full origin (scheme+host+port).** Owner: "domain." The zktag domain scope (`scope_domain`, D5/FR2) and the D38/D39 attester-key alias derive from the request origin's **host only** (today `127.0.0.1`; in production `example.com`), while D34/D37's origin-consistency check across `client_id`/`request_uri`/`response_uri` uses the **full origin: scheme + host + port**. Rationale: a site that upgrades http→https or changes port is still the same site — binding the pseudonym to the full origin would silently reset every returning user's identity (and, under D39, mint a fresh attester key) for a change unrelated to who they are; the consistency check, by contrast, is a security claim about one request object and must be exact, since `https://example.com` and `http://example.com` are genuinely different origins. The implementation already behaves this way — `MainActivity.kt` derives `scopeDomain` via `URI(verified.origin).host`; `RequestTrust.kt`'s `originOf`/`resolveVerifierKey` compare scheme+host+port; the spike's `SCOPE_DOMAIN` derives from `BIND_HOST` (`spikes/m2-handoff/server.mjs`) — D42 records the split as deliberate, not accidental, which was the point of Q30. **Flagged, not fixed:** "host" and "registrable domain" are not the same thing for a real deployment — `a.example.com` and `b.example.com` are different hosts but one registrable domain, and the choice determines whether subdomains share a pseudonym. The current code uses host; recommended reading is host (subdomains stay distinct scopes — the conservative reading), recorded as a note for a production deployment since it does not bite at M2 scope with a single `127.0.0.1` origin. Closes **Q30** (§11). |
 | D43 | *(2026-09-01, owner decision)* **Any outcome that ends a scan attempt and requires user action MUST be surfaced as a modal dialog with an acknowledge (OK) action, never a self-dismissing Snackbar.** Owner, after a live run where a mistyped document number produced a transient overlay: "when wrong data in, it is not pop up to dismiss but overlay notification that disappears, i should get pop up then ok then it resets. i just updated number then tapped again and worked." §6.2 item 6 / F3 deliberately keeps the MRZ and locked mode on an access-establishment failure (PACE/BAC `SW 0x6300`→`0x6985`) so the user can fix a typo and retry (`wipeSession(keepMrzAndMode = accessFailure)`) — the app enters a "waiting for you to correct and re-tap" state whose only announcement, today, is a Snackbar that fades in a few seconds, indistinguishable from a finished or hung app once it does. New §6.2 item 15: the dialog carries the value-free reason and an OK action; on dismissal the app performs the state transition explicitly — keeping the MRZ focused for correction (access-establishment failure) or resetting the session (every other failure) — matching the existing `keepMrzAndMode` rule rather than a second policy. Transient (Snackbar) UI stays correct for purely informational events that change no state (e.g. "QR capture cancelled"). General rule: transient UI for transient facts, blocking UI for state that requires the user to act. Cross-references the recurring defect class this session already fixed twice (a UI-only write with no log, `apps/scanner/.../MainActivity.kt`; a silent `?: return null` in intent parsing): the shared failure shape is a state change whose only notification is transient or absent. Dialog text stays value-free — same constraint as the report (item 5) |
 | D44 | *(2026-09-01, owner decision)* **The per-scan report moves to its own log view, timestamped.** Owner: "the feedback of what happened every scan at the bottom of the app should go to another tab as logs, same output with timestamp." New §6.2 item 16: the value-free report currently rendered into `reportView` also accumulates into a separate in-app log view (a tab or equivalent navigation, exact widget left to implementation), each entry prefixed with a local wall-clock timestamp. Content is unchanged — the same value-free lines `emitReport()` already produces (item 5's grep-provable constraint: no MRZ, names, key bytes, fingerprints, chain contents); a log view must not become a reason to add richer detail. The single-write invariant survives: every report write still goes through the one logged `emitReport()` path (this session's fix for the earlier silent-report defect), and the log view is an additional consumer of it, never a second write site. In-memory only for the session, never persisted to disk — governed by item 6/F1 (MRZ persistence removed) and D35, not NO-GO #9 (secrets/test keys, not on-device persistence); D35's in-memory retention across Activity recreation extends to the accumulated log, and the log is cleared whenever a session wipe occurs that does not keep MRZ/mode (item 6), so the log's lifetime never exceeds the session it describes. Timestamps are display-only and do not enter any proof/evidence path — contrast D28's midnight-UTC coarsening of `current_date`, which is a payload field. The accessibility-snapshot caution on raw-field screens does not apply here because the content is value-free by construction, stated explicitly so the log view is never later treated as a place to add raw fields |
+| D45 | *(2026-09-01, owner decision, amends D44/item 16 — original D44 text kept, not deleted)* **The log view's lifetime is decoupled from `wipeSession()`'s per-scan wipe; it accumulates for the life of the app session, not one scan.** D44 as written said the log "lists the reports of successive scans in the session" while item 16 also said it MUST be cleared "whenever a session wipe occurs that does not keep MRZ/mode" (item 6) — self-contradicting. **Verified in code:** `MainActivity.kt` calls `wipeSession(keepMrzAndMode = false)` at the completed-read call site on EVERY completed read, including a successful one, so implemented literally the log held exactly one scan and reset on the next — successive scans never accumulated. Owner chose accumulation over the literal clear rule. Retention is otherwise unchanged from D44: in-memory only for the session, never persisted to disk (item 6/F1; NO-GO #9 does not apply — that NO-GO governs secrets/test keys in the tree, not on-device persistence), surviving Activity recreation via `onSaveInstanceState` (D35), gone only when the app process is gone — D45 removes the per-scan wipe as a clearing trigger, it does not make the log durable across process death |
+| D46 | *(2026-09-01, owner decision, amends D44/item 16 — original D44 text kept, not deleted)* **Each log entry MUST be titled by the site it was for and MUST legibly summarize disclosure outcome, not just echo the unlabeled report text.** Owner: "logs should be safe and not a source of threat, but should be there for user to know how it went, what went out and the result, how much it disclosed, successful or not" and "titled by timestamp, titled by website." Each entry MUST carry, besides its existing local wall-clock timestamp (display-only, unchanged, MUST NOT enter any proof/evidence path — contrast D28's midnight-UTC `current_date` coarsening, a payload field), a title identifying the verified request origin/`scope_domain` (D37, D42) the scan was for; a bare local scan with no verified handoff (mode A, no pending request) MUST use the fixed, value-free label **"Local scan (no site)"** rather than a blank field or a fabricated origin — this exact string is a specification made here, not itself owner-confirmed wording (flagged, §11 Q32). The log MUST be legible to a non-engineer about outcome: what went out, to whom, what was disclosed, whether it succeeded. **This SUPERSEDES D44/item 16's "MUST NOT change report content" clause to the extent that a value-free disclosure summary is now REQUIRED**; the rest of that clause — no MRZ, names, document fields, key bytes, signatures, nonces, fingerprints, or chain contents (item 5's grep-provable constraint), the single-`emitReport()`-write-path invariant, and the accessibility-snapshot note — is UNCHANGED and remains binding. The origin/site name is explicitly NOT a document field and is safe to show — stated so it is never later confused with one, and so this decision is never read as license to add any other raw field. **Open, not decided — Q32 (§11):** the exact shape/wording of the disclosure summary is not owner-specified; this decision states the requirement at the level the owner gave it |
+| D47 | *(2026-09-01, owner decision, closes Q32, amends D46/item 16 — original D46 text kept, not deleted)* **The disclosure-summary shape is a four-field plain-language block — `Result` / `Sent` / `Shared` / `Identity` — under the entry title, followed by a subordinate `▸ technical:` line; the no-site title label is CONFIRMED.** Owner approved, from three concrete renderings put to them, "plain summary first, technical detail subordinate," with this exact worked shape (a mode-B success, and a mode-A bare read): `14:22:07 · 127.0.0.1:8787` / `Result Verified — the site accepted you` / `Sent a site-only pseudonym + proof you're over 18` / `Shared your age threshold, and nothing else. Not your name, date of birth, document number, or nationality.` / `Identity new — minted fresh for this site` / `▸ technical: mode B · evidence sig-p256/1 · key_id c303cf3f… · chip_auth true · tx HVLKlhbU…` — and `14:19:41 · Local scan (no site)` / `Result Read OK — nothing sent` / `Sent nothing left this device` / `Shared nothing` / `▸ technical: mode A · evidence [] (D27)` (full verbatim block recorded at §6.2 item 16). **Title line** stays timestamp + verified `scope_domain` (D37/D42), or, for a bare mode-A scan, the label **"Local scan (no site)"** — this label, flagged in D46 as "a specification made here, not itself owner-confirmed wording," is now owner-CONFIRMED verbatim; that D46 flag is superseded, not deleted, and no longer applies. **`Identity`** is the plain-language restatement of the D38/D39 per-(origin, zktag) attester-key state — whether this presentation minted a new key/alias for this (origin, zktag) pair or reused one already bound from a prior visit at that site. Only the "new" case's copy above is owner-approved verbatim; the "reused" case's exact copy is not yet owner-specified and stays at this same register pending confirmation (does not reopen Q32 as a numbered question). **REQUIREMENT, not decoration:** the four plain-language lines MUST be accurate to the actual outcome, not a fixed template — a success, a request/handoff refusal, a masterlist "no," an unmet mint gate (item 12 failure classes), an access-establishment failure, and a bare mode-A read are genuinely different disclosures and MUST read differently; the log MUST NOT claim something was sent when nothing left the device, and MUST NOT read as success on a failure path; mode A MUST state plainly that nothing left the device (`evidence: []`, D27) — the second worked example above is the reference case. Everything D46 held UNCHANGED remains UNCHANGED under this amendment: the value-free constraint (item 5 — no MRZ, names, document fields, date of birth, document number, nationality, key bytes, raw signatures, nonces, fingerprints, or chain contents); the origin/site name is explicitly NOT a document field; the single-`emitReport()`-write-path invariant (the log view — including this richer rendering — is an additional consumer of that one call site, never a second write site; a field the current single string does not carry is added by extending what flows through that ONE call site, never by a second write path); the timestamp stays display-only, never in a proof/evidence path; and the accessibility-snapshot note stands — value-free by construction, never a place to add raw fields. Closes **Q32** (§11). |
+| D48 | *(2026-09-01, owner decision, closes the D47 residual, amends D47/item 16 — original D47 text kept, not deleted)* **The `Identity` field's reused-key wording is now owner-confirmed, and `Shared` MUST render the actual disclosed claim and its answer.** Owner: "new — minted fresh for this site, known - recognized only here from previous visit (or shorter), age above 18 yes shared." Two confirmed `Identity` strings: newly minted key — **"new — minted fresh for this site"** (unchanged, confirmed at D47); reused key — **"known — recognized only here from previous visit"**. The phrase **"only here" is load-bearing, not decorative** — it is the plain-language statement of D38/D39's per-(origin, zktag) key isolation: this site recognizes the returning user, and no other site can, because the key is scoped to (origin, zktag) not to the device. Implementers MUST NOT simplify or shorten this phrase out. This closes the residual D47 left open ("the 'reused' case's exact copy is not yet owner-specified"); that flag is superseded, not deleted. **`Shared` REQUIREMENT (new, substantive):** D47's example rendered `Shared` as the fixed sentence "your age threshold, and nothing else." — that was illustrative, not the requirement. `Shared` MUST instead state the actual disclosed predicate and its actual answer, in the shape `age above <threshold>: <answer> — and nothing else.`, followed by the existing negation line ("Not your name, date of birth, document number, or nationality."). Owner's worked value: "age above 18 yes shared" → `age above 18: yes — and nothing else.` Three sub-requirements: (1) the threshold number MUST be read from the verified request object at presentation time, NOT hardcoded — 18 is the value the current test request happens to carry, not a protocol constant; a request asking a different threshold renders that number. (2) the answer MUST be the actual value asserted for that scan, never assumed true — a scan that asserted `no`/failed the predicate MUST render that outcome, not a blind "yes." (3) on any path where nothing was disclosed (mode A, an unmet mint gate, a refusal, any failure), `Shared` MUST say so plainly and MUST NOT render an age claim at all — this is D47's outcome-accuracy rule (§6.2 item 16), restated here because the `Shared` line is exactly where it is easiest to violate by defaulting to the success template. **The disclosed age predicate is explicitly NOT a document field** under item 5's forbidden-fields list — it is the claim the user deliberately chose to present, and showing it back to the user in their own on-device log is the point of the feature, not a leak; item 5's constraint on raw document fields (MRZ, names, DOB, document number, nationality, key bytes, signatures, nonces, fingerprints, chain contents) is otherwise UNCHANGED and remains binding — the age-predicate exception is narrow and specific to this one field, not a general opening. **Three implementation clarifications, owner-approved ("agreed on 1 and 2 and 3 above"), recorded as clarifications not new decisions:** (a) the `▸ technical:` line carries the complete, unmodified existing report text, indented, rather than the terse one-line summary shown in D47's worked example — no debugging detail is lost, the terse form in D47 was illustrative formatting only; (b) the two debug-only probe buttons (masterlist self-test, device-key self-test) render as a distinct "Diagnostic OK/failed" summary titled under the no-site label — they are not scans, disclose nothing to any site, and MUST NOT be rendered as if they were a scan outcome; (c) `siteTitleFor()` (or equivalent) MUST render the fixed **"Local scan (no site)"** label for a handoff whose request-object verification FAILED, not only for a bare mode-A scan with no pending request — an unverified or attacker-claimed origin MUST NOT ever be rendered as a trusted site name in the log title. This is D37's origin-verification requirement enforced at the UI layer, stated here as a security property of the log view, not merely a UI/cosmetic detail. **Cross-reference, added 2026-09-01, not a new decision — see Q33 (§11):** the threshold-MUST in sub-requirement (1) above is currently UNMET by the app — `MainActivity.kt` asserts a hardcoded `threshold = 18` and an unconditional `true` answer rather than reading the threshold from the verified request object or computing the answer from the chip's DOB; flagged here so the unmet MUST is traceable to its cause rather than looking like an oversight. **Superseded 2026-09-01, not a new decision:** Q33 was split (§11) — this cross-reference now points at **Q35** specifically (the scanner-side fix reading `zkagent.challenge.threshold`, already present/signed/nonce-bound), not at Q36 (computing a real DOB-vs-threshold answer, a separate and still-undecided question). **Clarified 2026-09-01, not a new decision — what `Shared` is FOR:** owner: "what i meant is to surface what questions was asked and how it was answered above 18: true note where above 18 is requester and true was the answer, combined with not known and known that's a complete pic of request to the user." `Shared` is a QUESTION→ANSWER record of the exchange — the predicate the requester asked and the answer this presentation asserted — which, together with `Identity`'s known/new state, gives the user a complete picture of the request: who asked what, what was answered, and whether they were recognized. **Interim sourcing, tied to Q33, not a substitute for the request-object MUST above:** until a request-carried threshold and a real computed answer exist (Q33), both halves of the `Shared` line MUST be rendered from the actual signed claim map the app sends — never from a separately-typed string — so the log is by construction a faithful record of what was sent to that site, and becomes correct automatically once real per-request evaluation lands. **Cross-reference corrected 2026-09-01, conflict sweep, not a new decision:** Q33 was split into Q35/Q36 at v1.29; the two "(Q33)" mentions immediately above now read as **Q35** (the request-carried threshold, still open) for the threshold half and **Q36** (the real computed answer, still open) for the answer half. |
+| D49 | *(2026-09-01, owner decision, amends D48/item 16 — original D48 text kept, not deleted)* **`Shared` renders a LIST of predicate→boolean pairs, one per line, each answer a literal `true`/`false`, never `yes`/`no`; predicates use comparison (`attr > value`) or bare-boolean form.** Owner: "true/false always #2 agreed #3 questions answers, same shape \"age > 18: true, expiry > 3 months: false, expired: true\"." Two changes to D48's `Shared` specification, both superseding D48's illustrative example text (kept, not deleted) rather than its underlying requirement: (1) **Boolean literal, not paraphrase:** the answer half of each line MUST be the literal boolean `true` or `false` — never "yes"/"no" — because it is the direct mirror of the signed `over_threshold` (or future predicate) boolean; the log MUST NOT paraphrase the payload. D48's worked example `age above 18: yes` is superseded by `age > 18: true`; noted for the record that this reconciles the doc TO the implementation, which already rendered booleans, not the reverse. (2) **List, not sentence:** `Shared` MUST render as a list of `<predicate>: <boolean>` lines, one per disclosed claim, rather than one formatted sentence; the negation line ("Not your name, date of birth, document number, or nationality.") follows the list. **Predicate shape accommodates both forms shown in the owner's three examples** — comparison predicates (`age > 18`, `expiry > 3 months`) and bare boolean predicates with no operator (`expired`). **Constraints for today's single-element list:** the list holds exactly one element (the age predicate) until Q34 is resolved; an empty list (mode A, an unmet mint gate, a refusal, or any other non-delivered outcome) MUST render the plain "nothing shared" wording already required by D47/D48's outcome-accuracy rule, and MUST NOT render an empty label or a stray colon; the list MUST NOT be populated with any claim beyond the one that exists today — expiry and every other attribute remain **Q34** (§11), unbuilt. **Also recorded, owner-approved, not a new decision:** the `▸ technical:` block's compliance note is approved verbatim as `claim_proof: self-asserted by the device — not independently proven (D24)`, set only on outcomes where a claim was actually signed; this is currently the only place the log states the claim is unverified, tying directly to **Q33** (§11). |
+| D50 | *(2026-09-01, owner decision, from a live run on the Pixel 6a with both real documents, amends item 15/D43 and item 16/D44 — original text of both items kept, not deleted)* **Positive finding: D39's per-(origin, zktag) key isolation is confirmed on real hardware for the first time.** Both documents minted successfully (`ok=true allowed=true reason=evidence-verified evidence=["sig-p256/1"]`), each producing `attester=bound_first_sight` with a DIFFERENT key. **Three defects found in the same run, owner-approved to fix now as amendments to items 15/16 (not new items, not new open questions):** **(1) Log ordering (item 16):** the log view MUST list the newest entry first — a rendering-order change only; the stored order MUST keep round-tripping correctly through `onSaveInstanceState` (D35) unchanged. **(2) Duplicate in-progress entry (item 16):** the mint gate's biometric-authorization request calls `emitReport` (producing a `Result  In progress` entry) and the terminal outcome calls `emitReport` again, appending a second entry that never resolves the first. MUST: exactly ONE log entry per scan attempt, with the terminal outcome REPLACING that scan's in-progress entry in the log accumulator. MUST NOT be fixed by suppressing the in-progress `emitReport` call — every write MUST still reach logcat, since an unlogged UI-only write is exactly the defect item 16's single-write-path invariant exists to prevent. Required edge case: an in-progress entry with no terminal outcome (app backgrounded mid-scan) MUST still be shown, never silently erased. **(3) Consumed/expired handoff session (item 15), the substantive defect:** after a successful mint at 22:00:30 (`direct_post` 200, verdict PASS/minted), two subsequent taps failed at 22:01:16 and 22:01:37 with `AccessDeniedException SW=0x6982 SECURITY STATUS NOT SATISFIED` from `BACProtocol.doBAC` — a chip-access failure. The verifier log confirms no transaction was created between the two mints and no refusal was recorded server-side — nothing ever reached the verifier. The dialog's message was accurate for what actually failed, but the STATE was wrong: the app had left the handoff pending and the mode locked to an already-spent single-use nonce, inviting a doomed second tap. Same shape as this branch's scope-constant and threshold-constant findings — two internally-consistent sides (app's "handoff pending" vs. verifier's "nonce spent") disagreeing about something neither side can see alone. MUST: the pending handoff and its verified request are CLEARED once a presentation is delivered and accepted (`direct_post` 2xx), so a spent session cannot be reused. MUST: a tap or mint arriving with a mode locked to a handoff but no usable session (consumed OR expired — an expired challenge is equally unusable) is refused UP FRONT with a blocking dialog, ideally before any tap, stating the verifier session is no longer valid, with D43's existing non-access-failure reset on dismissal. UNCHANGED, restated: the access-establishment-failure path (`SW 0x6300`→`0x6985`, keeps MRZ, F3) behaved correctly in this run and is not touched. **Dialog wording NOT yet owner-approved** — owner's stated intent: "verifier session expired or something"; implementer's chosen exact strings return for approval like every other user-facing string. **Opens Q37 (§11), not resolved, no approach chosen:** whether "consumed" and "expired" can be distinguished device-side without a verifier round-trip, and where the challenge expiry is reachable from. **CORRECTED 2026-09-01 (original defect-3 text above kept, not deleted):** the causal claim above — that a successful mint left the handoff pending on an already-spent session — is not supported by the code. `MainActivity.kt:1033-1034` (pre-existing, already present before this session's work) clears `pendingHandoff`/`verifiedRequest` on ALL delivery outcomes, not only success, and `wipeSession(keepMrzAndMode = false)` clears `lockedMode` after every completed read — a consumed session could not have been left reachable for a stray tap. The two `SW=0x6982` failures observed were genuine chip-access failures after the owner re-typed the MRZ and re-locked; the dialog was accurate and the app's state was not wrong. The logcat evidence above stands; the interpretation of it does not. **What defect 3 actually is: NEW protection, not a bug fix** — nothing previously checked handoff session expiry at any point, so a session could age out (still formally pending — clearing only happens on definitive completion, never on elapsed time alone) during a physical chip read and fail at `direct_post` with no prior warning; that gap is real and the fix stands on its own merits. The "same class as this branch's scope-constant/threshold-constant findings" comparison drawn above no longer applies — those were two sides silently agreeing on a shared wrong constant, this is a genuinely missing check, not a coincidental agreement. **Q37 is now CLOSED**, resolved by implementation: the challenge expiry (`zkagent.challenge.expires_at`) is reachable from the already-verified request object with no verifier round-trip, and "consumed" needs no separate detection since clearing already removes a used session from state the moment it is used — see §11. |
+| D51 | *(2026-09-01, owner decision, from a live run on the Pixel 6a, amends items 4, 6/F1, 13/D33, 14/D34, 15/D43, and 16/D47/D49 — original text of all kept, not deleted)* **Positive finding: D38's first-sight attester binding confirmed `matched` on real hardware for the first time** — a returning document at the same origin re-presented the same key and was recognised (`attester=matched`), alongside D50's D39 confirmation in the same session. **Evidence for the amendments below:** a separate scan failed mid-read with `net.sf.scuba.smartcards.CardServiceException: Tag was lost` inside `DefaultFileSystem.readBinary`, surfacing as `IOException: Unexpected exception` — the document physically moved during the read; the verifier confirms a transaction was created and never received a presentation. **Three owner-approved amendments:** **(1) Third failure-transition bucket (item 15/D43):** a TRANSIENT chip-communication failure (tag lost / link dropped mid-read) MUST keep the MRZ and mode, like the access-establishment bucket, so the user can retry with no re-entry. General rule: the discriminator is whether THE ENTERED DATA IS STILL GOOD — wrong for access-establishment, merely interrupted for tag loss; resetting in that case discards correct input for a physical mishap. The pending handoff MUST survive the retry; D50's session-expiry refusal takes precedence if the session expires meanwhile. Classification MUST be conservative — an unclassifiable exception falls through to RESET, since a wrong "keep" leaves document data on screen unexpectedly, worse than a wrong "reset." Dialog wording not yet owner-approved. **(2) Mode radio removed; mode is DERIVED (items 4, 13/D33, 14/D34):** mode is no longer a user choice — a verified handoff's tier determines it, a bare local scan with no verified request is mode A by definition, and the control is replaced by plain text showing the derived mode. This eliminates F5's bug class by construction (a control that can disagree with the executed mode cannot disagree if it is not a control) and removes the last way to violate item 4's one-source-of-truth requirement. D33/D34's "sets and locks the mode radio" MECHANISM is superseded by derivation; the REQUIREMENT it enforced — an absent/invalid tier fails loudly, no default — is NOT superseded, now guarding the derivation instead; tier C remains refused. **(3) Mode and chip-authenticity status in the log block (item 16/D47/D49):** each entry MUST state, in plain language alongside Result/Sent/Shared/Identity, both the mode and the chip-authenticity status; `chip_auth` stays unchanged in `▸ technical:`. Chip authenticity has THREE states — verified, NOT SUPPORTED by this document, and failed — and the absent case MUST read honestly and MUST NOT render as "false." Ties to the project's stated-not-hidden position that a document without chip authentication is clone-replayable (the US passport is exactly this case) and mode-B uniqueness only holds where `chip_auth` is true. Exact strings not yet owner-approved. **One alternative considered and DECLINED, recorded because the rejection matters:** **(4) item 6/F1's `onStop()` MRZ wipe is REAFFIRMED, not relaxed.** Asked whether to relax it so entered details survive an app-switch (found annoying live), the owner declined — the wipe rule stays exactly as written. Reasoning: the actual friction was the tag-loss reset, fixed instead by (1) above; retaining document data in memory while backgrounded for convenience would weaken F1's privacy posture for a problem that had a better, narrower fix. Recorded so this alternative is not re-proposed later as an obvious improvement. |
 
 **Resolved and closed** (kept as one-liners; full reasoning is in the version history and session stashes): **Q2** — Apple entitlement moot for M0. **Q5** — Android is primary (D2). **Q6** — iOS deferred (D2). **Q9** — phone→agent cert handoff ships all three paths (QR ~400–550 bytes in one static QR with no fountain coding; LAN POST; user-moved file, which leaks the zktag to whatever routes it and must be documented rather than blocked). The cert carries the agent's *public* key and is signed by the phone, so integrity is free and the channel needs neither confidentiality nor authentication. No zkagent-run server in any path.
 
@@ -863,6 +1453,139 @@ The M2 opening POCs (§6 M2 row) all PASS on both documents (`docs/logs/M2-SCAN-
   accepting it as permanent. No recommendation made beyond noting the tension: any mechanism that
   lets a NEW key claim an EXISTING zktag is exactly the attack first-sight binding exists to
   prevent, so this is a genuine tension, not an oversight to fix casually.
+- **Q32 (closed by D47)** — exact shape of the log view's disclosure
+  summary (D46, §6.2 item 16). The owner requires each log entry to be legible to a
+  non-engineer about outcome — what went out, to whom, what was disclosed, whether it succeeded —
+  but did not specify the format: a fixed set of labeled fields (e.g. `site: … | mode: … |
+  result: … | disclosed: …`), a short free-text sentence generated from the existing report lines,
+  or something else. Also open within the same decision: the fixed no-site label for a bare local
+  scan is specified in this revision as **"Local scan (no site)"**, a string chosen here to fill
+  the gap, not itself owner-confirmed — the owner may want different wording. **Closed 2026-09-01:
+  owner chose, from three concrete renderings put to them, a plain-language-first /
+  technical-detail-subordinate four-field block (`Result`/`Sent`/`Shared`/`Identity`) plus a
+  subordinate `▸ technical:` line (D47, full worked examples at §6.2 item 16); and CONFIRMED "Local
+  scan (no site)" as the exact no-site label wording, closing both halves of this question.**
+
+- **Q33 (superseded 2026-09-01, split into Q35/Q36 — original text below kept, not deleted) — the
+  scanner asserts an age claim it never computes; the
+  D11 threshold-comparison requirement is unimplemented.** Verified by direct code inspection:
+  `apps/scanner/.../MainActivity.kt:1181-1182` sets `val threshold = 18` as a bare local constant
+  and `val claim = mapOf("over_threshold" to true, "threshold" to threshold)` asserts `true`
+  UNCONDITIONALLY on every mint, regardless of the document's actual date of birth. The chip's DOB
+  is used ONLY to derive the BAC/PACE access key; no DOB-versus-threshold comparison exists
+  anywhere in the app. `spikes/m2-handoff/server.mjs`'s request object carries no `threshold`
+  field, and neither `RequestTrust.kt` nor `HandoffClient.kt` parse one. **Consequence, stated
+  plainly:** the device evidence captured 2026-09-01 (`allowed=true reason=evidence-verified`) is
+  NOT evidence about age — both the app and the verifier behaved correctly by their own contracts
+  (the verifier checks the signature and the evidence binding, not the truth of the claim inside),
+  the same self-consistent-but-wrong shape as this branch's other cross-contract bugs. **What the
+  PRD already requires, not yet built:** D11 — the adopter sets `threshold`, the claim is
+  `age_over_${threshold}`, the verdict is one bit, and a proof of a threshold OTHER than the one
+  requested MUST be rejected. §6.2's sixteen items never asked the scanner to implement this, so
+  this is a gap between an existing decision and the build, not a violation of M2's written scope.
+  **D48's requirement that `Shared`'s threshold come from the verified request object is currently
+  UNMET as a direct consequence** — see D48's cross-reference. **Owner's tracking decision,
+  verbatim: "Both — question now, item when you decide to build it."** Recorded as an open question
+  now; to be promoted to a numbered §6.2 item only if and when the owner decides to build it inside
+  M2 — no §6.2 item added this revision.
+  **SUPERSEDED 2026-09-01:** this question's premise that the request-carried threshold and D11
+  enforcement were absent was incomplete — both already exist in code (see Q35's finding 1/2
+  below). Split into **Q35** (the scanner-side one-line fix, request-threshold not read) and
+  **Q36** (computing a real DOB-vs-threshold answer, genuine open design work) — see below.
+
+- **Q35 (open, owner-flagged 2026-09-01, descendant of Q33, part a) — the scanner must read the
+  already-present, signed, nonce-bound `zkagent.challenge.threshold` instead of its hardcoded
+  `18`.** Three code findings, verified directly against the live source, corrected Q33's premise
+  and produced this narrower question. **Finding 1 — the threshold is already carried, signed, and
+  nonce-bound in the request object:** `chiproof`'s `issueChallenge` places `threshold` inside the
+  challenge (`packages/chiproof/src/challenge.js:73-76,152-175`), which rides in the ES256-signed
+  request object at `zkagent.challenge.threshold`; the spike's own test asserts it equals 18
+  (`spikes/m2-handoff/tests/roundtrip.test.mjs:86`); it is additionally nonce-bound — chiproof
+  mints the nonce over `(tier, verbs, threshold, max_scan_age, expires_at)`, so any post-mint edit
+  returns `nonce_forged` (`packages/chiproof/src/challenge.js:225-240`). The scanner parses that
+  same challenge object at `MainActivity.kt:1197-1198` and reads ONLY `nonce`; the comment at
+  `MainActivity.kt:1191` asserting the challenge "carries only nonce/tier/expiry" is itself a
+  defect, factually wrong, and is folded into this question. **Finding 2 — D11's enforcement
+  already exists and has been running all along:** `packages/chiproof/src/index.js:233-236` rejects
+  `threshold_mismatch` when the presented `claim.threshold` differs from either the challenge's
+  threshold or the verifier's configured one, and rejects `under_threshold` when
+  `claim.over_threshold !== true`. Nothing here requires building enforcement — it is scanner-side
+  wiring only. **Finding 3 — the consequence:** the 2026-09-01 device runs that returned
+  `allowed=true` did so only because two independently hardcoded constants happened to agree — the
+  scanner's `threshold = 18` (`MainActivity.kt:1181`) and chiproof's default of 18, which the spike
+  verifier inherits by passing none (`packages/chiproof/src/index.js:76`;
+  `spikes/m2-handoff/server.mjs:143`). Change either constant and every scan returns
+  `threshold_mismatch`. Same shape as this branch's other scope-constant bugs (a test and a server
+  agreeing because they read one constant), except worse — here the two sides agree BY COINCIDENCE
+  rather than by a shared import, so nothing in the code expresses the coupling at all. **Scope,
+  stated honestly:** this is a one-line read plus a test — no protocol change, no new request-object
+  field, no verifier work — and it closes **D48**'s currently-unmet threshold-from-request MUST (see
+  D48's superseded cross-reference, §10). **Rejected approach, recorded so it is not re-proposed:** a
+  previous attempt added a sibling `zkagent.threshold` field and was REVERTED, because a sibling
+  field would be JWS-signed but NOT nonce-bound — the challenge-carried `zkagent.challenge.threshold`
+  is the correct and only source. **Owner's tracking decision, verbatim: "Both — question now, item
+  when you decide to build it."** Recorded as an open question now; promoted to a numbered §6.2 item
+  only if and when the owner decides to build it inside M2 — no §6.2 item added this revision.
+
+- **Q36 (open, owner-flagged 2026-09-01, descendant of Q33, part b) — compute a real answer from the
+  chip's DOB rather than asserting `true` unconditionally.** Genuine open design work, nothing
+  chosen. The verifier-side plumbing for a `false` answer already exists (`under_threshold`, Q35
+  finding 2), so the open work is entirely device-side: where the DOB-vs-threshold comparison lives
+  in the read/mint pipeline; how it interacts with item 3's mint gate (D21: always read chip data,
+  conditionally mint evidence); what the user is shown on a `false` outcome (an under-threshold
+  result is not a failure to be hidden, but D47/D48/D49's outcome-accuracy rule still applies —
+  `Shared` must render the true `false`, never a blind `true`); and how the comparison interacts
+  with D28's midnight-UTC `current_date` coarsening (the comparison must use the same coarsened
+  date the evidence payload uses, or the log and the proof could disagree). No approach proposed or
+  chosen here — recorded as open design work requiring its own pass before anything is built.
+  **Owner's tracking decision, verbatim: "Both — question now, item when you decide to build it."**
+  Recorded as an open question now; promoted to a numbered §6.2 item only if and when the owner
+  decides to build it inside M2 — no §6.2 item added this revision.
+
+- **Q34 (open, owner-raised 2026-09-01) — a general claim vocabulary beyond age.** Owner: "i expect
+  to land all things that comes with the id make it available, expiry date ie. > 3 months > 6
+  months > 1 year and other things that are usually verified/requested across mode a, b and c."
+  Not a decision, nothing built: whether/how zkagent should eventually support the attributes sites
+  commonly request, expressed as bucketed/predicate claims rather than raw values — the owner's
+  worked example is document expiry rendered as `> 3 months` / `> 6 months` / `> 1 year` rather than
+  a date. Considerations for whoever answers this, none decided here: (a) this generalizes D11's
+  single configurable threshold into a claim vocabulary, and D11's proof-of-the-wrong-predicate-
+  MUST-be-rejected rule would need to generalize with it; (b) each additional predicate discloses
+  additional bits — the data-minimisation reasoning behind D40 (no issuer-country attribute) and Q11
+  (threshold-probing) applies to every new claim, and likely harder, since multiple predicates
+  combined can narrow a person far faster than any one alone; (c) it interacts with FR6's
+  anonymity-set framing, since a build shipping more claims partitions its users more finely; (d)
+  the owner scoped it across modes A, B, and C, so the per-tier disclosure limits need working out
+  per claim, not once for the whole vocabulary. Needs its own design pass and, per the project's
+  standing rule, its own riskiest-assumption POC before anything is built.
+  **Structural point settled 2026-09-01 (D49), question STILL OPEN:** owner's examples ("age > 18:
+  true, expiry > 3 months: false, expired: true") answer HOW multiple claims would be rendered — a
+  list of predicate→boolean pairs, the same shape as today's single age claim — but decide NOTHING
+  about WHICH claims exist, what buckets they use, which tiers may carry them, or the cumulative-
+  disclosure cost of combining them; the claim vocabulary, its per-tier limits, and its
+  cumulative-disclosure analysis all remain open and still require their own design pass and
+  riskiest-assumption POC before anything is built. **Implementation fact, not a decision:**
+  `DisclosureSummary.shared` modelled one claim as a single string, which would have needed
+  reshaping rather than extending once this question lands — the list shape (D49) is adopted now,
+  while the list has one element and a live test suite around it, rather than later under pressure
+  alongside new claim logic; this is a structural change only and adds no claim.
+
+- **Q37 (closed, resolved by implementation 2026-09-01)** — can "consumed" and "expired" handoff
+  sessions be distinguished device-side without a verifier round-trip, and where is the challenge
+  expiry reachable from? D50 requires refusing a tap/mint against a handoff session that is
+  either consumed (single-use nonce already spent) or expired (past the challenge's expiry) — both
+  are equally unusable — but whether the device can tell WHICH of the two happened without asking
+  the verifier, and where in the existing request/challenge object the expiry timestamp is actually
+  reachable from, is not resolved here. No approach proposed or chosen — recorded as open,
+  implementer-flagged, pending its own answer before or during D50's implementation.
+  **Resolved 2026-09-01, by code fact not design choice:** the challenge expiry
+  (`zkagent.challenge.expires_at`) is reachable directly from the already-verified request object,
+  with no verifier round-trip needed. Separately, "consumed" needs no device-side detection at
+  all — D50's corrected understanding (§10, §6.2 item 15) established that a used handoff session
+  is already cleared from app state (`pendingHandoff`/`verifiedRequest` set to null) the moment it
+  is used, by pre-existing code, so there is nothing left to distinguish: an expired-but-not-yet-
+  used session is caught by the new expiry check, and a used session is simply gone, not present to
+  be mistaken for anything else.
 
 ## 12. Grounding (why this isn't a dart in the dark)
 
@@ -897,6 +1620,15 @@ The dominant risk is not a break in the chain — it is that no one installs the
 
 | Version | Date | Change |
 |---|---|---|
+| v1.32 — 2026-09-01, owner-approved | 2026-09-01 | D51 (amends items 4, 6/F1, 13/D33, 14/D34, 15/D43, 16/D47/D49, original text kept) — from a live Pixel 6a run: positive finding, D38's first-sight attester binding confirmed `matched` on real hardware; evidence of a mid-read `CardServiceException: Tag was lost`/`IOException` chip-communication failure. Three amendments: (1) item 15 gains a third failure-transition bucket — transient chip-communication failure keeps MRZ/mode for a no-re-entry retry, pending handoff survives, D50 expiry refusal still takes precedence, classification conservative (falls through to reset when unclear); (2) the mode radio is removed, mode is derived from a verified handoff's tier or defaults to mode A, shown as plain text — eliminates F5's bug class by construction, item 13/D33's absent/invalid-tier-fails-loudly requirement is unchanged and now guards the derivation, tier C still refused; (3) item 16's log block gains plain-language mode and three-state chip-authenticity status (verified / not supported / failed, never rendered as false), `chip_auth` unchanged in `▸ technical:`. One alternative declined: item 6/F1's `onStop()` MRZ wipe is reaffirmed unchanged, relaxing it for app-switch convenience was considered and rejected in favor of the narrower item-15 fix. Dialog/status wording not yet owner-approved throughout. §6.2 (items 4, 6, 13, 15, 16, exit-criteria table), §10 (D51 added) are annotated. |
+| v1.31 — 2026-09-01, owner-approved | 2026-09-01 | Corrects D50's defect-3 causal claim, which was wrong: code inspection (`MainActivity.kt:1033-1034`, pre-existing) shows `pendingHandoff`/`verifiedRequest` already clear on every definitive delivery outcome and `lockedMode` clears on every completed read, so a consumed session could not have been left reachable; the two observed `SW=0x6982` failures were genuine chip-access failures, dialog accurate, state not wrong. Reframes defect 3 as NEW protection against a session aging past its challenge expiry while still formally pending (never cleared by elapsed time alone). Closes **Q37** by implementation fact (expiry reachable from the verified request object, no verifier round-trip; "consumed" needs no separate detection since clearing already happens on use). Conflict sweep (owner-requested): corrects a stale "(Q33)" cross-reference in D48's row to Q35/Q36; annotates the D47 worked-example code block in §6.2 item 16 as historical for its `Shared`/ordering/entry-count details, current shape being the Exit-criteria row; confirms no other conflicts in item 16's D44→D45→D46→D47→D49→D50 chain, the top-revision-narrative stack, or D48/Q35's framing. §6.2 (items 15, 16, exit-criteria table), §10 (D50 defect-3 corrected, D48 cross-reference corrected), §11 (Q37 closed) are annotated. |
+| v1.30 — 2026-09-01, owner-approved | 2026-09-01 | D50 (amends item 15/D43 and item 16/D44, original text kept) — from a live Pixel 6a run with both real documents: positive finding, D39's per-(origin,zktag) key isolation confirmed on real hardware (two mints, two different attester keys); three owner-approved defect fixes: (1) log view lists newest entry first (rendering order only, storage via D35 unchanged); (2) exactly one log entry per scan attempt, terminal outcome replaces the in-progress entry rather than appending a second (every `emitReport` write still reaches logcat, single-write-path invariant unchanged; an entry with no terminal outcome still shown); (3) the substantive fix — a pending handoff/request is cleared once a presentation is delivered and accepted (`direct_post` 2xx), and a tap/mint against a consumed or expired handoff session is refused up front with a blocking dialog before any tap rather than left to surface as a chip-access failure; access-establishment-failure path (F3) unchanged. Dialog wording not yet owner-approved. Opens **Q37** (§11) — device-side consumed-vs-expired distinguishability and challenge-expiry reachability, unresolved, no approach chosen. §6.2 (items 15, 16, exit-criteria table), §10 (D50 added), §11 (Q37 opened) are annotated. |
+| v1.29 — 2026-09-01, owner-approved | 2026-09-01 | Corrects **Q33** (opened on an incomplete reading) and splits it, per owner ("Split it into two"), into **Q35** (descendant of Q33, part a — the scanner must read the already-present, signed, nonce-bound `zkagent.challenge.threshold` (`packages/chiproof/src/challenge.js:73-76,152-175`) instead of its hardcoded `18` (`MainActivity.kt:1181`); D11 enforcement already exists (`packages/chiproof/src/index.js:233-236`); the two hardcoded 18s only coincidentally agreed; scoped as a one-line scanner read, no protocol/verifier work, closes D48's unmet threshold-from-request MUST; records a reverted sibling-field approach so it is not re-proposed) and **Q36** (descendant of Q33, part b — computing a real DOB-vs-threshold answer, genuine open design work, nothing chosen). Q33's own text is kept in place, marked superseded not deleted (matching D42's Q29→Q30 descendant convention). D48's Q33 cross-reference (§10) superseded in place to point at Q35 specifically. No §6.2 item added — promotion happens only if/when the owner decides to build inside M2. §10 (D48 cross-reference superseded), §11 (Q33 superseded/split, Q35/Q36 opened) are annotated. |
+| v1.28 — 2026-09-01, owner-approved | 2026-09-01 | D49 (amends D48/item 16, original text kept) — `Shared` answers MUST be the literal boolean `true`/`false`, never "yes"/"no" (reconciles doc to already-boolean implementation); `Shared` MUST render as a LIST of `<predicate>: <boolean>` lines (comparison form `age > 18` or bare-boolean form `expired`), followed by the existing negation line — today exactly one element, empty list renders plain "nothing shared", never an empty label/stray colon; list MUST NOT be populated beyond today's one claim (expiry etc. remain Q34, unbuilt). Also records owner-approved `▸ technical:` compliance note `claim_proof: self-asserted by the device — not independently proven (D24)`, tying to Q33. Appends a structural clarification to **Q34** (still OPEN, not closed): the owner's examples settle the multi-claim rendering shape only, not the claim vocabulary/tiers/disclosure cost, which remain open with their own design pass and POC required; records the `DisclosureSummary.shared` reshaping-now-vs-later implementation rationale as a structural fact, not a decision. §6.2 (item 16, exit-criteria table), §10 (D49 added), §11 (Q34 appended) are annotated. |
+| v1.27 — 2026-09-01, owner-approved | 2026-09-01 | Opens **Q33** — code-inspection finding: `MainActivity.kt:1181-1182` hardcodes `threshold = 18` and asserts `over_threshold: true` unconditionally, no DOB-vs-threshold comparison exists, no request carries a threshold — D11's threshold-comparison requirement is unimplemented, D48's `Shared`-threshold-from-request MUST is unmet as a consequence; owner: "Both — question now, item when you decide to build it," recorded as a question only, no §6.2 item added. Opens **Q34** — owner direction (not decided): a general claim vocabulary beyond age (e.g. document expiry as `> 3 months`/`> 6 months`/`> 1 year`), needing its own design pass and riskiest-assumption POC; four open considerations recorded (D11 generalization, D40/Q11 data-minimisation compounding across claims, FR6 anonymity-set, per-tier limits across modes A/B/C). Clarifies **D48** (not a new decision): `Shared` is a question→answer record of the exchange, which with `Identity` gives the user the complete picture of a request; interim sourcing recorded — both halves of `Shared` MUST render from the actual signed claim map until real per-request evaluation lands (tied to Q33). §10 (D48 annotated), §11 (Q33, Q34 opened) are annotated. |
+| v1.26 — 2026-09-01, owner-approved | 2026-09-01 | D48 (closes D47 residual, amends D47/item 16, original text kept) — `Identity` reused-key wording confirmed: **"known — recognized only here from previous visit"** (paired with the already-confirmed "new — minted fresh for this site"); "only here" is load-bearing, the plain-language statement of D38/D39's per-(origin,zktag) key isolation, MUST NOT be simplified out. New substantive requirement: `Shared` MUST render the actual disclosed predicate/answer as `age above <threshold>: <answer> — and nothing else.`, threshold read from the verified request (not hardcoded), answer the actual asserted value (never assumed true); any non-disclosing path states so plainly and renders no age claim. The disclosed age predicate is carved out of item 5's forbidden-fields list as the one thing the user chose to disclose; rest of item 5 UNCHANGED. Three owner-approved implementation clarifications recorded (not separately numbered): `▸ technical:` line carries the full unmodified report text; debug-only probe buttons render a distinct "Diagnostic OK/failed" summary under the no-site label; the no-site label also covers a failed request-object verification (D37 at the UI layer). §6.2 (item 16, exit-criteria table), §10 (D48 added) are annotated. |
+| v1.25 — 2026-09-01, owner-approved | 2026-09-01 | D47 (closes Q32, amends D46/item 16, original text kept) — owner-approved four-field plain-language disclosure block (`Result`/`Sent`/`Shared`/`Identity`) plus a subordinate `▸ technical:` line, per the two worked examples (mode-B success, mode-A bare read); `Identity` restates the D38/D39 per-(origin,zktag) key state (new vs. reused, only the "new" copy owner-verbatim). Stated as a REQUIREMENT that the plain-language lines be accurate per actual outcome — never overstating what was disclosed, never reading as success on a failure path, mode A required to state plainly that nothing left the device (`evidence: []`, D27). Owner also CONFIRMED "Local scan (no site)" as the exact no-site label wording, superseding D46's unconfirmed-wording flag. Value-free constraint (item 5), single-`emitReport()`-write-path invariant, display-only timestamp, and accessibility-snapshot note all restated UNCHANGED. §6.2 (item 16, exit-criteria table), §10 (D47 added), §11 (Q32 closed) are annotated. |
+| v1.24 — 2026-09-01, owner-approved | 2026-09-01 | D45 (amends D44/item 16, original text kept) — the log view's lifetime is decoupled from `wipeSession()`'s per-scan `!keepMrzAndMode` branch; it now accumulates for the life of the app session, not one scan. Corrects a self-contradiction found by inspecting the code: `MainActivity.kt` calls `wipeSession(keepMrzAndMode = false)` on every completed read including a successful one, so the literal original clear rule wiped the log on its own success path and successive scans never accumulated. Retention otherwise unchanged (in-memory only, never persisted, survives Activity recreation via D35, gone only when the process is gone). D46 (amends D44/item 16, original text kept) — each log entry MUST carry a title identifying the verified site (`scope_domain`, D37/D42), or the fixed value-free label "Local scan (no site)" for a bare mode-A scan, and MUST be legible to a non-engineer about outcome (what went out, to whom, what was disclosed, success/failure); SUPERSEDES item 16's "MUST NOT change report content" clause to the extent a value-free disclosure summary is now required, while the value-free constraint (item 5), single-`emitReport()`-write-path invariant, and accessibility-snapshot note all stand unchanged. Opens **Q32** (§11): exact disclosure-summary shape/wording not owner-specified. Also records a non-numbered clarification to D43/item 15: the three named failure classes are examples of its general rule, not exhaustive — mint-path failures are in scope and the implementation's wider coverage is kept. §6.2 (items 15, 16, exit-criteria table), §10 (D43 annotated, D45/D46 added), §11 (Q32 opened) are annotated. |
 | v1.23 — 2026-09-01, owner-approved | 2026-09-01 | D43 (owner: "when wrong data in, it is not pop up to dismiss but overlay notification that disappears, i should get pop up then ok then it resets") — any outcome that ends a scan attempt and requires user action MUST be a modal dialog with an OK action, not a self-dismissing Snackbar; on dismissal the app keeps the MRZ focused for correction (access-establishment failure, F3's `keepMrzAndMode`) or resets the session (every other failure) — the existing rule, not a second policy. Transient UI stays correct for informational, no-state-change events. New §6.2 item 15. D44 (owner: "the feedback of what happened every scan at the bottom of the app should go to another tab as logs, same output with timestamp") — the value-free report moves to (accumulates in) a separate in-app log view, timestamped, content unchanged, routed through the existing single `emitReport()` write path, in-memory only — governed by item 6/F1 and D35, not NO-GO #9 (secrets/test keys, not on-device persistence) — cleared on any wipe that does not keep MRZ/mode. New §6.2 item 16. Also records, as a stated limitation not a decision: first-sight attester binding (D38/D39) has no re-enrolment mechanism — a lost/reset device is refused `attester_key_mismatch` permanently at every site that knows it; observed as a real refusal (transactions `Cxn0dXWz8nlJfVX3`, `MstvPR4zJGK4VoSG`, 12:42), a staging artifact but a real mechanism. Opens **Q31** (§11): re-enrolment options listed, not decided. §6.2 (new items 15/16, exit-criteria table), §10 (D38 annotated, D43/D44 added), §11 (Q31) annotated. |
 | v1.22 — 2026-09-01, owner-approved | 2026-09-01 | D41 (owner: "leave it") closes the FR12 `sig-*/1` linkability-class escalation left open by D38/D39: `sig-ed25519/1`/`sig-p256/1` keep `linkability: 'signer'`, tier ceiling B unchanged — under D39 each key is scoped to `(origin, zktag)`, a fingerprint of one (device, site, document) triple, not a stable per-device value; `'device'` is reserved for a value the same at every site, permanently. Generalises to every future plug: linkability class is a property of the plug, measured from its payload, never inferred from its technology category — cited in code, `zk-passport/1` → `'none'` (D26's `vk_sha256` bucket the one disclosed exception), `sig-*/1`/`signed-receipt/1` → `'signer'`, a hypothetical `key-attestation/1` → `'device'`. Play Integrity worked as a test case, not a class assignment: M1's spike found no device-unique field across sites, so it would NOT be `'device'` — most likely `'signer'` or `'none'` — but any future plug's class MUST come from a fresh probe of its own payload. D42 (owner: "domain") closes **Q30**: the zktag/evidence signing scope stays host-only while D37's origin-consistency check stays the full origin (scheme+host+port) — deliberate, matching what `MainActivity.kt`/`RequestTrust.kt` already implement; flags, without fixing, that "host" and "registrable domain" diverge for a real multi-subdomain deployment, recommending host (subdomains stay distinct scopes) as a production-deployment note, not an M2 blocker. FR12 and §11 Q30 annotated; §10 gains D41, D42. |
 | v1.21 — 2026-09-01, owner-approved | 2026-09-01 | D39 (owner: "yeah, isolate") — a live run (11:43) with D38's per-origin attester key found the owner scanning an NL ID card then a US passport at the SAME origin mint the same key, because the attester-key store binds `(scope, zktag)` while the key itself was keyed by scope alone — a site could learn two pseudonyms share one device. Fix: the Keystore alias now derives from origin AND zktag (§6.2 item 1), narrowing D38 not reversing it — general rule, a key's scope must be at least as narrow as the identity it signs for. Cost: one StrongBox key per (site, document); old per-origin keys are left in place, not migrated/deleted. Owner explicitly declined the fraud-detection capability isolation removes (spotting one device presenting two documents with differing age verdicts) as "not our place to judge/police" / "borderline creepy/surveillance"; orchestrator-added technical support: zkagent never binds presenter to document holder, so the signal would be false-positive-heavy regardless. FR12 amended: D39 narrows the `sig-*/1` linkability-taxonomy escalation further but does not resolve it — orchestrator recommends keeping `'signer'`/tier-ceiling-B, pending owner veto. Also records D40 — no issuer/country attribute or accept/reject filter at tiers A/B ("id is id doesn't matter where it's from... mode C of kyc should have that but others shouldnt"), distinguished from CSCA trust-anchor curation (§6.2 item 7, unaffected, remains legitimate); tier C may carry issuer info per D37's existing carve-out. New Q30 (§11, orchestrator flag, pending owner confirmation): the signed scope is host-only while D37's origin-consistency check is scheme+host+port — recommended as deliberate (pseudonym/key survive a port/scheme change; the security check stays exact), not yet owner-ruled. §6.2 item 1, FR12, §10, §11 annotated; §10 gains D39, D40. |
