@@ -46,3 +46,6 @@ spikes/m1-zk/vendor/
 spikes/m1-zk/out/
 spikes/m1-zk/run/node_modules/
 spikes/m1-zk/phone/dl/
+
+# Transient friction analysis — regenerated every /remember run, cross-project content
+/.claude/remember/friction/
