@@ -29,14 +29,58 @@
 
 import { createServer } from 'node:http';
 import { randomBytes, createPublicKey, createPrivateKey } from 'node:crypto';
-import { createVerifier, InMemoryNonceStore, realNo } from 'chiproof';
-import { sigEd25519, SIG_ED25519_KEY } from './sig-ed25519-plug.mjs';
+import {
+  createVerifier, InMemoryNonceStore, InMemoryAttesterStore, realNo, sigEd25519, sigP256,
+} from 'chiproof';
 import { DEV_ATTESTER } from './dev-attester-key.mjs';
+import { DEV_ATTESTER_P256 } from './dev-attester-key-p256.mjs';
 import { signJws } from './jws.mjs';
 import { DEV_REQUEST_SIGNER } from './dev-request-signer-key.mjs';
 
+// D31 (2026-09-01): the verifier accepts EITHER attester-sig plug, not one
+// fixed one — the device picks whichever its Keystore actually produced (F2:
+// Ed25519 is unavailable via AndroidKeyStore on the Pixel 6a). chiproof 0.4.0
+// ships both plugs (src/plugs/attester-sig.js); this spike's own local
+// sig-ed25519-plug.mjs is now redundant with chiproof's sigEd25519 (same
+// preimage, same item shape) and is retired in favor of it.
+const SIG_ED25519_KEY = 'sig-ed25519/1';
+const SIG_P256_KEY = 'sig-p256/1';
+
 // ---------------------------------------------------------------- config ----
-const SCOPE_DOMAIN = process.env.SCOPE_DOMAIN ?? 'm2-handoff.test';
+// This server always binds here (see startServer below) -- the ONE source
+// of truth for "what host does a real request actually arrive on."
+const BIND_HOST = '127.0.0.1';
+// Real-device finding (2026-09-01): the scanner signs mode-B evidence with
+// scope = the HOST of its verified request origin (D37,
+// apps/scanner/.../MainActivity.kt:876) -- e.g. `127.0.0.1`, never a port
+// and never a scheme. This verifier was hardcoded to an unrelated fixed
+// string ('m2-handoff.test'), so every real-device P-256 signature failed
+// (`sig_invalid`, not `sig_unknown_key` -- the pinned key resolved fine,
+// the scope byte in the signed preimage just didn't match). SCOPE_DOMAIN
+// now derives from BIND_HOST by default -- decision (a): derived ONCE at
+// startup from the bind address, not per-transaction from the request
+// origin, because chiproof's `createVerifier` takes `scopeDomain` as
+// fixed, boot-time config (`src/index.js`: `typeof config.scopeDomain !==
+// 'string'` throws) -- there is no per-call override in `verify()`, so a
+// literal per-transaction derivation (b) would mean re-`createVerifier`ing
+// per request, which is not what a spike (or fixed-origin deployment)
+// needs. Good enough for this single-origin spike; a multi-origin
+// deployment would need one verifier instance PER origin, not a per-call
+// scope. SCOPE_DOMAIN stays a full override (e.g. `SCOPE_DOMAIN=127.0.0.1`,
+// the exact stopgap the owner already applied to the running instance) for
+// anyone running this behind a real hostname or TLS terminator.
+//
+// Escalated, not decided (PRD-level, D37): scope is HOST ONLY here, same as
+// the scanner -- but D37's origin-CONSISTENCY check (verifying the request
+// object's own origin before trusting it, D34) uses the FULL
+// scheme+host+port origin (`origin(req)` below). That's a deliberate,
+// different granularity for two different jobs (a stable per-site
+// pseudonym scope vs. an exact same-request-object check), not an
+// oversight -- but it should be a written PRD decision, not an implicit
+// one. Recommendation (orchestrator, not owner-decided): keep scope
+// host-only, keep the consistency check on the full origin. Flagging for
+// owner confirmation; did not edit the PRD file myself.
+const SCOPE_DOMAIN = process.env.SCOPE_DOMAIN ?? BIND_HOST;
 // Spike-only dev secret. A real deployment supplies its own (>=16 bytes).
 const CHALLENGE_SECRET =
   process.env.CHALLENGE_SECRET ?? 'm2-handoff-spike-dev-secret-not-for-production';
@@ -46,10 +90,13 @@ const LINK_SCHEME = process.env.LINK_SCHEME ?? 'https';
 // Where the https app link points. On a real deployment this is the wallet
 // app's verified app-link host; .invalid TLD here so nothing resolves by accident.
 const APP_LINK_BASE = process.env.APP_LINK_BASE ?? 'https://wallet.example.invalid/authorize';
-// Operator-pinned attester pubkey for sig-ed25519/1 (mode B). Defaults to the
-// DEV-ONLY spike keypair shared with the fake wallet.
+// Operator-pinned attester pubkeys for mode B (D31: either alternative is
+// accepted). Defaults to the DEV-ONLY spike keypairs shared with the fake
+// wallet.
 const ATTESTER_KEY_ID = process.env.ATTESTER_KEY_ID ?? DEV_ATTESTER.key_id;
 const ATTESTER_PUBKEY_PEM = process.env.ATTESTER_PUBKEY_PEM ?? DEV_ATTESTER.publicKeyPem;
+const ATTESTER_P256_KEY_ID = process.env.ATTESTER_P256_KEY_ID ?? DEV_ATTESTER_P256.key_id;
+const ATTESTER_P256_PUBKEY_PEM = process.env.ATTESTER_P256_PUBKEY_PEM ?? DEV_ATTESTER_P256.publicKeyPem;
 // ES256 request-object (JAR) signing key — the reference verifier signs its
 // request objects by default. Defaults to the DEV-ONLY spike keypair the
 // fake wallet pins the public half of.
@@ -63,9 +110,26 @@ const MAX_TRANSACTIONS = 1000; // spike-grade memory cap
 // -------------------------------------------------------------- verifier ----
 // ONE chiproof instance for both modes (chiproof 0.3.0: `evidence.require`
 // accepts a per-tier `{A?, B?, C?}` object) — tier A stays bare (D27) while
-// tier B requires sig-ed25519/1 (D30), on the same instance/nonce store.
-// Resolves the former two-instance workaround; see README.md.
+// tier B requires EITHER attester-sig alternative (D31, chiproof 0.4.0's
+// any-of `require` groups), on the same instance/nonce store. Resolves the
+// former two-instance workaround; see README.md.
 export function makeVerifier() {
+  // D38 (2026-09-01): per-origin device keys, trust-on-first-sight. A real
+  // device's mode-B key is no longer expected to be one operator-pinned
+  // constant — it now carries its own `pubkey` and gets bound to
+  // (scopeDomain, zktag) the first time it's seen. ONE store per algorithm,
+  // fresh per `makeVerifier()` call (not a module-level singleton) so
+  // separate server/verifier instances — e.g. one per test file — never
+  // share bindings; and not shared BETWEEN the two algorithms either: a
+  // device that verified once under sig-p256/1 for a given zktag and later
+  // (e.g. across a fallback) presented sig-ed25519/1 for the SAME zktag must
+  // not collide with an unrelated algorithm's binding — each plug's key
+  // space is independent. The pinned ATTESTER_*_KEY_ID/PUBKEY_PEM env
+  // override still works unchanged (D31 predates D38): a pinned key_id is
+  // resolved before the store is ever consulted, letting the owner keep
+  // pinning a real Pixel key today, ahead of the scanner sending `pubkey`.
+  const attesterStoreEd25519 = new InMemoryAttesterStore({ quiet: true });
+  const attesterStoreP256 = new InMemoryAttesterStore({ quiet: true });
   return createVerifier({
     scopeDomain: SCOPE_DOMAIN,
     challengeSecret: CHALLENGE_SECRET,
@@ -78,9 +142,16 @@ export function makeVerifier() {
       plugs: {
         [SIG_ED25519_KEY]: sigEd25519({
           keys: [{ key_id: ATTESTER_KEY_ID, pubkey: createPublicKey(ATTESTER_PUBKEY_PEM) }],
+          attesterStore: attesterStoreEd25519,
+        }),
+        [SIG_P256_KEY]: sigP256({
+          keys: [{ key_id: ATTESTER_P256_KEY_ID, pubkey: createPublicKey(ATTESTER_P256_PUBKEY_PEM) }],
+          attesterStore: attesterStoreP256,
         }),
       },
-      require: { A: [], B: [SIG_ED25519_KEY] }, // D30: default mode-B evidence delivery
+      // D31: any one of the operator's accepted attester-sig alternatives
+      // satisfies mode B — supersedes D30's single-required-plug framing.
+      require: { A: [], B: [[SIG_ED25519_KEY, SIG_P256_KEY]] },
     },
   });
 }
@@ -109,7 +180,7 @@ const PAGE = `<!doctype html>
 </style>
 <h1>Age gate demo (m2-handoff spike)</h1>
 <p>Throwaway M2 POC verifier. Mode A: tier A, bare evidence (D27) — captcha-grade.
-Mode B: tier B, <code>sig-ed25519/1</code> required (D30).</p>
+Mode B: tier B, either <code>sig-ed25519/1</code> or <code>sig-p256/1</code> accepted (D31). The device's key is per-origin and bound to this site on first sight (D38) — a returning device must keep presenting the SAME key it bound the first time.</p>
 <button id="go" data-mode="A">Verify your age (mode A)</button>
 <button id="goB" data-mode="B">Verify your age (mode B)</button>
 <div id="out" hidden>
@@ -192,7 +263,7 @@ export function createApp() {
   const byRequestId = new Map();     // requestId -> tx
 
   function origin(req) {
-    return `http://${req.headers.host ?? '127.0.0.1'}`;
+    return `http://${req.headers.host ?? BIND_HOST}`;
   }
 
   async function handle(req, res) {
@@ -248,12 +319,14 @@ export function createApp() {
           }],
         },
         // zkagent payload: the chiproof challenge rides in the request.
-        // Mode A: tier A, bare evidence set (D27). Mode B: tier B,
-        // sig-ed25519/1 required as the reference default evidence (D30).
+        // Mode A: tier A, bare evidence set (D27). Mode B: tier B, EITHER
+        // sig-ed25519/1 OR sig-p256/1 (D31) — evidence_required carries the
+        // same alternatives shape as chiproof's evidence.require, so the app
+        // knows it may send whichever its Keystore actually produced.
         zkagent: {
           spec: 'zkagent/1',
           tier: mode,
-          evidence_required: mode === 'B' ? [SIG_ED25519_KEY] : [],
+          evidence_required: mode === 'B' ? [[SIG_ED25519_KEY, SIG_P256_KEY]] : [],
           evidence: [],
           challenge,
         },
@@ -266,6 +339,10 @@ export function createApp() {
       };
       byTransactionId.set(transactionId, tx);
       byRequestId.set(requestId, tx);
+      // Value-free: transactionId, mode, ttlMs only — never the challenge,
+      // nonce, or anything a real device would carry.
+      // eslint-disable-next-line no-console
+      console.log(`[m2-handoff] tx created transactionId=${transactionId} mode=${mode} ttlMs=${ttlMs}`);
 
       sendJson(res, 201, {
         transactionId,
@@ -336,6 +413,26 @@ export function createApp() {
       }
       tx.status = 'done';
       tx.verdict = verdict;
+      // Value-free: no zktag, nonce, pubkey, sig, or state -- transactionId,
+      // tier, and the verdict's own ok/allowed/reason/evidence are the whole
+      // point (the owner's side can't see any of this otherwise, since only
+      // the browser page renders the verdict today). `attesterStatus` reads
+      // D38's own signal, the SAME channel the verdict already carries: the
+      // plug's `attester_bound_first_sight` note rides `verdict.warnings`
+      // (evidence.js's existing pass-through), and `verdict.evidence` (§6.2
+      // item 9) already lists which plug verified -- no new field needed
+      // here either, just describing what's already there.
+      {
+        const attesterStatus = Array.isArray(verdict.warnings) && verdict.warnings.includes('attester_bound_first_sight')
+          ? 'bound_first_sight'
+          : (Array.isArray(verdict.evidence) && verdict.evidence.length > 0 ? 'matched' : 'n/a');
+        // eslint-disable-next-line no-console
+        console.log(
+          `[m2-handoff] verdict transactionId=${tx.transactionId} tier=${verdict.tier ?? tx.mode} `
+          + `ok=${verdict.ok} allowed=${verdict.allowed} reason=${verdict.reason} `
+          + `evidence=${JSON.stringify(verdict.evidence ?? [])} attester=${attesterStatus}`,
+        );
+      }
       sendJson(res, 200, { accepted: true });
       return;
     }
@@ -367,12 +464,12 @@ export function startServer(port = 0) {
   const server = createApp();
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, '127.0.0.1', () => {
+    server.listen(port, BIND_HOST, () => {
       const actual = server.address().port;
       resolve({
         server,
         port: actual,
-        url: `http://127.0.0.1:${actual}`,
+        url: `http://${BIND_HOST}:${actual}`,
         close: () => new Promise((r) => server.close(r)),
       });
     });

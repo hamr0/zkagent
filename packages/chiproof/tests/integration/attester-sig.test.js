@@ -488,10 +488,13 @@ test('sig-p256/1: an internal throw inside verify() maps to ok:false, never allo
   assert.equal(out.allowed, null);
 });
 
-test('sig-ed25519/1: scopeDomain unconfigured (empty string) at ctx level maps to ok:false, valid:null via the plug directly', () => {
+test('sig-ed25519/1: scopeDomain unconfigured (empty string) at ctx level maps to ok:false, valid:null via the plug directly', async () => {
   const plug = edPlug();
   const item = { type: 'sig-ed25519', version: 1, data: { key_id: 'att1', sig: 'AAAA' } };
-  const result = plug.verify(item, {
+  // D38: verify() is now async (the attester-store lookup on the unpinned
+  // path needs it) -- the evidence router has always awaited it (`may be
+  // async` per its own contract doc); this direct call must too.
+  const result = await plug.verify(item, {
     claim: { over_threshold: true, threshold: 18 }, nonce: 'AAAA', scopeDomain: '', zktag: 'zktag-x',
   });
   assert.equal(result.ok, false);

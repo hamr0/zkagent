@@ -5,6 +5,98 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **`spikes/m2-handoff` — real-device scope-domain bug found and fixed
+  (D37), plus the test-suite blind spot that let it pass — 23/23 spike
+  tests, 191/191 chiproof tests.** A live Pixel 6a mode-B run returned
+  `sig_invalid` (pinned key resolved fine — never `sig_unknown_key`): the
+  scanner signs scope = host of its verified request origin (D37,
+  `MainActivity.kt:876`, e.g. `127.0.0.1`), while `server.mjs`'s
+  `SCOPE_DOMAIN` was hardcoded to an unrelated literal (`'m2-handoff.test'`)
+  — one differing string in the signed preimage, every real-device
+  signature fails. Fixed: `SCOPE_DOMAIN` now defaults to `BIND_HOST`
+  (`'127.0.0.1'`, the address the server always binds), still overridable
+  by env var. Decision recorded: derived ONCE at startup from the bind
+  address (not per-transaction from the request origin) — chiproof's
+  `createVerifier` takes `scopeDomain` as fixed boot-time config with no
+  per-call override in `verify()`, so per-transaction derivation would need
+  one verifier instance per origin; fine for a single-origin spike, flagged
+  as awkward for chiproof's current API on a genuinely multi-origin
+  deployment. **Escalated for the PRD, not decided here:** scope is HOST
+  ONLY (matching the scanner) while D37's origin-consistency check (D34)
+  uses the FULL scheme+host+port origin — a deliberate difference in
+  granularity between two different jobs, recommended to stay that way,
+  needs owner confirmation; the PRD file was not edited. The suite itself
+  had carried its own hardcoded `SCOPE_DOMAIN` copies
+  (`tests/tier-b.test.mjs`, `scripts/fake-wallet.mjs`) that happened to
+  match the server's old literal — proving nothing about a real client's
+  derivation, which is exactly why 17/17 passed while the real device
+  failed. Fixed to derive independently: the fake wallet now derives scope
+  from `requestObject.response_uri`'s host AFTER verifying that request
+  object's JWS (the same verified-origin mechanism D37 specifies for the
+  real scanner); the test file derives it from `new URL(srv.url).hostname`
+  once the ephemeral server is up. Neither hardcodes a scope or imports the
+  server's constant anymore, so a future scope-config regression fails for
+  the right reason instead of silently agreeing with a copied literal.
+- **`chiproof` 0.4.0 (still unpublished) — per-origin attester keys,
+  trust-on-first-sight (D38) — 191/191 tests passing (173 + 18 new).**
+  `sig-ed25519/1`/`sig-p256/1` items may now carry `data.pubkey`
+  trust-on-first-sight (D38) — 191/191 tests passing (173 + 18 new).**
+  `sig-ed25519/1`/`sig-p256/1` items may now carry `data.pubkey`
+  (SubjectPublicKeyInfo DER, base64) alongside `key_id`; the verifier always
+  recomputes `key_id` from `pubkey` via the new exported `keyIdFor(der)`
+  (`sha256(der)` hex, first 16 chars — byte-identical construction to the
+  scanner's Kotlin `EvidenceSigner.keyIdFor`) and refuses a mismatch
+  (`sig_key_id_mismatch`). Key resolution order: operator-pinned `keys`
+  (unchanged, still the only path that accepts an item without `pubkey`),
+  else a new pluggable `attesterStore` (`{get({scope,zktag}),
+  bind({scope,zktag,key_id,pubkey})}`, `InMemoryAttesterStore` reference
+  implementation in `src/stores/attester.js`, same conventions as
+  `InMemoryNonceStore`) binds an unpinned key to `(scope, zktag)` on first
+  sight — only after its signature verifies, never before — and surfaces
+  `attester_bound_first_sight` via the plug's existing `warnings` channel (no
+  parallel field); a later presentation for the same `(scope, zktag)`
+  carrying a DIFFERENT key is `attester_key_mismatch`, never silently
+  re-bound. Store `get`/`bind` throwing maps to `ok:false`/`allowed:null`,
+  never a "no" — same discipline as `NonceStore`. `sigEd25519`/`sigP256` now
+  accept construction with an `attesterStore` and NO pinned `keys` at all
+  (pre-D38: an empty/absent `keys` list always threw); `verify()` is now
+  `async` (the store lookup needs it) — one pre-existing direct-call test
+  updated to `await` it, no behavioural change. New test file
+  `tests/integration/attester-sig-d38.test.js` (18 tests: pinned-path
+  unaffected/pinned-precedence-over-store, first-sight bind then match (both
+  algorithms), first-sight then a different key, pubkey/key_id mismatch,
+  unpinned-no-pubkey, store `get`/`bind` throwing, bind-only-after-verify,
+  registration validation, `InMemoryAttesterStore` itself). Types
+  regenerated (`AttesterStore` typedef, `InMemoryAttesterStore` export).
+  **Escalated, not decided:** whether the D30 `linkability: 'signer'`
+  declaration is still the right one now that the key is per-origin rather
+  than a single fixed device key — `evidence.js`'s tier gating treats
+  `'signer'` and `'device'` identically today, so nothing in the code forces
+  either answer; left unchanged pending owner sign-off (see PR/report).
+  `spikes/m2-handoff` wired an `InMemoryAttesterStore` into its verifier so a
+  real device binds on first sight, keeping the env-override pinned key path
+  working; `tests/tier-b.test.mjs` and `scripts/fake-wallet.mjs` updated to
+  send `pubkey`.
+- **`chiproof` 0.4.0 (still unpublished) — `evidence.require` alternatives
+  groups (D31/D36) — 173/173 tests passing (165 + 8 new).** A `require`
+  entry may now be a registry-key string (all-of, unchanged since 0.2.0) or
+  a non-empty array of registry-key strings — an alternatives GROUP,
+  satisfied when at least one member is present and verifies, e.g.
+  `require: { B: [['sig-ed25519/1', 'sig-p256/1']] }` lets the verifier
+  accept whichever attester-sig algorithm a device's Keystore actually
+  produced (D31 supersedes D30's single-required-plug framing; D36: the
+  device never chooses to downgrade, only falls through on failure).
+  `normalizeRequire` and `routeEvidence` (`src/evidence.js`) both extended;
+  `Verdict.evidence` (already exposed, §6.2 item 9) continues to list every
+  registry key actually checked, so which group member was used needs no
+  new field — a present-but-invalid group member is a real no exactly like
+  any other checked item, never masked by a different member of the same
+  group passing. New test file
+  `tests/integration/evidence-alternatives.test.js` (8 tests). Types
+  regenerated (`RequireEntry = string | string[]`); `spikes/m2-handoff`
+  updated to register both `sig-ed25519/1` and `sig-p256/1` and require the
+  any-of group for tier B, retiring its local `sig-ed25519-plug.mjs` in
+  favor of chiproof's own `sig-ed25519/1`/`sig-p256/1` plugs.
 - **`chiproof` 0.4.0 — attester-key evidence plug family (`sig-ed25519/1`,
   `sig-p256/1`), PRD §6.2 items 1/9/11 + FR12/D30 — 165/165 tests passing.**
   One shared preimage (`src/plugs/attester-sig.js`) drives both plugs so

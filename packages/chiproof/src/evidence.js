@@ -69,16 +69,29 @@ export function assertPlug(type, plug) {
  * `{A?, B?, C?}` object) into a frozen `{A, B, C}` of frozen arrays. Throws a
  * TypeError on any other shape — this is boot-time config validation.
  *
+ * Each entry is either a registry-key string (all-of, unchanged since 0.2.0)
+ * or a non-empty array of registry-key strings — an alternatives GROUP
+ * (D31/D36, 2026-09-01): the requirement is satisfied when at least one
+ * member of the group is present and verifies. A group is frozen too, so the
+ * normalized shape is stable and shareable.
+ *
  * @param {unknown} raw  `config.evidence.require` (`undefined` = bare everywhere)
  * @returns {Required<import('./types.js').RequireByTier>}
  */
 export function normalizeRequire(raw) {
-  /** @type {(v: unknown, label: string) => string[]} */
+  /** @type {(v: unknown, label: string) => import('./types.js').RequireEntry[]} */
   const asList = (v, label) => {
-    if (!Array.isArray(v) || v.some((t) => typeof t !== 'string')) {
-      throw new TypeError(`createVerifier: config.evidence.${label} must be an array of registry-key strings`);
+    if (!Array.isArray(v)) {
+      throw new TypeError(`createVerifier: config.evidence.${label} must be an array of registry-key strings or alternatives-group arrays`);
     }
-    return /** @type {string[]} */ (Object.freeze([...v]));
+    const normalized = v.map((entry) => {
+      if (typeof entry === 'string') return entry;
+      if (Array.isArray(entry) && entry.length > 0 && entry.every((t) => typeof t === 'string')) {
+        return /** @type {string[]} */ (Object.freeze([...entry]));
+      }
+      throw new TypeError(`createVerifier: config.evidence.${label} entries must be a registry-key string, or a non-empty array of registry-key strings (an alternatives group)`);
+    });
+    return /** @type {import('./types.js').RequireEntry[]} */ (Object.freeze(normalized));
   };
   /** @type {string[]} */
   const none = /** @type {any} */ (Object.freeze([]));
@@ -137,7 +150,13 @@ export function itemKey(item) {
  *
  * `slot.require` may be the 0.2.0 plain array (same list at every tier) or the
  * normalized per-tier `{A, B, C}` object `createVerifier` builds — both work,
- * so direct callers of this export keep their 0.2.0 semantics unchanged.
+ * so direct callers of this export keep their 0.2.0 semantics unchanged. Each
+ * `require` entry is a registry-key string (all-of) or a non-empty array of
+ * registry-key strings — an alternatives GROUP (D31/D36): satisfied when at
+ * least one member is present. Every group member that is present is still
+ * routed to its plug and verified like any other checked item, so a present-
+ * but-invalid member fails the whole presentation exactly as today's all-of
+ * items do — it is never silently masked by another group member passing.
  *
  * @param {{registry: EvidenceRegistry, require: string[]|import('./types.js').RequireByTier, accept: string[], maxItems: number, maxItemBytes: number}} slot
  * @param {unknown[]} items  presentation.evidence (already known to be an array)
@@ -147,7 +166,10 @@ export function itemKey(item) {
 export async function routeEvidence(slot, items, tier, ctx) {
   const presentedRank = tierRank(tier);
   const required = Array.isArray(slot.require) ? slot.require : (slot.require?.[tier] ?? []);
-  const checked = new Set(required.concat(slot.accept));
+  // Flatten alternatives groups (arrays) alongside plain string entries so
+  // every group member is a checked/routable key, same as a plain require.
+  const requiredKeys = required.flatMap((req) => (Array.isArray(req) ? req : [req]));
+  const checked = new Set(requiredKeys.concat(slot.accept));
   const seen = new Set();
   const keys = new Set();
   const toVerify = [];
@@ -181,7 +203,8 @@ export async function routeEvidence(slot, items, tier, ctx) {
   }
 
   for (const req of required) {
-    if (!seen.has(req)) return realNo('evidence_required_missing');
+    const satisfied = Array.isArray(req) ? req.some((k) => seen.has(k)) : seen.has(req);
+    if (!satisfied) return realNo('evidence_required_missing');
   }
 
   const warnings = [];
