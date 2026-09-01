@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  §6.2 item 10 — the default (release) network security config: NO cleartext
+  exception, anywhere. This file is the one packaged into a release build.
+  The debug build overrides it with app/src/debug/res/xml/network_security_config.xml,
+  which carries exactly one exception scoped to 10.0.2.2/localhost for the
+  local test verifier (spikes/m2-handoff). Gradle's source-set precedence
+  (debug overrides main for a debug build type) is what makes this work —
+  verify with `./gradlew :app:dependencies` style resource merging, not
+  assumed; see README.md build/verify notes.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
