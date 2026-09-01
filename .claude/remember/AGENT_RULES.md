@@ -6,12 +6,10 @@
 3. [Development Standards](#development-standards)
 4. [Testing Standards](#testing-standards)
 5. [Security & Robustness Invariants](#security--robustness-invariants)
-6. [Guardrails (Enforced, Not Requested)](#guardrails-enforced-not-requested)
-7. [Environment](#environment)
-8. [Development Workflow](#development-workflow)
-9. [Twelve-Factor Checklist](#twelve-factor-checklist)
-10. [CLAUDE.md Stub](#claudemd-stub)
-11. [AI Agent Instructions](#ai-agent-instructions)
+6. [Environment](#environment)
+7. [Development Workflow](#development-workflow)
+8. [Twelve-Factor Checklist](#twelve-factor-checklist)
+9. [CLAUDE.md Stub](#claudemd-stub)
 
 ---
 
@@ -19,9 +17,24 @@
 
 Every task runs through three layers. Do not skip ahead to code.
 
-1. **Spec — agree on intent before touching anything.** Interview me up front to surface the *real* goal and the context you can't see — prompt the **decision I'm trying to make**, not the literal task I typed. Break the scope into small buckets with checkpoints. **State the load-bearing structural and logic decisions and get my explicit sign-off *before* you execute.** A wrong assumption caught at spec stage costs a sentence; caught after building it costs the build.
-2. **Verify — define "good" up front, then prove it.** Write down what success looks like *before* changing code. Prove with measurement and tests, not assertion (see [*Prove, don't assert*](#validate-before-you-build)). Gate security-sensitive work with `/security` and pre-deploy with `/ship`; a second-model pass (`/code-review`) on non-trivial output is worth the round-trip. External signal — a real test run, a real deploy, a gold-standard reference — beats a confident paragraph every time.
-3. **Environment — the guardrails are enforced, not requested.** This file is the standing context that primes every session. Critical-path protections (secrets, auth, schema, CI) are enforced by a pre-tool hook on an **Always / Ask / Never** basis — see [Guardrails](#guardrails-enforced-not-requested). Where the hook isn't wired, the same rules still bind you.
+1. **Spec — the interview must happen; its shape is yours.** Before touching anything, surface the *decision I'm actually making*, not the literal task I typed. Ask what you need to know — no more; how you ask is your call. Restate what you heard and get my explicit sign-off on the load-bearing decisions *before* you execute. A wrong assumption caught here costs a sentence; caught after building costs the build.
+
+   Write the outcome down as a **PRD**. A PRD is a portal, not a deliverable — where the conversation starts and the doc every POC refines. Minimum content, whatever the form:
+   - **Problem & goal** — what we're solving and why now
+   - **Go / no-go** — the 1–2 capabilities the product stands or falls on; usually module 0's riskiest assumption (e.g. "can a phone camera read the ID?"). Fails → stop
+   - **Out of scope** — what we're explicitly not doing
+   - **Modules** — the pieces to build, in order (see [*One module at a time*](#validate-before-you-build))
+   - **Open questions** — unknowns that don't block; never silently assumed
+
+   Every POC result updates the PRD; one that flips the go/no-go or a module's assumption is a spec change, not a footnote.
+2. **Verify — define "good" up front, then prove it.** Write down what success looks like *before* changing code. Prove with measurement and tests, not assertion (see [*Prove, don't assert*](#validate-before-you-build)). When the work is done, propose `/branch-review` — a general review plus a full `/security` audit, which reports findings and never fixes them — and then `/release`, which runs `/ship` as the mechanical pre-deploy gate. You never merge or release on your own (see [Required Safeguards](#required-safeguards-always--ask--never)). External signal — a real test run, a real deploy, a gold-standard reference — beats a confident paragraph every time.
+3. **Environment — the standing context.** This file primes every session. Critical-path protections (secrets, auth, schema, CI) are stated as **Always / Ask / Never** below and bind you as written. Where your tool offers a permission allow/ask/deny list, mirror them there so they are enforced and not merely requested.
+
+**Execution order — work the way a program runs, in this order, nothing skipped:**
+1. **Sequence** — do the PRD's modules in the order listed; never start module N+1 while module N is unproven.
+2. **Selection** — every POC is a branch: pass → next module, fail → back to the PRD as a spec change.
+3. **Iteration** — repeat POC → update PRD → next POC until the go/no-go is answered; the loop invariant is *everything built so far still works on its own*.
+4. **Verify** — assert before you move: a step is done when you ran the proof and saw it pass, not when you wrote that it did.
 
 > The model is brilliant at execution and blind to intent. You can outsource the typing; you cannot outsource the understanding. Surface assumptions — don't bury them.
 
@@ -30,26 +43,25 @@ Every task runs through three layers. Do not skip ahead to code.
 ## Communication Protocol
 
 ### Core Rules
-- **Spec before build**: Don't wait for ambiguity to block you — interview me up front to extract the real goal and the context you can't see. Prompt the *decision*, not the literal task. Restate what you heard before building
-- **Checkpoint before executing**: State the load-bearing structural and logic decisions and get my explicit sign-off *before* you write code. Never run ahead on an unverified assumption — flag it and stop
+- **Spec first, then checkpoint**: see [Operating Flow §1](#operating-flow). Never run ahead on an unverified assumption — flag it and stop
 - **Fact-Based**: Base all recommendations on verified, current information. Prefer external signal (a real run, a real source) over a confident guess
 - **Simplicity Advocate**: Call out overcomplications and suggest simpler alternatives
-- **Safety First**: Never modify critical systems without explicit understanding and approval. Where the [guardrail hook](#guardrails-enforced-not-requested) is wired, this is enforced before the tool runs, not after
 
 ### User Profile
 - **Technical Level**: Non-coder but technically savvy
 - **Learning Style**: Understands concepts, needs executable instructions
-- **Expects**: Step-by-step guidance with clear explanations
+- **Expects**: Step-by-step guidance, ready-to-run commands, and the *why* behind each recommendation
 - **Comfortable with**: Command-line operations and scripts
 - **Builds a lot of web apps** — assume any UI work will be consumed on phones as well as desktop
 
 ### Required Safeguards (Always / Ask / Never)
 
-Not courtesies — where the [guardrail hook](#guardrails-enforced-not-requested) is wired these are enforced *before* the tool runs. When it isn't, they still bind you.
+Not courtesies. These bind you as written, whether or not your tool enforces them.
 
 - **Always** identify affected files before making changes, and explain what will change and why
 - **Ask first** — stop and get explicit sign-off — before modifying authentication systems, database schema or migrations, CI workflows, or `.claude/settings.json`
 - **Never** write secrets into the tree (`.env`/`*.env`, keys, credentials). They load from the environment at runtime; only a value-less `.env.example` is committed
+- **Never** commit to `main`. Commit to a new branch (name doesn't matter), then propose `/branch-review` followed by `/release`; merging and releasing are my call, made by name — "approve", "good", or "go" on a draft is not that call
 
 ---
 
@@ -58,12 +70,12 @@ Not courtesies — where the [guardrail hook](#guardrails-enforced-not-requested
 ### Validate Before You Build
 
 - **POC everything first.** Before committing to a design, build a quick proof-of-concept (~15 min) that validates the core logic. Keep it stupidly simple — manual steps are fine, hardcoded values are fine, no tests needed yet
-- **POC scope:** Cover the happy path, 2-3 common edge cases, **and the riskiest assumption (see below) — not just the parts that are easy to check**. If those hold, the idea is sound
 - **Graduation criteria:** POC validates logic and covers most common scenarios → stop, design properly, then build with structure, tests, and error handling. Never ship the POC — rewrite it
-- **Aim the POC at the load-bearing claim — not the easy part.** Name the riskiest assumption first (does the cheap path actually run cheap? does the library really do X? does the perf hold?), then point the spike straight at *that*. A POC that confirms the happy-path shape while hand-waving the risky mechanism is theater. If you catch yourself writing "production would do X" instead of *doing* X in the spike, the POC has not validated X — go do X
+- **Aim the POC at the load-bearing claim — not the easy part.** Cover the happy path and 2-3 common edges, but name the riskiest assumption first (does the cheap path actually run cheap? does the library really do X? does the perf hold?), then point the spike straight at *that*. A POC that confirms the happy-path shape while hand-waving the risky mechanism is theater. If you catch yourself writing "production would do X" instead of *doing* X in the spike, the POC has not validated X — go do X
 - **Prove, don't assert — a POC's output is evidence you ran, not prose you wrote.** Every claim the design rests on must be something the spike actually exercised and you actually observed. **Measure anything you call "cheap," "fast," "constant," or "negligible"** — never state a cost you didn't time; a guessed number is a bug with a confident voice. State conclusions only at the confidence the evidence supports: if you didn't test it, say so plainly instead of rounding up to "it works." Better a small honest finding than a big-mouthed claim that measurement later falsifies
 - **The test must be able to FAIL — pre-flight check, not an afterthought.** Before trusting a POC's numbers, confirm three things: **(1) Can the test produce the negative?** A fixture you authored to contain the phenomenon you're testing can only confirm it — prefer real, uncrafted data over synthetic inputs; if synthetic is unavoidable, construct it so it *could* show no effect. **(2) Is the harness free of confounds?** A surprising or degenerate result is often an artifact of the setup, not a real finding — when output looks wrong, debug the test before believing it. **(3) Did the test actually exercise the variable?** If two conditions that should differ produce identical output, the variable isn't wired in — that's a finding, not noise. Run this checklist every time, especially when a result confirms what you hoped
-- **Build incrementally.** After POC graduates, break the work into small, independent modules. Focus on one at a time. Each piece must work on its own before integrating with the next
+- **One module at a time.** Build the PRD's modules in order, never several at once. Each module gets its own POC aimed at *its* riskiest assumption (module 0's is the go/no-go). A module is done when **(1)** it works on its own and **(2)** it connects to what's already built and the whole still works — both proven, not assumed. Only then start the next
+- **No fitting to pass.** Never narrow the input, move the threshold, or shrink the scope until a POC goes green. Report the failure and take it back to the PRD
 
 ### Dependency Hierarchy
 
@@ -107,6 +119,7 @@ Before adding any external dependency, all of these must be true:
 - Skipping POC validation for unproven ideas
 - POC-ing only the easy part while hand-waving the risky mechanism, or claiming a cost ("cheap"/"fast"/"constant") you never measured
 - Authoring a fixture/corpus that *guarantees* the result (a test that can't return the negative), or trusting a degenerate-looking number without auditing the harness for confounds — use real uncrafted data; the test must be able to fail
+- Fitting a POC to pass (narrowed input, moved threshold, shrunk scope) instead of reporting the failure; starting module N+1 while module N is unproven
 
 ---
 
@@ -216,36 +229,7 @@ Also hold the line on: input validation at every trust boundary (untrusted uploa
 
 **Verify at two moments, not one.**
 - **While building** — this list shapes the code as it's written.
-- **Before deploy/merge** — run **`/security`** on security-sensitive changes and **`/ship`** as the pre-deploy gate. A Critical/High finding blocks the ship; lower-severity findings get logged and triaged, not silently shipped. Proactively remind the user to run them whenever a change touches auth, data access, endpoints, secrets, or untrusted input.
-
----
-
-## Guardrails (Enforced, Not Requested)
-
-A prompt rule is a request the model can rationalise past. For anything that actually matters — secrets, auth, schema — don't rely on soft instruction. Enforce it with a **pre-tool hook** that intercepts the call *before* it runs and decides on an **Always / Ask / Never** basis:
-
-- **Never** — writing `.env`/`*.env`, keys, or credential files is blocked outright (secrets load from the environment, never the tree). Destructive shell (`rm -rf` of a root-ish target, redirecting into a secret) is blocked too.
-- **Ask** — touching auth, DB schema/migrations, CI workflows, or `.claude/settings.json` forces a human confirmation. Same for force-push / push to a default branch.
-- **Always / allow** — everything else proceeds through the normal permission flow; the hook stays out of the way.
-
-The reference implementation ships in this repo at [`.claude/hooks/guardrails.py`](.claude/hooks/guardrails.py) — stdlib only, no deps, fails open on a malformed event so it can never wedge the agent. The Never/Ask lists are constants at the top; **tune them per project**. To wire it up, add to the project's `.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
-        "hooks": [
-          { "type": "command", "command": "python3 .claude/hooks/guardrails.py" }
-        ]
-      }
-    ]
-  }
-}
-```
-
-The hook is the hard line; the prose rules above are why it exists. Keep them in sync — when you tighten one, tighten the other.
+- **Before deploy/merge** — run **`/branch-review`**, whose second stage runs **`/security`** in full; `/release` then runs **`/ship`** as the mechanical pre-deploy gate. A Critical/High finding blocks the ship; lower-severity findings get logged and triaged, not silently shipped. Proactively remind the user to run them whenever a change touches auth, data access, endpoints, secrets, or untrusted input.
 
 ---
 
@@ -299,9 +283,9 @@ Copy this to any project's CLAUDE.md. These are mandatory rules, not suggestions
 ```markdown
 ## Dev Rules
 
-**POC first.** Always validate logic with a ~15min proof-of-concept before building. Cover happy path + common edges. POC works → design properly → build with tests. Never ship the POC. **Aim the spike at the riskiest assumption, not the easy part; prove, don't assert — measure anything you call "cheap"/"fast"/"constant," and claim only what the evidence supports (no big-mouthed conclusions measurement can falsify). The test must be able to FAIL: prefer real uncrafted data over a fixture you authored to contain the result, audit a degenerate number for harness confounds before believing it, and treat two should-differ conditions that match as a finding.**
+**Spec first.** Interview to find the decision, not the task; write a PRD with problem/goal, go/no-go, out-of-scope, modules, open questions. POCs refine it.
 
-**Build incrementally.** Break work into small independent modules. One piece at a time, each must work on its own before integrating.
+**POC first, one module at a time.** Each module's POC targets its riskiest assumption (module 0 = go/no-go); the test must be able to fail; prove, don't assert — measure anything you call cheap/fast/constant. No fitting to pass. A module works on its own, then connects to what's built, before the next starts. Never ship the POC.
 
 **Dependency hierarchy — follow strictly:** vanilla language → standard library → external (only when stdlib can't do it in <100 lines). External deps must be maintained, lightweight, and widely adopted. Exception: always use vetted libraries for security-critical code (crypto, auth, sanitization).
 
@@ -311,19 +295,5 @@ Copy this to any project's CLAUDE.md. These are mandatory rules, not suggestions
 
 **Responsive web UI is mandatory.** Any web UI must work on mobile by default — fluid layouts, viewport meta, breakpoints, no horizontal scroll. Verify in DevTools device emulation before claiming a UI task is done. POCs exempt; real projects are not.
 
-For full development and testing standards, see `.claude/memory/AGENT_RULES.md`.
+For full development and testing standards, see `.claude/remember/AGENT_RULES.md`.
 ```
-
----
-
-## AI Agent Instructions
-
-When working with this user:
-1. **Interview before building** — extract the real goal and surface load-bearing decisions for sign-off before you execute (see [Operating Flow](#operating-flow))
-2. **Provide step-by-step** instructions with clear explanations
-3. **Include ready-to-run** scripts and commands
-4. **Explain the "why"** behind technical recommendations
-5. **Flag potential issues** before they become problems — name the assumption, don't bury it
-6. **Suggest simpler alternatives** when appropriate
-7. **Ask first** before touching auth, DB schema/migrations, CI, or settings; **never** commit secrets — enforced by the [guardrail hook](#guardrails-enforced-not-requested) where wired
-8. **Always identify** which files will be affected by changes
