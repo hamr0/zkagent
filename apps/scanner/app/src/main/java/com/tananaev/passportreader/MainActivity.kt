@@ -867,7 +867,6 @@ abstract class MainActivity : AppCompatActivity() {
 
         private lateinit var dg1File: DG1File
         private lateinit var sodFile: SODFile
-        private var accessFailure = false
         private val timeline = M0Probe.Timeline()
         private var accessProtocol = "unknown"
         private var chipAuthStatus = M0Probe.ChipAuthStatus.NOT_SUPPORTED
@@ -897,18 +896,22 @@ abstract class MainActivity : AppCompatActivity() {
                     Log.i(TAG, "M2 stage: PACE unavailable (${e.javaClass.simpleName})")
                 }
 
-                try {
-                    service.sendSelectApplet(paceSucceeded)
-                    if (!paceSucceeded) {
-                        try {
-                            service.getInputStream(PassportService.EF_COM).read()
-                        } catch (e: Exception) {
-                            service.doBAC(bacKey)
-                        }
+                // 2026-09 real-device fix (second round — a real bug):
+                // this block no longer sets a "this is an access failure"
+                // flag from the mere fact that an exception happened here.
+                // A tag-loss mid-PACE/mid-BAC would previously be mislabelled
+                // an access-establishment failure ("check your details")
+                // when the true cause was a card slip. The exception is
+                // simply rethrown uninterpreted; classification happens
+                // ONCE, in onPostExecute, from the exception's own evidence
+                // via FailureTransition.classify — see that object's doc.
+                service.sendSelectApplet(paceSucceeded)
+                if (!paceSucceeded) {
+                    try {
+                        service.getInputStream(PassportService.EF_COM).read()
+                    } catch (e: Exception) {
+                        service.doBAC(bacKey)
                     }
-                } catch (e: Exception) {
-                    accessFailure = true // §6.2 item 6: keep MRZ+mode on this specific failure
-                    throw e
                 }
                 accessProtocol = if (paceSucceeded) "PACE" else "BAC"
                 timeline.mark("access_established ($accessProtocol)")
@@ -1004,14 +1007,18 @@ abstract class MainActivity : AppCompatActivity() {
             mainLayout.visibility = View.VISIBLE
             loadingLayout.visibility = View.GONE
             if (result != null) {
-                // 2026-09 real-device fix ("fix — a hand tremor should not
-                // cost a retype"): bucket 2 of FailureTransition's now-three-
-                // bucket rule — see its doc for the conservative classifier.
-                // Only evaluated when this ISN'T already an access-
-                // establishment failure (that bucket already keeps MRZ+mode
-                // for its own reason; no need to also ask whether it looks
-                // like a tag-loss).
-                val transientChipFailure = !accessFailure && FailureTransition.isTransientChipCommunicationFailure(result)
+                // 2026-09 real-device fix, second round (a real bug: a
+                // mid-PACE/mid-BAC tag-loss used to be mislabelled an
+                // access-establishment failure because the OLD rule was
+                // "any exception during this code path"). Classification is
+                // now by EXCEPTION EVIDENCE alone, in ONE place —
+                // FailureTransition.classify — with transient checked
+                // FIRST; see that object's doc for the full precedence
+                // rationale and why the state-transition mapping itself
+                // (keepsMrzAndMode) is unaffected.
+                val classification = FailureTransition.classify(result)
+                val accessFailure = classification == FailureTransition.Classification.ACCESS_ESTABLISHMENT
+                val transientChipFailure = classification == FailureTransition.Classification.TRANSIENT_CHIP_COMMUNICATION
                 // §6.2 item 15 (D43): the report renders immediately (so it
                 // is never missed, even before the dialog is dismissed), but
                 // the state transition (wipeSession) happens only on OK —
@@ -1027,8 +1034,8 @@ abstract class MainActivity : AppCompatActivity() {
                     ReportLog.DisclosureSummary(
                         site = siteTitleFor(verifiedRequest?.origin),
                         result = when {
-                            accessFailure -> "Read failed — could not establish access to the document"
-                            transientChipFailure -> "Read interrupted — the document moved or the connection dropped"
+                            accessFailure -> "Couldn't read — check your details"
+                            transientChipFailure -> "Couldn't read — card moved"
                             else -> "Read failed — the document could not be read"
                         },
                         sent = "nothing left this device",
@@ -1799,7 +1806,7 @@ abstract class MainActivity : AppCompatActivity() {
         // retype"), bucket 2 of FailureTransition's three-bucket rule. Not
         // yet owner-approved (report requested back explicitly): tells the
         // user what to DO, not just that something failed.
-        private const val TRANSIENT_READ_FAILURE_MESSAGE = "Reading was interrupted — hold the document still against your phone and try again."
+        private const val TRANSIENT_READ_FAILURE_MESSAGE = "Couldn't read — keep the card at the top of your phone."
         // 2026-09 real-device fix ("confirm success too"). Owner-specified
         // shape: minimal, just the outcome — no restated site/predicate/
         // identity detail (that already lives in the log entry and

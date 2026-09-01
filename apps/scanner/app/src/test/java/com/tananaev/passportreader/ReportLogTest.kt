@@ -82,7 +82,9 @@ class ReportLogTest {
             "verdict: FAIL\nfailure: IOException: timeout",
             summary(
                 site = "Local scan (no site)",
-                result = "Read failed — could not establish access to the document",
+                // §6.2 item 15 (2026-09, shortened per owner: "message
+                // should be shorter" — five skimmed-past device runs).
+                result = "Couldn't read — check your details",
                 sent = "nothing left this device",
                 shared = notDisclosedNothing,
                 identity = null,
@@ -90,7 +92,7 @@ class ReportLogTest {
             nowMillis = 0L,
         )
         val entry = log.entriesSnapshot()[0]
-        assertTrue(entry.contains("Result    Read failed"))
+        assertTrue(entry.contains("Result    Couldn't read — check your details"))
         assertFalse("a failed entry must never say Verified/PASS in its plain-language Result line", entry.lines().first { it.startsWith("Result") }.contains("Verified"))
     }
 

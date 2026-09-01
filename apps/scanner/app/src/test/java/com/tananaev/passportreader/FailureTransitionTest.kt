@@ -1,6 +1,8 @@
 package com.tananaev.passportreader
 
 import net.sf.scuba.smartcards.CardServiceException
+import org.jmrtd.AccessDeniedException
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,10 +14,16 @@ import java.io.IOException
  * and bucket 2 (transient chip-communication failure) both keep MRZ+mode;
  * everything else (bucket 3) resets via the same `keepMrzAndMode` branch,
  * never a second policy.
+ *
+ * 2026-09, second round: this suite is what let a real bug through —
+ * `keepsMrzAndMode`'s MAPPING was correct (both buckets keep MRZ+mode) but
+ * nothing here pinned WHICH bucket a given exception resolves to, which is
+ * exactly what determined the message the user saw. The `classify`/
+ * `isAccessEstablishmentFailure` tests below close that gap.
  */
 class FailureTransitionTest {
 
-    // ------------------------------------------------------- keepsMrzAndMode
+    // ------------------------------------------------------- keepsMrzAndMode (booleans)
 
     @Test
     fun `bucket 1 - access-establishment failure keeps MRZ and mode`() {
@@ -35,6 +43,23 @@ class FailureTransitionTest {
     @Test
     fun `both buckets true (defensive) still keeps MRZ and mode`() {
         assertTrue(FailureTransition.keepsMrzAndMode(isAccessEstablishmentFailure = true, isTransientChipCommunicationFailure = true))
+    }
+
+    // ------------------------------------------------- keepsMrzAndMode (Classification)
+
+    @Test
+    fun `keepsMrzAndMode(Classification) - TRANSIENT_CHIP_COMMUNICATION keeps MRZ and mode`() {
+        assertTrue(FailureTransition.keepsMrzAndMode(FailureTransition.Classification.TRANSIENT_CHIP_COMMUNICATION))
+    }
+
+    @Test
+    fun `keepsMrzAndMode(Classification) - ACCESS_ESTABLISHMENT keeps MRZ and mode`() {
+        assertTrue(FailureTransition.keepsMrzAndMode(FailureTransition.Classification.ACCESS_ESTABLISHMENT))
+    }
+
+    @Test
+    fun `keepsMrzAndMode(Classification) - UNCLASSIFIED resets`() {
+        assertFalse(FailureTransition.keepsMrzAndMode(FailureTransition.Classification.UNCLASSIFIED))
     }
 
     // ---------------------------------------- isTransientChipCommunicationFailure
@@ -92,5 +117,75 @@ class FailureTransitionTest {
     fun `an unrelated exception with no CardServiceException anywhere cannot be classified - falls through to reset`() {
         val chain = IOException("Unexpected exception", RuntimeException("some other cause"))
         assertFalse(FailureTransition.isTransientChipCommunicationFailure(chain))
+    }
+
+    // ------------------------------------------------- isAccessEstablishmentFailure
+
+    @Test
+    fun `real-device case - AccessDeniedException Mutual authentication failed is an access-establishment failure`() {
+        val e = AccessDeniedException("Mutual authentication failed", 0x6985)
+        assertTrue(FailureTransition.isAccessEstablishmentFailure(e))
+    }
+
+    @Test
+    fun `AccessDeniedException is recognised even wrapped in another exception`() {
+        val wrapped = IOException("Unexpected exception", AccessDeniedException("Mutual authentication failed", 0x6985))
+        assertTrue(FailureTransition.isAccessEstablishmentFailure(wrapped))
+    }
+
+    @Test
+    fun `a plain CardServiceException (not AccessDeniedException) is NOT an access-establishment failure`() {
+        // AccessDeniedException IS-A CardServiceException in the JMRTD/scuba
+        // hierarchy — this pins that the base type alone does not qualify,
+        // only the specific subtype JMRTD actually raises for a rejected key.
+        assertFalse(FailureTransition.isAccessEstablishmentFailure(CardServiceException("Tag was lost")))
+    }
+
+    @Test
+    fun `null throwable is not an access-establishment failure`() {
+        assertFalse(FailureTransition.isAccessEstablishmentFailure(null))
+    }
+
+    @Test
+    fun `an unrelated exception is not an access-establishment failure`() {
+        assertFalse(FailureTransition.isAccessEstablishmentFailure(IOException("Unexpected exception", RuntimeException("some other cause"))))
+    }
+
+    // --------------------------------------------------------------- classify
+
+    // THE BUG this round fixed: a tag-loss occurring DURING access
+    // establishment (before PACE/BAC completes) must classify as
+    // TRANSIENT, never as ACCESS_ESTABLISHMENT — classification is by
+    // exception evidence, never by which code path was executing.
+    @Test
+    fun `a tag-loss during access establishment classifies as TRANSIENT, not access-establishment`() {
+        val e = IOException("Unexpected exception", CardServiceException("Tag was lost"))
+        assertEquals(FailureTransition.Classification.TRANSIENT_CHIP_COMMUNICATION, FailureTransition.classify(e))
+    }
+
+    @Test
+    fun `a real AccessDeniedException (mutual-auth failure) classifies as ACCESS_ESTABLISHMENT`() {
+        val e = AccessDeniedException("Mutual authentication failed", 0x6985)
+        assertEquals(FailureTransition.Classification.ACCESS_ESTABLISHMENT, FailureTransition.classify(e))
+    }
+
+    @Test
+    fun `precedence - an exception matching both markers classifies as TRANSIENT`() {
+        // A CardServiceException subtype (AccessDeniedException) whose
+        // message ALSO happens to contain the tag-lost marker — contrived,
+        // but exactly what the precedence rule must resolve deterministically.
+        val e = AccessDeniedException("Tag was lost", 0x6985)
+        assertEquals(FailureTransition.Classification.TRANSIENT_CHIP_COMMUNICATION, FailureTransition.classify(e))
+    }
+
+    @Test
+    fun `an unrecognised exception still falls to UNCLASSIFIED (reset)`() {
+        val e = IOException("Unexpected exception", RuntimeException("some other cause"))
+        assertEquals(FailureTransition.Classification.UNCLASSIFIED, FailureTransition.classify(e))
+    }
+
+    @Test
+    fun `null throwable classifies as UNCLASSIFIED (reset)`() {
+        assertEquals(FailureTransition.Classification.UNCLASSIFIED, FailureTransition.classify(null))
     }
 }

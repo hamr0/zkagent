@@ -10,24 +10,73 @@ import net.sf.scuba.smartcards.CardServiceException
  *
  * THREE buckets (2026-09 real-device fix — a hand tremor should not cost a
  * full retype):
- *  1. **Access-establishment failure** (PACE/BAC `SW 0x6300`->`0x6985`, F3)
- *     — keeps MRZ+mode.
+ *  1. **Access-establishment failure** — a genuine access DENIAL: an
+ *     [org.jmrtd.AccessDeniedException] (the real-device case: "Mutual
+ *     authentication failed", the documented `SW 0x6300`->`0x6985`
+ *     condition — this IS the exception JMRTD raises for a rejected
+ *     PACE/BAC key) anywhere in the cause chain — keeps MRZ+mode, so a
+ *     mistyped key is a retry, not a full re-lock+retype (F3).
  *  2. **Transient chip-communication failure** — the document moved or the
- *     NFC link dropped mid-read, AFTER access was already established (the
- *     real-device case: `CardServiceException("Tag was lost")` surfacing
- *     wrapped in `IOException("Unexpected exception")` from JMRTD's
- *     `readBinary`). The entered MRZ details were CORRECT — only the
- *     physical connection broke — so this bucket keeps MRZ+mode too, for
- *     the same reason as bucket 1: the user holds the document still and
- *     taps again, no re-entry.
- *  3. **Everything else** — resets.
+ *     NFC link dropped mid-read (the real-device case:
+ *     `CardServiceException("Tag was lost")` surfacing wrapped in
+ *     `IOException("Unexpected exception")` from JMRTD's `readBinary`).
+ *     The entered MRZ details were CORRECT — only the physical connection
+ *     broke — so this bucket keeps MRZ+mode too, for a DIFFERENT reason
+ *     than bucket 1: the user holds the document still and taps again, no
+ *     re-entry.
+ *  3. **Everything else (including an unrecognised exception)** — resets.
  *
- * [keepsMrzAndMode] is the single place that decides which bucket a
- * failure falls into; [isTransientChipCommunicationFailure] is the single,
- * CONSERVATIVE classifier that feeds bucket 2 — see its own doc for why a
- * wrong "keep" is worse than a wrong "reset".
+ * **Classification is by EXCEPTION EVIDENCE, never by which code path was
+ * executing** (2026-09, second real-device fix — a real bug: the access-
+ * establishment code path used to catch ANY exception unconditionally and
+ * label it bucket 1, so a tag-loss occurring DURING PACE/BAC — before
+ * access ever completed — was misreported as "check your details" when
+ * the true cause was a card slip. [org.jmrtd.AccessDeniedException] IS-A
+ * [CardServiceException] in the JMRTD/scuba class hierarchy, so the two
+ * classifiers can both be evaluated against the SAME exception regardless
+ * of where in the read it was thrown; [classify] is the single place that
+ * resolves which bucket wins.
+ *
+ * **Precedence, explicit and single-sourced here (2026-09):** transient
+ * wins over access-establishment when both could match the same
+ * exception. In practice the two real-device markers ("tag was lost" vs.
+ * "mutual authentication failed") never both match one message, but the
+ * ordering itself — not an incidental non-overlap — is what [classify]
+ * guarantees, and [FailureTransitionTest] pins it directly rather than
+ * relying on the messages never colliding.
  */
 object FailureTransition {
+    /** The outcome of classifying one failure exception — see the class
+     * doc for what each bucket means and the state-transition it implies. */
+    enum class Classification { TRANSIENT_CHIP_COMMUNICATION, ACCESS_ESTABLISHMENT, UNCLASSIFIED }
+
+    /** The ONE place a failure exception is resolved to a bucket.
+     * TRANSIENT is checked FIRST — see the class doc's precedence note —
+     * then ACCESS_ESTABLISHMENT; anything matching neither is
+     * [Classification.UNCLASSIFIED] (bucket 3, reset), never a guess
+     * toward either "keep" bucket. */
+    fun classify(throwable: Throwable?): Classification = when {
+        isTransientChipCommunicationFailure(throwable) -> Classification.TRANSIENT_CHIP_COMMUNICATION
+        isAccessEstablishmentFailure(throwable) -> Classification.ACCESS_ESTABLISHMENT
+        else -> Classification.UNCLASSIFIED
+    }
+
+    /** Whether [classification] keeps MRZ+mode (buckets 1 and 2) or resets
+     * (bucket 3, [Classification.UNCLASSIFIED]) — state transitions are
+     * UNCHANGED by the 2026-09 classification-order fix: both "keep"
+     * buckets still behave identically here, only WHICH bucket a given
+     * exception lands in (and therefore which message the user sees)
+     * changed. */
+    fun keepsMrzAndMode(classification: Classification): Boolean = classification != Classification.UNCLASSIFIED
+
+    /** Legacy two-boolean form, kept for the many call sites (mint-path
+     * refusals, session-expiry, tier refusals) that already know their own
+     * bucket without ever running [classify] — they are not read-failure
+     * exceptions being classified, they are refusals that always resolve
+     * to bucket 1 or bucket 3 directly. Equivalent to
+     * `keepsMrzAndMode(classify(...))` for a real classified exception,
+     * never called with both true from [classify]'s own output (the two
+     * booleans there are mutually exclusive by construction). */
     fun keepsMrzAndMode(isAccessEstablishmentFailure: Boolean, isTransientChipCommunicationFailure: Boolean): Boolean =
         isAccessEstablishmentFailure || isTransientChipCommunicationFailure
 
@@ -43,7 +92,9 @@ object FailureTransition {
      * (case-insensitive — the exact, real-device-observed string is
      * `"Tag was lost"`). Nothing else is classified as transient; anything
      * this function cannot confidently recognise falls through to false
-     * (the existing reset bucket), never a guess toward "keep".
+     * (the existing reset bucket), never a guess toward "keep". UNCHANGED
+     * by the 2026-09 ordering fix — still exactly this, just no longer
+     * gated behind `!accessFailure` at the call site.
      */
     fun isTransientChipCommunicationFailure(throwable: Throwable?): Boolean {
         var cause: Throwable? = throwable
@@ -52,6 +103,30 @@ object FailureTransition {
             if (cause is CardServiceException && (cause.message ?: "").contains(TAG_LOST_MARKER, ignoreCase = true)) {
                 return true
             }
+            cause = cause.cause
+            depth++
+        }
+        return false
+    }
+
+    /**
+     * Walks [throwable]'s cause chain looking for an
+     * [org.jmrtd.AccessDeniedException] — the exception JMRTD actually
+     * raises for a rejected PACE or BAC key (the documented
+     * `SW 0x6300`->`0x6985` condition; the real-device case: "Mutual
+     * authentication failed"). 2026-09: this REPLACES the old
+     * "any exception during the access-establishment code path" rule —
+     * that rule mislabelled a mid-PACE/BAC tag-loss as an access failure.
+     * Same conservative discipline as [isTransientChipCommunicationFailure]:
+     * anything this function cannot confidently recognise as a genuine
+     * denial falls through to false (bucket 3, reset), never a guess
+     * toward "keep".
+     */
+    fun isAccessEstablishmentFailure(throwable: Throwable?): Boolean {
+        var cause: Throwable? = throwable
+        var depth = 0
+        while (cause != null && depth < MAX_CAUSE_CHAIN_DEPTH) {
+            if (cause is org.jmrtd.AccessDeniedException) return true
             cause = cause.cause
             depth++
         }
