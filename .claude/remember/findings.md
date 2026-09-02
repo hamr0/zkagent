@@ -80,6 +80,41 @@ audit's own section for the full reasoning behind each row.
   cross-thread read interleave unfavorably. Adversarial analysis in progress (per the audit).
 - **Status**: OPEN. This is the headline "one writer per piece of mutable state" violation the
   2026-09-02 freeze names explicitly — a structural refactor target, not a point fix.
+- Status update 2026-09-02: CLOSED BY CONSTRUCTION in `65096b9` (D58 step 3) — a new immutable
+  `data class AuthorizedHandoff(request, origin, site)` is captured EXACTLY ONCE, on the main thread,
+  in `lockModeAndArm`, and threaded as a parameter through `startSession`, `ReadTask`,
+  `continueAfterRead`, `promptAndMint`, and `mintAndMaybeHandoff`. Both cross-thread read sites named
+  above (`continueAfterRead`'s `Thread{}` at the old `:1281-1282`, `mintAndMaybeHandoff`'s independent
+  re-read at the old `:1470-1471`) are DELETED — no background code reads `pendingHandoff` or
+  `verifiedRequest` any more. The three reads that remain are all main-thread (`refreshModeStatus`,
+  `lockModeAndArm` itself, and `applyHandoffVerificationOutcome`'s staleness check, posted via
+  `runOnUiThread`), so the non-`@Volatile`/cross-thread half of this finding no longer applies — there
+  is no happens-before gap left to close, because there is no cross-thread read left. No staleness
+  guard or generation counter was added, by construction: a later `beginHandoffVerification` call can
+  still overwrite the mutable fields for the NEXT attempt, but it cannot reach back and change what an
+  already-constructed `AuthorizedHandoff` carries — a `val` cannot be reassigned, and the class has no
+  setter (a reflection test in the new `AuthorizedHandoffTest` fails if any field ever becomes `var`).
+  **Verified explicitly, per this file's own rule against taking a `!!` on trust**: the coder replaced
+  the old defensive null-check with `val authorized = snapshot!!` at the NFC-tag call site. The
+  orchestrator confirmed this cannot throw, via two independent gates in sequence rather than by
+  argument alone — mode A returns early at the `MintGate` check (`MintGate.mayMint` is
+  `modeIsB && verdict.ok && verdict.allowed == true`, i.e. `false` whenever `modeIsB` is `false`;
+  `MintGateTest` carries a test literally named `` `mode A NEVER mints, even with ok true allowed
+  true` ``), and mode B with a null snapshot is refused earlier still by the pre-existing D38 origin
+  guard. Unit tests 162 → 168 (JUnit XML, 0 failures); new `AuthorizedHandoffTest` adds the
+  supersession regression test (a second `beginHandoffVerification` call after lock time does not
+  alter an already-captured snapshot) plus the reflection check above. **`HandoffAdmission` (finding
+  #10's mitigation) was KEPT, not removed, contrary to D58's stated expectation** — see #10's own
+  status update below for why; this finding's own closure (mint correctness against the snapshot) does
+  not depend on that guard staying or going. Device-confirmed indirectly on the Pixel 6a, 2026-09-02
+  (two sessions, real NL ID card): every mint observed landed against the transaction the locked
+  session actually authorized, including a case where the orchestrator itself briefly mis-tracked
+  which transaction would complete — the device's own report said PASS, and only the verifier's
+  independent pending/done state distinguished the superseded transaction from the one actually
+  minted (see finding #10's status update and `docs/logs/M2-D58-STEP3-EVIDENCE.md` for the full
+  device narrative; this run exercises the guard/refusal path primarily, not a targeted #2/#3
+  cross-thread-corruption repro, so treat it as corroborating rather than dispositive for this
+  specific finding). See `docs/logs/M2-D58-STEP3-EVIDENCE.md`.
 
 ### 2026-09-02 — #4: 11 of 16 app fields lost on rotation; only two persist
 
@@ -266,6 +301,36 @@ audit's own section for the full reasoning behind each row.
   guard is to be REMOVED when that lands.
 - Status update 2026-09-02: mitigation DEVICE-CONFIRMED (build 26f67ac) — see
   docs/logs/M2-D55-D56-EVIDENCE.md; still OPEN for the ownership fix.
+- Status update 2026-09-02 (D58 step 3, `65096b9`): still **MITIGATED, NOT CLOSED**. The
+  MINT-CORRECTNESS half of this finding (evidence signed against a superseded request) is now closed
+  by construction — see finding #2/#3's own status update, same commit, for the `AuthorizedHandoff`
+  lock-time snapshot. `HandoffAdmission` was explicitly **KEPT, not removed, contrary to D58's
+  verbatim expectation** that it "becomes redundant and be removed" once the snapshot lands. Reason,
+  from the coder's trace, verified at source by the orchestrator: `applyHandoffVerificationOutcome`
+  (the async verify callback `beginHandoffVerification` schedules) unconditionally calls
+  `refreshModeStatus()` and sets `lockButton.isEnabled = true` on a successful verify, while
+  `refreshModeStatus`'s own doc says it must never run while `lockedMode` is set — nothing in code
+  enforces that except this guard refusing the foreign intent before `beginHandoffVerification` ever
+  runs. Removing the guard today would let an admitted foreign intent overwrite the "Locked: mode X"
+  banner with the attacker's "verifying…"/tier text (inert for re-locking — `lockedMode != null`
+  still no-ops a second Lock tap — but a real user-visible display regression). **Guard removal is
+  now explicitly blocked on `applyHandoffVerificationOutcome` respecting `lockedMode`** — that is D58
+  step 4 (`modeStatusView`/`lockButton.isEnabled` are named on step 3's own MUST NOT list). Device
+  evidence, two sessions on the Pixel 6a, real NL ID card, 2026-09-02: the guard correctly REFUSED
+  four separate hostile `av://` transactions fired from the same local verifier origin across three
+  distinct windows (post-lock/pre-read, mid-read via a logcat-triggered watcher landing 60ms after
+  the card tap, and one first attempt that missed the window entirely because the read/mint finished
+  before the hostile fire, so the subsequent fire was legitimately ACCEPTED as a new handoff — a
+  missed window, not a bypass); one refusal was independently confirmed user-visible (owner reported
+  seeing the Snackbar mid-scan, not only the log line); the owner's own legitimate mints in both
+  sessions completed correctly against the transaction actually locked, confirmed against the
+  verifier's own independent pending/done state rather than the device's self-report alone (see the
+  cross-check lesson in `docs/logs/M2-D58-STEP3-EVIDENCE.md`). **Stated limitations, carried forward,
+  not closed by this run**: all hostile links originated from the SAME local verifier origin (a
+  genuinely foreign origin is still untested); the PIN-prompt window specifically was not tested in
+  isolation (the mid-read refusal happened before the prompt appeared); the QR-scan/manual-paste
+  handoff path has NO gate at all (see new finding #15, same class, asymmetric coverage). See
+  `docs/logs/M2-D58-STEP3-EVIDENCE.md`.
 
 ### 2026-09-02 — #11: biometric prompt shows no origin/site/tier — consent defect, independent of and surviving #10's mitigations
 
@@ -301,6 +366,15 @@ audit's own section for the full reasoning behind each row.
 - Status update 2026-09-02: MITIGATED in 730ef09 — the site-named prompt title (`MintPromptText`,
   `strings.xml` `biometric_prompt_title_for_site`); remains OPEN for the ownership fix (lock-time
   snapshot / SessionState); the guard is to be REMOVED when that lands.
+- Status update 2026-09-02 (D58 step 3, `65096b9`): still **MITIGATED, NOT CLOSED** — same status as
+  #10, which this finding is independent of but shares a guard with. The lock-time `AuthorizedHandoff`
+  snapshot (finding #2/#3's status update, same commit) closes the mint-correctness question this
+  finding is not about; the site-named prompt title mitigation from `730ef09` is untouched by this
+  step. `HandoffAdmission` was explicitly **KEPT, not removed, contrary to D58's expectation** —
+  see #10's status update for the full reason (`applyHandoffVerificationOutcome` re-enabling
+  `lockButton`/rewriting `modeStatusView` without respecting `lockedMode`). **Guard removal is now
+  explicitly blocked on `applyHandoffVerificationOutcome` respecting `lockedMode`** — D58 step 4. No
+  new device evidence specific to the biometric prompt's content was gathered this session.
 
 ### 2026-09-02 — #12: reused `showBlockingOutcomeDialog` for the #10 refusal path would have let a refused foreign intent wipe the legitimate locked session — CLOSED-BY-CONSTRUCTION before commit
 
@@ -349,6 +423,12 @@ audit's own section for the full reasoning behind each row.
   estimates (400-900 bytes/entry, ~100-180 KB at cap vs. the ~1 MB Bundle/binder transaction limit),
   not measured on device. Unit tests cover eviction and the restore round-trip (145→151, JUnit XML).
   See `docs/logs/M2-D58-STEP1-EVIDENCE.md`.
+- Status update 2026-09-02: **FIXED** — no longer provisional. D59 (owner decision) set the
+  owner-approved unit and value: the cap counts ENTRIES, not lines (one entry is a whole scan-outcome
+  block of roughly 20 rendered lines), and the approved value is **20**, oldest-first eviction
+  unchanged. That constant change landed in commit `ff15629` (`ReportLog.MAX_ENTRIES = 200 → 20`),
+  replacing the PROVISIONAL 200 from `c856f42`. Both bound tests already referenced `MAX_ENTRIES`
+  symbolically rather than by literal, so they scaled to the new value untouched — 168/0/0, unchanged.
 
 ### 2026-09-02 — #14: `handoffStatus.text` — stale "verified/waiting" status survives a consumed or wiped session, misled the owner into two unintended mode-A scans
 
@@ -378,3 +458,33 @@ audit's own section for the full reasoning behind each row.
   class — a projection nobody rewrites when the state it describes changes.
 - **Status**: OPEN, consequence MEDIUM (user misled about which site a scan answers; no wrong data
   sent — the log entries were honest).
+
+### 2026-09-02 — #15: `applyPendingHandoffText` (QR-scan/manual-paste handoff path) has NO `HandoffAdmission` gate at all — only the `av://` intent path is guarded
+
+- **Source**: D58 step 3 coder's required survey (touching `beginHandoffVerification`'s call sites),
+  verified at source by the orchestrator, 2026-09-02, SHA `65096b9`
+- **Anchor**: `MainActivity.kt:717-725` (`applyPendingHandoffText` — parses pasted text or a scanned
+  QR payload via `HandoffClient.parsePastedText`, then calls `beginHandoffVerification(handoff)`
+  unconditionally on any successful parse); its two call sites at `:288` (manual-paste button handler)
+  and `:392` (post-QR-scan callback); contrast `:666` (the `av://` intent branch of
+  `handleIncomingIntent`), which gates the identical call through
+  `HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = lockedMode != null, readInProgress =
+  paneState.readInProgress)` before ever calling `beginHandoffVerification` — `applyPendingHandoffText`
+  has no equivalent check anywhere in its body
+- **Finding**: `applyPendingHandoffText` calls `beginHandoffVerification` with **no `HandoffAdmission`
+  gate of any kind** — neither `lockedMode` nor `paneState.readInProgress` is consulted before it
+  unconditionally overwrites `pendingHandoff`/`verifiedRequest`, exactly the call finding #10's
+  mitigation exists to guard on the `av://` path. This is the SAME class of defect as #10 (an
+  unguarded capture site for the handoff-verification pipeline), and the guard's coverage is
+  **asymmetric**: only the `av://` intent path is admission-gated; the QR-scan/manual-paste path is
+  not. PRE-EXISTING (not introduced by D58 step 3) — found by the step-3 coder while surveying every
+  call site of `beginHandoffVerification` as that step required, not by this step's own change.
+  **Consequence, stated as lower than #10's**: exploiting this path requires the DEVICE'S OWN USER to
+  paste text or scan a QR code (no on-device attacker app can drive it the way `av://` intents can be
+  fired from any installed app with no permission), so the practical attacker model is narrower — but
+  the underlying race (a foreign handoff admitted mid-lock/mid-read, landing on the same
+  `pendingHandoff`/`verifiedRequest` fields) is otherwise identical in shape to #10's.
+- **Status**: OPEN. Not exercised on device this session (the device runs that probed #10's mitigation
+  used only the `av://` path). Belongs with D58 step 4 and the guard-removal decision alongside #10/
+  #11 — whatever mechanism ends up gating admission for the ownership-refactored session boundary
+  should cover this call site too, not just `handleIncomingIntent`'s `av://` branch.
