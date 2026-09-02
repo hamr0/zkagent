@@ -5,6 +5,52 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **`apps/scanner` — finding #5 (fence): fix-ledger doc-drift bullet cleared.**
+  `e13dab0` rewrites `LifecycleFence.kt`'s KDoc so its thread-safety proof no
+  longer enumerates two syntactic forms (`runOnUiThread`, `onPostExecute`) as
+  exhaustive. It now states the real invariant — every `passes()` read is a
+  main-thread landing — lists the three forms actually observed (10
+  `runOnUiThread`, 1 `onPostExecute`, 2 main-executor `BiometricPrompt`
+  callbacks = 13 sites) as observed-not-exhaustive, and names the hazard
+  predicate itself as the criterion for any future site. This closes the
+  single open `.claude/remember/fix-ledger.md` bullet (ledger now 0 bullets;
+  the file is gitignored). Doc-only: the `72e0b2c` BiometricPrompt fence
+  guard remains without device evidence. Tests 184/0, unchanged.
+- **`apps/scanner` — finding #8 fixed: chip-auth classification extracted
+  and unit-tested for the first time.** `651ecd5` adds a pure
+  `ChipAuthClassification` object (`fromDg14`, `combine`, `label`,
+  `technical`) that replaces the inline DG14 decision, the CA+AA combine
+  rule, and both owner-approved D53 string mappings previously inline in
+  `MainActivity` — I/O stays inline, only the decision moved, and the
+  rendered strings are byte-identical to before. New
+  `ChipAuthClassificationTest.kt` (20 tests: a hand-written 3×3 combine
+  truth table, 4 DG14 cases, NOT_SUPPORTED never contains "false"/"Not
+  verified", FAILED contains "Not verified", three distinct labels). Tests
+  184 → 204, 0 failures. **Noticed, not changed**: `M0Probe.tryActiveAuth`
+  (`M0Probe.kt` ~:238) still holds its own separate inline
+  VERIFIED/NOT_SUPPORTED/FAILED decision with no direct unit test — the
+  same finding's narrower second half, left for the next spawn touching
+  `M0Probe.kt`.
+- **`apps/scanner` — finding #6 fixed: NFC-tag branch of
+  `handleIncomingIntent` now refuses a tag arriving mid-read.** `c60354e`
+  adds a pure predicate `HandoffAdmission.mayStartTagRead(sessionLocked,
+  readInProgress) = sessionLocked && !readInProgress` (opposite polarity to
+  the existing `mayAdmitInboundHandoff`, kept in the same object since both
+  gate the same two fields for the two intent branches of one function), 4
+  new truth-table tests. Wired into the NFC branch after the existing
+  `lockedMode == null` check and before the MRZ snapshot/`MrzChangeTracker`
+  diagnostic, so a refusal never disturbs `lastMrzHash`. Refusal shape
+  mirrors the `av://` path: static `Log.w` + Snackbar (new
+  `TAG_REFUSED_MID_READ_MESSAGE = "Ignored a tag that arrived mid-read."`) +
+  return — no report-log append (finding #13's rule), no blocking dialog
+  (finding #12's rule), no state assignment. Tests 204 → 208, 0 failures.
+  Guard is unit-tested at the predicate level and source-verified at the
+  call site only. **Residuals**: the Snackbar wording is PROPOSED, pending
+  owner approval; NO device evidence — no device was attached this session.
+  See `.claude/remember/findings.md` #6/#8/#5 for the full record.
+
+## [0.4.0] — 2026-09-02
+
 - **`apps/scanner` — D57 exit criterion (2) met: every async writer fenced
   against the Activity lifecycle (commits `b8e0e05`, then `72e0b2c`), with
   a completeness correction found by `/branch-review` recorded plainly, not

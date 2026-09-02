@@ -32,6 +32,10 @@ that moment, not necessarily what a future commit will show — re-anchor on rea
 code has moved. Source for items #1–#8 and the owner-observation item: the ownership audit; cite the
 audit's own section for the full reasoning behind each row.
 
+Note, 2026-09-02: the status-change notes added this session (under #4, #5, #6, #8, #10, #11) are
+anchored at `c60354e` on `chore/memory-consolidation`, not at the `2cd1e00`/uncommitted-D55/D56
+state the sentence above describes — a DOCS reconciliation pass, no code touched.
+
 ---
 
 ### 2026-09-02 — #1: TabLayout selection vs. `showPane()` race on rotation
@@ -145,6 +149,8 @@ audit's own section for the full reasoning behind each row.
   on gating, security, or user-facing state. What remains OPEN: the `lastMrzHash` diagnostic mislabel
   itself, plus the other ten of the eleven lost fields this finding names, none of which this step
   touched. Belongs with `lastMrzHash`/`SessionState` in a later D58 step. Finding NOT closed.
+- Status update 2026-09-02: unaffected this session, still OPEN — the `lastMrzHash` diagnostic
+  mislabel and the other ten lost fields.
 
 ### 2026-09-02 — #5: zero async-cancellation discipline
 
@@ -244,6 +250,15 @@ audit's own section for the full reasoning behind each row.
   framework may deliver late that touches Activity-owned UI or state — never by grepping for a
   syntactic form such as `runOnUiThread`; the form is an implementation detail of some landings, not
   a definition of the hazard class.
+- Status update 2026-09-02 (`e13dab0`): the `.claude/remember/fix-ledger.md` doc-drift bullet the
+  `9584bc8` re-review raised against `LifecycleFence.kt`'s KDoc (the thread-safety proof enumerating
+  two syntactic forms as exhaustive, contradicting this finding's own recurrence-prevention lesson)
+  is fixed — the KDoc now states the real invariant (every `passes()` read is a main-thread landing),
+  lists the three forms observed (10 `runOnUiThread`, 1 `onPostExecute`, 2 main-executor
+  `BiometricPrompt` callbacks = 13 sites) as observed-not-exhaustive, and names the hazard predicate
+  as the criterion for new sites. `fix-ledger` is now cleared (0 bullets). This is a doc-drift fix
+  only, not new coverage — the `72e0b2c` BiometricPrompt fence guard itself remains without device
+  evidence, unchanged this session (no device attached).
 
 ### 2026-09-02 — #6: `handleIncomingIntent` tag guard ignores `readInProgress`
 
@@ -263,6 +278,25 @@ audit's own section for the full reasoning behind each row.
   mechanical read-site update, semantics unchanged. `handleIncomingIntent`'s NFC-tag branch, the
   guard this finding is actually about, still never consults `readInProgress` under either name.
   The finding itself is unchanged and remains OPEN.
+- Status update 2026-09-02 (FIX, `c60354e`): **FIXED-IN-c60354e.** A new pure predicate
+  `HandoffAdmission.mayStartTagRead(sessionLocked, readInProgress) = sessionLocked &&
+  !readInProgress` (opposite polarity to `mayAdmitInboundHandoff`, kept in the same object because
+  both gate the same two fields for the two intent branches of one function), 4 new truth-table
+  tests in `HandoffAdmissionTest.kt`. Wired into the NFC `ACTION_TECH_DISCOVERED` branch of
+  `handleIncomingIntent`, after the existing `lockedMode == null` check (its log text unchanged)
+  and before the MRZ snapshot and the `MrzChangeTracker` diagnostic, so a refused tap does not
+  disturb `lastMrzHash`. Refusal shape mirrors the `av://` path: static value-free
+  `Log.w("M2 stage: ignoring tag intent — a read is already in progress")` + `Snackbar` (new
+  constant `TAG_REFUSED_MID_READ_MESSAGE = "Ignored a tag that arrived mid-read."`, LENGTH_SHORT) +
+  return; no `reportLog` append (finding #13's rule), no `showBlockingOutcomeDialog` (finding #12's
+  rule), no state assignment. Tests 204 → 208, 0 failures. **Coverage, stated precisely**: the guard
+  is unit-tested at the predicate level (the 4-case truth table) and source-verified at the call
+  site only — no runtime/device confirmation that the wiring actually fires as traced. **Residuals**:
+  (a) the Snackbar wording is PROPOSED, pending owner approval, same convention as
+  `HANDOFF_REFUSED_MID_SESSION_MESSAGE`; (b) NO device evidence — no device was attached this
+  session; a device test would lock a session, tap to start a read, then re-tap or fire a synthetic
+  `ACTION_TECH_DISCOVERED` intent mid-read and confirm the new log line plus Snackbar with no second
+  `startSession`.
 
 ### 2026-09-02 — #7: `reportView.text` written outside `emitReport`, contradicting its own KDoc
 
@@ -297,6 +331,19 @@ audit's own section for the full reasoning behind each row.
   `ReadTask.doInBackground`, so it is not independently testable without extraction — same shape as
   the `FailureTransition`/`PaneVisibility` extractions already done for other decisions.
 - **Status**: OPEN.
+- Status update 2026-09-02 (FIX, `651ecd5`): **FIXED-IN-651ecd5.** A new pure `ChipAuthClassification`
+  object (`fromDg14`, `combine`, `label`, `technical`) replaces the inline DG14 decision, the CA+AA
+  combine rule, and both owner-approved D53 string mappings previously inline in `MainActivity` — I/O
+  stays inline; only the decision moved; the rendered strings are byte-identical to before. New
+  `ChipAuthClassificationTest.kt`: 20 tests — a hand-written 3×3 combine truth table, 4 DG14 cases,
+  an assertion that NOT_SUPPORTED never contains "false"/"Not verified", an assertion that FAILED
+  contains "Not verified", and a check that the three labels are distinct. Tests 184 → 204, 0
+  failures. **Remaining gap, INSIDE this same finding (narrower, not a new numbered finding)**:
+  noticed but not changed this session — `M0Probe.tryActiveAuth` (`M0Probe.kt` ~:238) still holds
+  its own separate inline VERIFIED/NOT_SUPPORTED/FAILED decision, with no direct unit test of its
+  own. This is the second half of the same underlying defect (`M0Probe`'s AA-only three-state logic
+  never got the same extraction `ReadTask`'s DG14/CA+AA logic just did) and belongs to whatever spawn
+  next touches `M0Probe.kt`.
 
 ### 2026-09-02 — #9: `lockButton.isEnabled` — four writers, nothing reads it; joins the session and handoff clusters
 
@@ -440,6 +487,15 @@ audit's own section for the full reasoning behind each row.
   test coverage of its own and removing it was not this step's job; the owner has not ruled on removal.
   No new device evidence against a genuinely foreign origin this step. See
   `docs/logs/M2-D58-STEP4-EVIDENCE.md`.
+- Status update 2026-09-02 (RECONCILIATION, no status change, no fix this session): what remains,
+  precisely, for this entry to move from MITIGATED to CLOSED, derived only from the status text
+  already in this file: (1) an owner ruling on `HandoffAdmission`'s fate — keep it as a tested
+  first-class gate, or remove it now that mint correctness (#2/#3) and display correctness (#9) are
+  both closed by construction and the guard is kept only by recommendation, not by any remaining
+  code dependency; (2) the still-untested cases this file already names — a genuinely foreign origin
+  (every device test so far fired hostile links from the same local verifier origin), and the
+  PIN-prompt window specifically in isolation (the mid-read refusal observed happened before the
+  prompt appeared). Pending owner ruling.
 
 ### 2026-09-02 — #11: biometric prompt shows no origin/site/tier — consent defect, independent of and surviving #10's mitigations
 
@@ -494,6 +550,14 @@ audit's own section for the full reasoning behind each row.
   own subject (the biometric prompt's content), which remains mitigated only by the site-named prompt
   title from `730ef09`, untouched by this step. No new device evidence specific to the biometric
   prompt's content was gathered this step either. See `docs/logs/M2-D58-STEP4-EVIDENCE.md`.
+- Status update 2026-09-02 (RECONCILIATION, no status change, no fix this session): what remains,
+  precisely, for this entry to move from MITIGATED to CLOSED, derived only from the status text
+  already in this file: the mitigation option the entry itself already named — the site-named prompt
+  title (`730ef09`, `MintPromptText`/`biometric_prompt_title_for_site`) — IS the fix that was
+  applied; what remains is (1) an owner ruling that the site-named title actually satisfies the
+  consent requirement this finding raised, and (2) device evidence specific to the prompt's content,
+  which this file states was never gathered ("No new device evidence specific to the biometric
+  prompt's content was gathered this session" / "this step either"). Pending owner ruling.
 
 ### 2026-09-02 — #12: reused `showBlockingOutcomeDialog` for the #10 refusal path would have let a refused foreign intent wipe the legitimate locked session — CLOSED-BY-CONSTRUCTION before commit
 
