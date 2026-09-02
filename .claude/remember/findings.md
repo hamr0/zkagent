@@ -209,6 +209,9 @@ audit's own section for the full reasoning behind each row.
   "adversarial analysis in progress" for; that analysis is now complete and confirms it. Blocks
   under D57 pending an explicit owner ruling on whether mitigation (a) is a FIX that can proceed
   ahead of the full ownership refactor, or waits for it.
+- Status update 2026-09-02: MITIGATED in 730ef09 — `HandoffAdmission.mayAdmitInboundHandoff` gating
+  the av:// branch; remains OPEN for the ownership fix (lock-time snapshot / SessionState); the
+  guard is to be REMOVED when that lands.
 
 ### 2026-09-02 — #11: biometric prompt shows no origin/site/tier — consent defect, independent of and surviving #10's mitigations
 
@@ -241,3 +244,48 @@ audit's own section for the full reasoning behind each row.
   meaningfully informed about what it authorizes). Not fixed by `4969a20`. Blocked by D57 pending
   owner ruling on sequencing (same open question as #10: does a contained, low-risk FIX like this
   proceed ahead of the full ownership refactor, or wait for it).
+- Status update 2026-09-02: MITIGATED in 730ef09 — the site-named prompt title (`MintPromptText`,
+  `strings.xml` `biometric_prompt_title_for_site`); remains OPEN for the ownership fix (lock-time
+  snapshot / SessionState); the guard is to be REMOVED when that lands.
+
+### 2026-09-02 — #12: reused `showBlockingOutcomeDialog` for the #10 refusal path would have let a refused foreign intent wipe the legitimate locked session — CLOSED-BY-CONSTRUCTION before commit
+
+- **Source**: orchestrator + coder, 2026-09-02, SHA `730ef09`
+- **Anchor**: `MainActivity.kt` ~:905-909 at `4969a20` (now ~:921-925) — `showBlockingOutcomeDialog`'s
+  OK handler nulls `pendingHandoff`/`verifiedRequest` and calls `wipeSession(false)` whenever
+  `keepMrzAndMode` is false
+- **Finding**: the first draft of the #10 mitigation reused `showBlockingOutcomeDialog` for the
+  refusal path. That dialog's OK handler unconditionally nulls `pendingHandoff`/`verifiedRequest`
+  and wipes the session when `keepMrzAndMode` is false — reusing it for a refused FOREIGN intent
+  would have let the user's own OK tap destroy the LEGITIMATE locked session, a one-tap DoS via the
+  mitigation itself. Caught by the coder's required survey (found half — the wipe) and the
+  orchestrator's source check (found the pointer-nulling half). Fixed before commit by using a
+  Snackbar instead (no state transition). This hazard was AVOIDED, not fixed — the underlying
+  dialog handler is still the audit finding "guards row 6 / dismissal handler writes five fields."
+  Lesson for the briefing rule: grep the findings log for every function a brief tells an agent to
+  **CALL**, not only those it tells it to change.
+- **Status**: CLOSED-BY-CONSTRUCTION in `730ef09`. **Rule**: no refusal/ignore path may use
+  `showBlockingOutcomeDialog`; that dialog's contract is terminal-outcome-with-state-transition.
+
+### 2026-09-02 — #13: unbounded `ReportLog.entries` growth — the #10 refusal path is the first externally-triggerable APPEND, `TransactionTooLargeException` reachable via looped `av://` intents
+
+- **Source**: second-session review of `730ef09`, verified at source by the orchestrator, 2026-09-02, SHA `730ef09`
+- **Anchor**: `ReportLog.kt:162` (`entries`, a plain `mutableListOf<String>()` — no max size, eviction,
+  or trim anywhere in the file); `MainActivity.kt:573-581` (the #10 refusal path calls `emitReport`
+  before returning, which appends an entry); `onSaveInstanceState` (`:533`-equivalent) persists the
+  whole list into the Bundle
+- **Finding**: a hostile app firing `av://` intents at a locked session in a loop appends to
+  `ReportLog.entries` indefinitely — unbounded in-memory list and unbounded Bundle, ending in
+  `TransactionTooLargeException` at the next save. Before `730ef09` a foreign intent overwrote two
+  fields (O(1) state); the refusal path is the first code that lets an external trigger APPEND. The
+  `Log.e` on the same path is likewise remotely drivable but bounded by logcat's ring buffer. CREATED
+  BY the #10 mitigation.
+- **Options recorded, not applied**: (a) do not `emitReport` on refusal — the Snackbar + `Log.e`
+  already inform; a refused foreign intent is not a disclosure event (would reverse the
+  owner-approved Result-line string, so owner decision); (b) cap `ReportLog.entries` (touches D45
+  "accumulates for the app session" — needs a decision on the bound); (c) both. Owner ruling pending.
+- **Status**: OPEN, consequence MEDIUM (crash, not disclosure; needs a hostile app installed).
+- Status update 2026-09-02: option (a) applied in 26f67ac — the refusal path no longer calls
+  emitReport (Log.e + Snackbar only; the approved Result-line string was deleted with it). The
+  unbounded ReportLog.entries itself remains OPEN for the refactor (cap decision pending, touches
+  D45).
