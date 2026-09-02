@@ -2,7 +2,7 @@
 
     <string name="app_name">zkagent scanner (reference)</string>
 
-    <string name="input_passport_number">Passport number</string>
+    <string name="input_passport_number">Document number</string>
     <string name="input_expiration_date">Expiration date</string>
     <string name="input_date_of_birth">Date of birth</string>
 
