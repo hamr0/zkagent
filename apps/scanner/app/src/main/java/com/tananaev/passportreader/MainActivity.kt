@@ -187,12 +187,19 @@ abstract class MainActivity : AppCompatActivity() {
     // else that branch resets. ----
     private val reportLog = ReportLog()
 
-    // ---- D55: whether a chip read is currently in flight — the ONLY input
-    // to [showPane] besides the tab selection itself. Set ONLY by
-    // [startSession] (true) and as the FIRST statement of
-    // [ReadTask.onPostExecute] (false, on every exit path) — see
+    // ---- D55 / D58 step 2 (finding #1): the pane decision's owner — both
+    // its inputs (the tab index, and whether a chip read is in flight) now
+    // live here, not as scattered `MainActivity` fields nor read back from
+    // `tabLayout.selectedTabPosition`. See [PaneState]'s class doc for the
+    // full rationale and the survey behind moving `readInProgress` in. ----
+    private val paneState = PaneState()
+
+    // ---- D58 step 2: guards the ONE path where this Activity moves
+    // [tabLayout]'s own selection programmatically ([showPane], to keep the
+    // visible tab in sync with [paneState]) from being misread by the tab
+    // listener as a fresh user tap — see the listener's doc below and
     // [showPane]'s doc. ----
-    private var readInProgress: Boolean = false
+    private var applyingPaneStateToTabLayout = false
 
     // ---- D56: salted hash of the previous read attempt's MRZ fields, held
     // ONLY in memory — never rendered, never logged, never persisted. See
@@ -260,16 +267,17 @@ abstract class MainActivity : AppCompatActivity() {
         handoffStatus = findViewById(R.id.handoff_status)
         handoffManualInput = findViewById(R.id.handoff_manual_input)
 
-        // §6.2 item 16 (D44) / D55: tab selection only changes which pane
-        // [showPane] computes — see that function's doc for the single-
-        // write-site invariant this listener now defers to entirely.
+        // §6.2 item 16 (D44) / D55 / D58 step 2 (finding #1): a real user
+        // tap or reselect WRITES [paneState] first, then applies via
+        // [showPane] — see [onUserTabSelection]'s doc for the
+        // [applyingPaneStateToTabLayout] re-entry guard this pairs with.
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab) { showPane() }
+            override fun onTabSelected(tab: TabLayout.Tab) { onUserTabSelection(tab.position) }
             override fun onTabUnselected(tab: TabLayout.Tab) {}
             // D55: was a no-op — part of why a user stranded on the Log
             // tab after a failed read had no way back. Now idempotent:
             // re-tapping the current tab re-applies [showPane]'s decision.
-            override fun onTabReselected(tab: TabLayout.Tab) { showPane() }
+            override fun onTabReselected(tab: TabLayout.Tab) { onUserTabSelection(tab.position) }
         })
 
         // No SharedPreferences/DataStore read or write anywhere in this
@@ -288,6 +296,18 @@ abstract class MainActivity : AppCompatActivity() {
         // on the same owner (ReportLog), the only other writer of this
         // cluster's state.
         restoreReport(savedInstanceState)
+
+        // D58 step 2 (finding #1): restores [paneState]'s tab index from
+        // THIS Activity's own persisted Bundle key — MUST run before
+        // showPane() below, and before anything reads
+        // `tabLayout.selectedTabPosition` for the pane decision (nothing
+        // does, any more — see [showPane]'s doc). Closes finding #1 by
+        // construction: the framework's own, separately-timed TabLayout
+        // restore (inside its default `onPostCreate`, which this class
+        // still does not override — there is nothing there to make a
+        // no-op) can land whenever it lands; the pane decision no longer
+        // depends on it having landed yet.
+        paneState.restoreTabIndex(savedInstanceState?.getInt(STATE_TAB_INDEX, PaneState.TAB_SCAN))
 
         // D55: tab state and the restored log are both in place above —
         // one call so a recreated Activity is never left in a stale
@@ -527,6 +547,9 @@ abstract class MainActivity : AppCompatActivity() {
         // parallel MainActivity field — see ReportLog.lastText's doc.
         reportLog.lastText?.let { outState.putString(STATE_LAST_REPORT, it) }
         outState.putStringArrayList(STATE_LOG_ENTRIES, ArrayList(reportLog.entriesSnapshot()))
+        // D58 step 2 (finding #1): reads FROM the owner (paneState), the
+        // app's own tab index — see [PaneState]'s class doc.
+        outState.putInt(STATE_TAB_INDEX, paneState.tabIndexToSave())
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -571,7 +594,7 @@ abstract class MainActivity : AppCompatActivity() {
                 // (ReportLog.entries is unbounded and persisted whole into
                 // the Bundle) — the Snackbar and the logcat line below are
                 // the only outputs.
-                if (!HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = lockedMode != null, readInProgress = readInProgress)) {
+                if (!HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = lockedMode != null, readInProgress = paneState.readInProgress)) {
                     Log.e(TAG, "M2 stage: av:// handoff REFUSED — session locked or read in progress (D57 mitigation for finding #10)")
                     Snackbar.make(reportView, HANDOFF_REFUSED_MID_SESSION_MESSAGE, Snackbar.LENGTH_LONG).show()
                     return
@@ -958,9 +981,9 @@ abstract class MainActivity : AppCompatActivity() {
      * D55 — THE ONLY place in this file that writes `.visibility` on
      * [mainLayout], [logLayout] or [loadingLayout]. Enforced the same way
      * [emitReport] is the only place that writes [reportView]'s text: any
-     * future call site that wants a different pane shown must set
-     * [readInProgress] and/or the tab selection, then call this function —
-     * never touch a view's `.visibility` directly.
+     * future call site that wants a different pane shown must write
+     * [paneState] (its readInProgress and/or tab-index setters), then call
+     * this function — never touch a view's `.visibility` directly.
      *
      * WHY: `activity_main.xml` places these three views as overlapping
      * siblings inside one `FrameLayout` — so more than one `VISIBLE` at
@@ -973,17 +996,44 @@ abstract class MainActivity : AppCompatActivity() {
      * on every call, from [PaneVisibility.choosePane]'s single decision,
      * so the both-visible state is unrepresentable rather than merely
      * avoided by convention.
+     *
+     * D58 step 2 (finding #1): both inputs now come from [paneState], never
+     * from `tabLayout.selectedTabPosition` — the TabLayout is DRIVEN FROM
+     * the owner, never read as the source of truth. The one place this
+     * function still touches [tabLayout] is to keep its VISIBLE selection
+     * in sync with [paneState] (a restore, or a read finishing while the
+     * user is on a different tab than [paneState] currently names) —
+     * guarded by [applyingPaneStateToTabLayout] so that programmatic move
+     * is never misread by the tab listener as a fresh user tap.
      */
     private fun showPane() {
-        val pane = PaneVisibility.choosePane(readInProgress, tabLayout.selectedTabPosition)
+        if (tabLayout.selectedTabPosition != paneState.selectedTab) {
+            applyingPaneStateToTabLayout = true
+            tabLayout.getTabAt(paneState.selectedTab)?.select()
+            applyingPaneStateToTabLayout = false
+        }
+        val pane = PaneVisibility.choosePane(paneState.readInProgress, paneState.selectedTab)
         mainLayout.visibility = if (pane == PaneVisibility.Pane.SCAN) View.VISIBLE else View.GONE
         logLayout.visibility = if (pane == PaneVisibility.Pane.LOG) View.VISIBLE else View.GONE
         loadingLayout.visibility = if (pane == PaneVisibility.Pane.LOADING) View.VISIBLE else View.GONE
     }
 
+    /** D58 step 2 (finding #1): the tab listener's own entry point — see
+     * the listener registration's doc. A real user tap or reselect writes
+     * [paneState] then applies via [showPane]; a re-entrant call caused by
+     * [showPane] itself moving the TabLayout (guarded by
+     * [applyingPaneStateToTabLayout]) is a no-op here, so that
+     * programmatic move can never write [paneState] back from what was
+     * just applied FROM it. */
+    private fun onUserTabSelection(position: Int) {
+        if (applyingPaneStateToTabLayout) return
+        paneState.userSelectedTab(position)
+        showPane()
+    }
+
     // ------------------------------------------------------------- session
     private fun startSession(isoDep: IsoDep, bacKey: BACKeySpec, mode: PresentationMode) {
-        readInProgress = true
+        paneState.readStarted()
         showPane()
         ReadTask(isoDep, bacKey, mode).execute()
     }
@@ -1133,12 +1183,13 @@ abstract class MainActivity : AppCompatActivity() {
         }
 
         override fun onPostExecute(result: Exception?) {
-            // D55: FIRST statement, on every exit path (including the
-            // early `return` below in the failure branch) — see
-            // [showPane]'s doc. No future branch can add a new exit
-            // without also clearing [readInProgress], because there is
-            // nothing left after this point that still needs it true.
-            readInProgress = false
+            // D55 / D58 step 2: FIRST statement, on every exit path
+            // (including the early `return` below in the failure branch)
+            // — see [showPane]'s doc. No future branch can add a new exit
+            // without also clearing [paneState]'s readInProgress, because
+            // there is nothing left after this point that still needs it
+            // true.
+            paneState.readFinished()
             showPane()
             if (result != null) {
                 // 2026-09 real-device fix, second round (a real bug: a
@@ -1931,6 +1982,9 @@ abstract class MainActivity : AppCompatActivity() {
         private val TAG = MainActivity::class.java.simpleName
         private const val STATE_LAST_REPORT = "m2_last_report"
         private const val STATE_LOG_ENTRIES = "m2_log_entries"
+        // D58 step 2 (finding #1): the app's own tab index — see
+        // [PaneState]'s class doc for why this is the fix.
+        private const val STATE_TAB_INDEX = "m2_tab_index"
         // §6.2 item 16 (D46): the exact, owner-specified fixed label for a
         // log entry with no verified handoff — never a blank field or a
         // fabricated origin.
