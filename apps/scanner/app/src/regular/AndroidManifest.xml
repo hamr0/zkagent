@@ -4,7 +4,7 @@
 
         <activity
             android:name=".RegularActivity"
-            android:screenOrientation="fullSensor"
+            android:screenOrientation="portrait"
             android:launchMode="singleTop"
             android:exported="true">
 
