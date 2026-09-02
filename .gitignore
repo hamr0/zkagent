@@ -49,3 +49,11 @@ spikes/m1-zk/phone/dl/
 
 # Transient friction analysis — regenerated every /remember run, cross-project content
 /.claude/remember/friction/
+
+# /branch-review working artifacts — private, regenerated every run, not deliverables.
+# Narrow exception to the LIBRARY_CONVENTIONS §7 rule that keeps .claude/remember
+# tracked: these two are rewritten by every review, so tracking them makes each
+# review invalidate itself (the commit moves HEAD past the SHA it just recorded,
+# which /release reads as stale). Project memory in .claude/remember stays tracked.
+/.claude/remember/last-review.md
+/.claude/remember/fix-ledger.md

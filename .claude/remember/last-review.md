@@ -1,5 +1,0 @@
-sha: 9584bc85472a8b52a524923e047f5fafc50bbd09
-branch: m2-build
-target: 2a4db8100c4ccff107f15c3048ff185a01d37b7c..9584bc85472a8b52a524923e047f5fafc50bbd09
-verdict: ready
-date: 2026-09-02
