@@ -1116,17 +1116,17 @@ abstract class MainActivity : AppCompatActivity() {
      * states"): the plain-language value for the log entry's `Chip auth`
      * line. Reported to the owner for approval — see [ChipAuthStatus]'s
      * three states and why NOT_SUPPORTED must never read as "false". */
-    private fun chipAuthLabel(status: M0Probe.ChipAuthStatus): String = when (status) {
+    private fun chipAuthLabel(status: M0Probe.ChipAuthStatus): String =
         // Owner-revised wording (clone phrasing rejected as alarming to a
         // non-technical reader on every US-passport-shaped NOT_SUPPORTED
         // scan) — the three-state DISTINCTION itself (M0Probe.ChipAuthStatus,
         // the two independent try/catch blocks that stop conflating a
         // missing capability with a failed protocol) is unchanged; only
         // this text changed. "absent" must never render as "false".
-        M0Probe.ChipAuthStatus.VERIFIED -> "Verified — this document's chip proved it is genuine"
-        M0Probe.ChipAuthStatus.NOT_SUPPORTED -> "Not supported — this document has no chip authenticity check"
-        M0Probe.ChipAuthStatus.FAILED -> "Not verified — the chip check did not pass"
-    }
+        // finding #8 fix: strings now single-sourced in
+        // ChipAuthClassification.label (unit-tested for the "never false"
+        // rule) instead of this inline `when`.
+        ChipAuthClassification.label(status)
 
     /** §6.2 item 15 (D43, extended 2026-09 to cover SUCCESS too — "the one
      * outcome the user most wants confirmed was the only one that didn't
@@ -1312,27 +1312,31 @@ abstract class MainActivity : AppCompatActivity() {
                 // restructure both landed in the same catch and were
                 // indistinguishable, exactly the "absent" vs "failed"
                 // conflation the owner flagged.
+                // finding #8 fix: the I/O (getInputStream, DG14File parse,
+                // doEACCA) stays inline; only the DECISION now runs through
+                // ChipAuthClassification.fromDg14 (unit-tested truth table)
+                // instead of being computed by this inline `if`/`when`.
                 var caStatus = M0Probe.ChipAuthStatus.NOT_SUPPORTED
                 try {
                     val dg14In = service.getInputStream(PassportService.EF_DG14)
                     val dg14Encoded = IOUtils.toByteArray(dg14In)
                     val dg14File = org.jmrtd.lds.icao.DG14File(ByteArrayInputStream(dg14Encoded))
                     val caInfos = dg14File.securityInfos.filterIsInstance<org.jmrtd.lds.ChipAuthenticationPublicKeyInfo>()
-                    caStatus = if (caInfos.isEmpty()) {
-                        M0Probe.ChipAuthStatus.NOT_SUPPORTED
-                    } else {
+                    var challengeSucceeded = false
+                    if (caInfos.isNotEmpty()) {
                         try {
                             for (si in caInfos) {
                                 service.doEACCA(si.keyId, org.jmrtd.lds.ChipAuthenticationPublicKeyInfo.ID_CA_ECDH_AES_CBC_CMAC_256, si.objectIdentifier, si.subjectPublicKey)
                             }
-                            M0Probe.ChipAuthStatus.VERIFIED
+                            challengeSucceeded = true
                         } catch (e: Exception) {
                             Log.i(TAG, "M2 stage: CA declared (DG14 present) but failed (${e.javaClass.simpleName})")
-                            M0Probe.ChipAuthStatus.FAILED
                         }
                     }
+                    caStatus = ChipAuthClassification.fromDg14(dg14Readable = true, caInfosPresent = caInfos.isNotEmpty(), challengeSucceeded = challengeSucceeded)
                 } catch (e: Exception) {
                     Log.i(TAG, "M2 stage: CA not supported (no DG14) (${e.javaClass.simpleName})")
+                    caStatus = ChipAuthClassification.fromDg14(dg14Readable = false, caInfosPresent = false, challengeSucceeded = false)
                 }
                 val aa = M0Probe.tryActiveAuth(service, sodFile)
                 // Either mechanism verifying is enough to call chip authenticity
@@ -1340,11 +1344,9 @@ abstract class MainActivity : AppCompatActivity() {
                 // NOT_SUPPORTED (a genuine protocol failure is a stronger signal
                 // than "this mechanism just isn't present") — the combined
                 // status is never NOT_SUPPORTED unless BOTH mechanisms are.
-                chipAuthStatus = when {
-                    caStatus == M0Probe.ChipAuthStatus.VERIFIED || aa.first == M0Probe.ChipAuthStatus.VERIFIED -> M0Probe.ChipAuthStatus.VERIFIED
-                    caStatus == M0Probe.ChipAuthStatus.FAILED || aa.first == M0Probe.ChipAuthStatus.FAILED -> M0Probe.ChipAuthStatus.FAILED
-                    else -> M0Probe.ChipAuthStatus.NOT_SUPPORTED
-                }
+                // finding #8 fix: this used to be an inline `when` block;
+                // now a call to the unit-tested ChipAuthClassification.combine.
+                chipAuthStatus = ChipAuthClassification.combine(caStatus, aa.first)
                 timeline.mark("chip_auth_probed")
 
                 // Chip session no longer needed past this point — close before
@@ -1493,11 +1495,11 @@ abstract class MainActivity : AppCompatActivity() {
         // source: this string and the plain-language chipAuthLabel() line
         // below are both derived from the SAME chipAuthStatus, never two
         // independently-tracked variables that could drift.
-        val chipAuthTechnical = when (chipAuthStatus) {
-            M0Probe.ChipAuthStatus.VERIFIED -> "passed"
-            M0Probe.ChipAuthStatus.FAILED -> "failed"
-            M0Probe.ChipAuthStatus.NOT_SUPPORTED -> "absent"
-        }
+        // finding #8 fix: single-sourced in ChipAuthClassification.technical
+        // instead of this inline `when` (was already documented as sharing
+        // its source status with chipAuthLabel above — now it also shares
+        // the STRING MAPPING code, unit-tested for the "never false" rule).
+        val chipAuthTechnical = ChipAuthClassification.technical(chipAuthStatus)
         val baseReport = buildString {
             append("mode: $mode\n")
             append("access_protocol: $accessProtocol\n")
