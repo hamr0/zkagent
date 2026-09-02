@@ -195,6 +195,56 @@ audit's own section for the full reasoning behind each row.
   artificial test-harness delay proxy (natural windows ~12-28ms on localhost); the QR-scan/
   manual-paste path was not exercised under fence conditions this session.
 
+- Status update 2026-09-02 (correction, commit `72e0b2c`, following a `/branch-review` finding over
+  the 44-commit branch): **the prior status-change note's completeness claim was WRONG in scope.**
+  That note (and PRD D57's matching annotation) said "11 sites fenced," full stop — implying
+  exhaustive coverage of every main-thread landing reachable after Activity destruction. It was not
+  exhaustive: it was a syntactic enumeration (`grep`-shaped — every `runOnUiThread` call plus
+  `ReadTask.onPostExecute`), not an enumeration by the actual hazard predicate. A
+  `BiometricPrompt.AuthenticationCallback` is dispatched on the main executor and is a main-thread
+  landing in exactly the same sense as the 11 sites already fenced, but it does not say
+  `runOnUiThread` anywhere, so it was missed. `onAuthenticationError` called `emitReport` then
+  `showBlockingOutcomeDialog`, which does `AlertDialog.Builder(this).show()` against the Activity —
+  a real landing, not a hypothetical one.
+- **Why it was reachable, bytecode-verified by the orchestrator in `androidx.biometric` 1.1.0, not
+  assumed** (worth recording precisely — it is counter-intuitive):
+  `BiometricPrompt$ResetCallbackObserver.resetCallback()` is annotated `@OnLifecycleEvent(ON_DESTROY)`
+  and nulls `BiometricViewModel.mClientCallback`, after which `getClientCallback()` substitutes a
+  no-op default — so a destroyed host is *normally* never called back. BUT `addObservers()` is
+  invoked ONLY from the library's two `Fragment` constructors; both `FragmentActivity` constructors
+  call neither `addObservers` nor `getLifecycle`. `MainActivity` is an `AppCompatActivity` (`:186`)
+  and uses the `FragmentActivity` overload (`:1779`), so that protection is NOT active here — "androidx
+  handles lifecycle" is a wrong but very reachable conclusion, one constructor overload away from
+  being true.
+- **Fix, commit `72e0b2c`**: the same guard as the other 11 sites added to `onAuthenticationError`,
+  plus `onAuthenticationFailed` for defence-in-depth (placed AFTER its existing diagnostic log line
+  so it never suppresses it, so future UI work appended there inherits the fence).
+  `onAuthenticationSucceeded` unchanged — it only starts a `Thread{}` whose landings are already
+  fenced. Both new messages static, zero interpolation, `Log.i` not `Log.w` (nothing minted, nothing
+  left the device on these paths, unlike `:2131`). **13 fenced sites now, not 11.** Unit tests 184/0
+  unchanged, verified by the orchestrator on a clean `--rerun-tasks` build, exit 0. Not
+  unit-testable (Activity-resident callback, module runs `isReturnDefaultValues=true`) — settling it
+  needs a device test that destroys the Activity while a biometric prompt is outstanding, confirming
+  the landing is dropped with no `WindowManager$BadTokenException`; not yet run.
+- **Sweep result**: the coder swept every other non-`runOnUiThread` main-thread landing in
+  `MainActivity.kt` by the correct predicate — "a callback the framework may deliver late that
+  touches Activity-owned UI or state" — not by text match, and found NO further gaps: click/editor/
+  long-click listeners (alive by construction — an input event requires an attached, foregrounded
+  view), `registerForActivityResult`/`qrCaptureLauncher` (AndroidX `ActivityResultRegistry` is
+  lifecycle-aware, unlike the `BiometricPrompt` path), the `DatePickerDialog` `DialogFragment` (added
+  via the normal `FragmentManager`, torn down with its host), NFC tag handling via `onNewIntent`
+  (synchronous, resumed-only), and `DeviceKey.exportDevAttesterPublicKeyIfPresent` (verified at
+  source: writes only to `openFileOutput`/`Log`, no Activity landing exists to fence).
+- **Criterion (2) status, stated precisely so the record does not read as continuously true**:
+  criterion (2) ("every async writer is fenced against Activity lifecycle") **was NOT actually met
+  between `b8e0e05` and `72e0b2c`** — the prior note's "MET" claim held only from `72e0b2c` onward.
+  It **is MET now**, at 13 sites. **The freeze does NOT lift** — criterion (3) is still not met;
+  findings #10/#11 remain OPEN, mitigated not closed.
+- **Recurrence-prevention lesson**: enumerate async landings by the predicate — a callback the
+  framework may deliver late that touches Activity-owned UI or state — never by grepping for a
+  syntactic form such as `runOnUiThread`; the form is an implementation detail of some landings, not
+  a definition of the hazard class.
+
 ### 2026-09-02 — #6: `handleIncomingIntent` tag guard ignores `readInProgress`
 
 - **Source**: audit (State join §, Guards §)

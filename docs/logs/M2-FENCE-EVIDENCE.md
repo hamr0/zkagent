@@ -223,6 +223,60 @@ question.
 
 ---
 
+## FOLLOW-UP, 2026-09-02 — BiometricPrompt callback gap found by `/branch-review`, fixed in `72e0b2c`
+
+**This section is a correction, added after this file's original content above was committed
+(`2a4db81`) and after a `/branch-review` pass over the 44-commit branch found a real gap in the
+11-site enumeration this file records.** The content above is UNCHANGED and describes the state as
+of `2a4db81`; read it together with this section, not in isolation.
+
+**The gap**: the 11 sites fenced by the pass this file documents were enumerated by searching for
+`runOnUiThread` (10 hits) plus `ReadTask.onPostExecute`. A `BiometricPrompt.AuthenticationCallback`
+is dispatched on the main executor and is a main-thread landing in exactly the same sense as those
+11 sites, but it does not match that syntactic pattern, so it was missed.
+`onAuthenticationError` called `emitReport` and then `showBlockingOutcomeDialog`, which does
+`AlertDialog.Builder(this).show()` against the Activity.
+
+**Why it was reachable** — bytecode-verified by the orchestrator in `androidx.biometric` 1.1.0, not
+assumed: `BiometricPrompt$ResetCallbackObserver.resetCallback()` is annotated
+`@OnLifecycleEvent(ON_DESTROY)` and nulls `BiometricViewModel.mClientCallback`, after which
+`getClientCallback()` substitutes a no-op default — a destroyed host is normally never called back.
+BUT `addObservers()` is invoked ONLY from the library's two `Fragment` constructors; both
+`FragmentActivity` constructors call neither `addObservers` nor `getLifecycle`. `MainActivity` is an
+`AppCompatActivity` (`:186`) and uses the `FragmentActivity` overload (`:1779`), so that protection
+is NOT active here.
+
+**Fix (`72e0b2c`)**: the same guard added to `onAuthenticationError`, plus `onAuthenticationFailed`
+for defence-in-depth (placed after its existing diagnostic log line so it never suppresses it).
+`onAuthenticationSucceeded` unchanged — it only starts a `Thread{}` whose landings are already
+fenced. Both new messages static, zero interpolation, `Log.i` not `Log.w`. **13 fenced sites now,
+not 11.** Unit tests 184/0 unchanged, verified on a clean `--rerun-tasks` build, exit 0.
+
+**Sweep result**: every other non-`runOnUiThread` main-thread landing in `MainActivity.kt` was swept
+by the predicate "a callback the framework may deliver late that touches Activity-owned UI or
+state," not by text match — no further gaps found (click/editor/long-click listeners,
+`registerForActivityResult`/`qrCaptureLauncher`, the `DatePickerDialog` `DialogFragment`, NFC
+`onNewIntent` dispatch, `DeviceKey.exportDevAttesterPublicKeyIfPresent`).
+
+**Device coverage — stated honestly**: the six device tests (T1-T5 above, T2 included) did **NOT**
+exercise the `BiometricPrompt` callback path at all — none of them destroyed the Activity while a
+biometric prompt was outstanding. **This fix is code-verified and bytecode-verified only; it has NO
+device evidence.** What would settle it: a device test that arms a biometric prompt, forces an
+Activity recreation while the prompt is outstanding (the font-scale toggle technique T2 used would
+work), and confirms the callback landing is dropped with no
+`WindowManager$BadTokenException` — not yet run.
+
+**Criterion (2) status, corrected**: D57's exit criterion (2) ("every async writer is fenced against
+Activity lifecycle") was **NOT actually met between `b8e0e05` and `72e0b2c`** — this file's original
+"D57 exit criterion (2) is now MET" line above described `2a4db81`'s state accurately at the time
+but is now superseded; criterion (2) **is MET now**, at 13 sites, only from `72e0b2c` onward. **The
+freeze does NOT lift** — criterion (3) remains unmet; findings #10/#11 remain open-but-mitigated.
+
+See `.claude/remember/findings.md` #5's matching status-change note for the full record, and
+`docs/product/zkagent-prd.md` D57 for the PRD-level annotation.
+
+---
+
 **No PII values appear anywhere above.** All quoted logcat lines, transaction identifiers, and
 verifier states are value-free by construction — stage names, boolean/status fields, truncated
 transaction IDs, and timings only — checked against this file's own rule and the project standard
