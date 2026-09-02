@@ -160,11 +160,14 @@ this is flagged in the report back to the caller.
   Status: CLOSED 2026-09-01 — challenge expiry is reachable from the verified
   request object directly; "consumed" needs no detection since a used session is
   already cleared from app state. (zkagent-prd.md:2062-2077)
-- **Q38 (opened 2026-09-02, deferred under D57)** — Whether the in-app log needs to
-  survive app close (process death). Status: DEFERRED under D57 — device evidence
-  shows the log survives Activity recreation but not process death; whether a
-  durable record is needed is undecided. Evidence: `docs/logs/M2-FENCE-EVIDENCE.md`,
-  `.claude/remember/findings.md` #16. (zkagent-prd.md:2079-2097)
+- **Q38 (closed by D64)** — Whether the in-app log needs to survive app close
+  (process death). Status: CLOSED 2026-09-02 — Option A (accept and disclose):
+  a mid-`direct_post` recreation still delivers the proof to the site while the
+  phone shows nothing; zero code, D44's in-memory-only log stands unamended.
+  Option B (a tiny on-disk "sent, awaiting result" marker, host + timestamp only)
+  is deferred to the next module's list, not designed here. Owner: "option A."
+  Evidence: `docs/logs/M2-FENCE-EVIDENCE.md`, `.claude/remember/findings.md` #16.
+  (owner, 2026-09-02)
 - **Q39 (opened 2026-09-02, deferred under D57)** — Whether an incoming handoff
   intent should switch the visible tab. Status: DEFERRED under D57 — distinct from
   the already-rejected D55 (auto-switch on read completion); blocked on the same
@@ -205,18 +208,20 @@ this is flagged in the report back to the caller.
   device attached this session. (zkagent-prd.md:2162-2168)
 - **Q47 (opened 2026-09-02, deferred under D57 — input-focus CORRECTNESS defect,
   not a styling preference)** — Typing in the date fields steals focus back to the
-  document-number field, corrupting entered MRZ data. Status: **INVESTIGATED
-  2026-09-02, NOT FIXED** — root cause not isolable from source; every app-code
-  focus mechanism was traced and ruled out (see
-  `.claude/remember/findings.md` #17 for the full trace). Standing hypothesis
+  document-number field, corrupting entered MRZ data. Status: **FIX IN FLIGHT,
+  DEVICE CHECK PENDING** — a coder fix (`clearFocus()` on the document-number
+  field plus hiding the keyboard after the `DatePickerDialog`'s OK) is landing on
+  this branch; not yet confirmed on device, so NOT marked FIXED. Prior session's
+  investigation traced and ruled out every app-code focus mechanism (see
+  `.claude/remember/findings.md` #17 for the full trace); standing hypothesis
   (unconfirmed): Android's own post-`DatePickerDialog` default focus restoration
   landing on `input_passport_number`, the form's only touch-focusable field — a
-  framework mechanism, not app code, and needs a device repro to confirm. The
-  repro wording itself needs the owner's sharpening: `docs/logs/M2-FENCE-EVIDENCE.md`
-  ~:168 describes the symptom as occurring "while typing the date fields," but the
-  date fields have no typing path (tap-to-picker only). Evidence:
-  `docs/logs/M2-FENCE-EVIDENCE.md`; full record: `.claude/remember/findings.md` #17.
-  (zkagent-prd.md:2170-2179)
+  framework mechanism, not app code. The repro wording itself still needs the
+  owner's sharpening: `docs/logs/M2-FENCE-EVIDENCE.md` ~:168 describes the symptom
+  as occurring "while typing the date fields," but the date fields have no typing
+  path (tap-to-picker only). Evidence: `docs/logs/M2-FENCE-EVIDENCE.md`; full
+  record: `.claude/remember/findings.md` #17. (zkagent-prd.md:2170-2179; owner,
+  2026-09-02)
 - **Q48 (opened 2026-09-02, deferred under D57 — UI/UX ENHANCEMENT, human-ID only,
   not a security question)** — Three installed reader apps are indistinguishable on
   the launcher. Status: DEFERRED — verified NOT a security gap (`av://` routing

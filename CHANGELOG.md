@@ -5,6 +5,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Owner rulings D61-D64: freeze exit criterion (3) MET; D57/D60 freeze not yet
+  lifted.** D61 closes finding #10 (`av://` hijack) by construction —
+  `HandoffAdmission` is now permanent policy, not a kept-by-recommendation
+  stopgap; device proof against a genuinely foreign origin is still owed. D62
+  closes finding #11 (biometric prompt origin disclosure) — the site-named
+  prompt title is accepted as the fix, owner-confirmed on device. D63 locks
+  `AndroidManifest.xml` `screenOrientation` to portrait (was `fullSensor`,
+  landing in a follow-up commit on this branch), closing finding #4's
+  rotation vector only; the non-rotation part of #4 carries to the next
+  module's `SessionState` design item. D64 closes finding #16 and Q38 as
+  Option A (accept and disclose): a mid-`direct_post` recreation still
+  delivers the proof to the site while the phone shows nothing; zero code,
+  D44's log stands unamended; Option B (an on-disk "sent, awaiting result"
+  marker) is deferred to the next module's list. D57's exit criterion (3)
+  is now MET by D61/D62, but the freeze's actual lift is withheld pending a
+  dedicated device session and is not recorded here. Q47 (input-focus
+  steal) has a fix in flight from a coder (`clearFocus()` plus hiding the
+  keyboard after the `DatePickerDialog`), not yet device-confirmed — marked
+  "fix in flight, device check pending," not FIXED. See `docs/wiki/decisions.md`
+  D61-D64, `docs/wiki/questions.md` Q38/Q47, `.claude/remember/findings.md`
+  #4/#10/#11/#16/#17. Docs only, no code touched this session.
 - **`apps/scanner` — finding #6 residual (a) retired: mid-read tag-refusal
   Snackbar removed by owner decision.** `57f5ddd` removes the mid-read
   Snackbar and its `TAG_REFUSED_MID_READ_MESSAGE` constant from the NFC

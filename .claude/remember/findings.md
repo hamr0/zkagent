@@ -156,6 +156,12 @@ JUnit XML, not from a device run.
   touched. Belongs with `lastMrzHash`/`SessionState` in a later D58 step. Finding NOT closed.
 - Status update 2026-09-02: unaffected this session, still OPEN — the `lastMrzHash` diagnostic
   mislabel and the other ten lost fields.
+- Status update 2026-09-02 (D63, owner ruling): `AndroidManifest.xml` `screenOrientation` locks
+  portrait (was `fullSensor`), landing in a follow-up commit on this branch. This closes the
+  ROTATION vector only — the framework-restore/lost-field mechanics this finding describes still
+  apply to non-rotation recreation (font-scale change, locale change, low-memory process death).
+  The `lastMrzHash` diagnostic mislabel and the other ten lost fields remain OPEN, carried forward
+  to the next module's `SessionState` design item, not fixed by D63.
 
 ### 2026-09-02 — #5: zero async-cancellation discipline
 
@@ -517,6 +523,11 @@ JUnit XML, not from a device run.
   (every device test so far fired hostile links from the same local verifier origin), and the
   PIN-prompt window specifically in isolation (the mid-read refusal observed happened before the
   prompt appeared). Pending owner ruling.
+- **Status update 2026-09-02 (D61, owner ruling): CLOSED BY CONSTRUCTION.** The owner ruling this
+  entry's prior update was pending now resolves item (1) above: `HandoffAdmission` is permanent
+  policy, not a kept-by-recommendation stopgap. Owner: "#10 ok." Item (2) — device proof against a
+  genuinely foreign origin (`127.0.0.1:18787` firing mid-scan) — is recorded as pending device
+  evidence owed, not as a condition of this closure. See `decisions.md` D61.
 
 ### 2026-09-02 — #11: biometric prompt shows no origin/site/tier — consent defect, independent of and surviving #10's mitigations
 
@@ -579,6 +590,9 @@ JUnit XML, not from a device run.
   consent requirement this finding raised, and (2) device evidence specific to the prompt's content,
   which this file states was never gathered ("No new device evidence specific to the biometric
   prompt's content was gathered this session" / "this step either"). Pending owner ruling.
+- **Status update 2026-09-02 (D62, owner ruling): CLOSED.** Item (1) above is resolved: the
+  site-named `BiometricPrompt` title is accepted as the fix. Owner confirmed it on device by eye:
+  "it did work, confirmed." See `decisions.md` D62.
 
 ### 2026-09-02 — #12: reused `showBlockingOutcomeDialog` for the #10 refusal path would have let a refused foreign intent wipe the legitimate locked session — CLOSED-BY-CONSTRUCTION before commit
 
@@ -748,6 +762,15 @@ JUnit XML, not from a device run.
   the owner, adjacent to and overlapping Q38 (log lifetime). Device-proven both sides in
   `docs/logs/M2-FENCE-EVIDENCE.md` T5 (drop) and T1 (the same path succeeding normally when no
   recreation intervenes).
+- **Status update 2026-09-02 (D64, owner ruling): CLOSED as Option A (accept and disclose).** If the
+  screen is recreated mid-`direct_post`, the site still receives the proof and the phone shows
+  nothing; the user rescans. Zero code changes; D44's in-memory-only log stands unamended. Option B
+  (a tiny on-disk "sent, awaiting result" marker — host + timestamp only, surfaced as "previous
+  presentation to \<host\>: result not recorded" on next app start; would amend D44, no NO-GO #9
+  conflict since #9 is about secrets, not disk state) is deferred to the next module's list as its
+  first small item, not designed further here. Owner: "oh well, they scan again or if you capture
+  error log it after app restart as failed," then "option A." See `decisions.md` D64, `questions.md`
+  Q38.
 
 ### 2026-09-02 — #17: Q47 focus-steal — investigated, not fixed; root cause not isolable from source, needs device repro
 
@@ -780,5 +803,9 @@ JUnit XML, not from a device run.
   (tap-to-picker only per the anchor above) — the repro wording needs sharpening (was the user typing
   in the document-number field and got interrupted, or did focus move right after a picker closed?)
   before the next spawn touches this file again.
+- Status update 2026-09-02 (owner direction, fix in flight): a coder fix (`clearFocus()` on the
+  document-number field plus hiding the keyboard after the `DatePickerDialog`'s OK) is landing on
+  this branch. Not device-confirmed — status stays OPEN pending that check, not marked FIXED. See
+  `questions.md` Q47.
 - **Status**: OPEN — needs device repro; not fixable from source alone. No device was attached this
   session; nothing here should be read as device evidence.

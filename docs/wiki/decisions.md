@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D60
+title: zkagent — owner decisions D1–D64
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D60
+# Owner decisions D1–D64
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -132,3 +132,13 @@ for those.
 **D59** — `ReportLog`'s bound is 20 entries (one entry = one whole scan-outcome block), not the 200 D58 step 1 shipped provisionally — 200 entries would be an unusable scroll. Closes finding #13 as FIXED (no longer provisional). (zkagent-prd.md:1797)
 
 **D60 — Branch close-out; D57's freeze is CARRIED FORWARD, not lifted.** Owner: "we will exit here to close this branch... we can move to release and future freeze still there, we will take it with next module first thing, a continuation" and "i want to pause this and move on, otherwise its a perpetual delay." **D57 exit-criteria status at close:** (1) MET; (2) MET as of `72e0b2c` (13 fenced sites); (3) **NOT MET** — findings #10/#11 remain OPEN at consequence HIGH, mitigated not closed. **This is a deferral, not a lift:** no new §6.2 item, enhancement, or UX change may land while D57 stands; clearing criterion (3) is the first work item of the next module, not folded into it. Other pending items at close: findings #4, #6, #8, #16 open (not freeze-blocking); Q38 answered but not decided; Q43-Q48 deferred UI items stay deferred; verification debt on the `BiometricPrompt` fence guard (code-verified only, no device run) and the QR/manual-paste handoff path (never exercised under fence conditions). (zkagent-prd.md:1798)
+
+**D61** — Finding #10 CLOSED by construction: `HandoffAdmission` is permanent policy, not a kept-by-recommendation stopgap pending an ownership fix. Device proof (a hostile `av://` link from a genuinely second local origin, `127.0.0.1:18787`, fired mid-scan, expected refusal) is still owed but is recorded as pending evidence, not as a condition of closure. Owner: "#10 ok." (owner, 2026-09-02)
+
+**D62** — Finding #11 CLOSED: the site-named `BiometricPrompt` title (`730ef09`, `biometric_prompt_title_for_site`) is accepted as the fix; owner confirmed it on device by eye. Owner: "it did work, confirmed." (owner, 2026-09-02)
+
+**D63** — `AndroidManifest.xml`'s `screenOrientation` locks portrait (was `fullSensor`), landing in a follow-up commit on this branch. Closes finding #4's rotation vector only — `PaneState`/`LifecycleFence`/`onSaveInstanceState` all stay, since non-rotation recreation (font-scale change, locale change, low-memory process death) still occurs. The remaining non-rotation part of finding #4 (the `lastMrzHash` diagnostic mislabel and the other untraced lost fields) carries forward as a design item for the next module's `SessionState` work, not closed here. Owner: "make it not rotate, some apps don't." (owner, 2026-09-02)
+
+**D64** — Finding #16 and Q38 CLOSED as Option A (accept and disclose): if the Activity is recreated mid-`direct_post`, the site still receives the proof and the phone shows nothing on-device; the user rescans. Zero code changes; D44's in-memory-only log stands unamended. Option B (a tiny on-disk marker recording only site host + timestamp + "sent, awaiting result," surfaced as "previous presentation to \<host\>: result not recorded" on next app start — would amend D44; not a NO-GO #9 conflict since NO-GO #9 concerns secrets, not disk state) is recorded as the first small item of the next module's list, not designed further here. Owner: "oh well, they scan again or if you capture error log it after app restart as failed," then "option A." (owner, 2026-09-02)
+
+D57's exit criterion (3) (".claude/remember/findings.md has no OPEN entry at consequence HIGH") is now MET by D61/D62 closing findings #10/#11. The freeze's actual lift is a separate decision, withheld pending a device session covering: the Q47 fix check, a mid-read re-tap, a QR request plus forced recreation mid-verify, an Activity destroyed with the biometric prompt open, and a hostile link from a second origin — to be recorded after that session, not here. (owner, 2026-09-02)
