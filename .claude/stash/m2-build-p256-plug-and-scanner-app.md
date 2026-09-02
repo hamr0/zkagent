@@ -345,6 +345,6 @@ curl -s -X POST http://127.0.0.1:8787/ui/presentations -H 'Content-Type: applica
 adb shell am start -a android.intent.action.VIEW -d '<app_link from that response>'
 ```
 
-PRD: `docs/product/zkagent-prd.md` v1.18.
+PRD: `docs/archive/zkagent-prd.md` v1.18.
 
 Predecessor stash: `.claude/stash/m2-build-ed25519-key-test.md`.

@@ -19,7 +19,7 @@ licence text, and code/config excerpts appear below.
 | Clone path | `/tmp/claude-1000/-home-hamr-PycharmProjects-zkagent/17b3eeda-2ed0-4f1f-8313-7bc24e3a48bb/scratchpad/av-lib-android-zkp-age-icao` (outside the repo, per instruction — never committed) |
 | Repo history | 6 commits total; first commit 2026-02-02, HEAD commit 2026-05-21 — **~3 months stale as of today (2026-08-31)** |
 | Declared version | `0.0.3-SNAPSHOT` (no Git tags; three `release-0.0.x-SNAPSHOT` branches on remote, no stable release ever cut) |
-| Cross-references read first | `docs/logs/M2-CONFORMANCE.md` Finding 6 (prior summary); `docs/logs/M1-Q23-EVIDENCE.md` §2 (our documents' SOD crypto profiles); `docs/product/zkagent-prd.md` FR12/D24/D25/D26/Q26 (evidence-type contract) |
+| Cross-references read first | `docs/logs/M2-CONFORMANCE.md` Finding 6 (prior summary); `docs/logs/M1-Q23-EVIDENCE.md` §2 (our documents' SOD crypto profiles); `docs/archive/zkagent-prd.md` FR12/D24/D25/D26/Q26 (evidence-type contract) |
 
 ---
 

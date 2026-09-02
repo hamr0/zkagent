@@ -24,7 +24,7 @@ as committed; everything from 2026-08-30 is uncommitted.
 
 All uncommitted, on top of the prior M1 POC commit:
 
-- `docs/product/zkagent-prd.md` → v1.8 (draft): D22 recorded; D19 tier-A
+- `docs/archive/zkagent-prd.md` → v1.8 (draft): D22 recorded; D19 tier-A
   wording changed to "this site learns one fact and nothing that follows
   you to other sites"; FR9 plus the M1b criterion "stable across sites"
   added; Q23 rewritten with options 1–5 and an evidence paragraph; risk #1's

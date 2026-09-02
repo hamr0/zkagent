@@ -24,7 +24,7 @@ Continued from the founding-session stash to answer "what's next." The session c
 ## Key decisions
 
 - **M0 de-platformed.** Preferred path: USB PC/SC NFC reader (e.g. ACR122U) + JMRTD on the owner's Linux desktop. Fallback: physical NFC Android phone + JMRTD. iPhone variant is only revisited if a Mac + paid Apple account later materialize.
-- **PRD bumped v1.0 → v1.1** (`docs/product/zkagent-prd.md`), edits uncommitted at session end:
+- **PRD bumped v1.0 → v1.1** (`docs/archive/zkagent-prd.md`), edits uncommitted at session end:
   1. Header amendment note added.
   2. M0 row rewritten per the de-platformed path above.
   3. M1 App Attest fixtures made conditional: published Apple sample fixtures stand in if M0 is not iOS; real fixtures get re-verified at M2.
@@ -38,7 +38,7 @@ Continued from the founding-session stash to answer "what's next." The session c
 
 ## Doc/repo state
 
-- `docs/product/zkagent-prd.md` — now v1.1 in the working tree (see edits above). **Uncommitted.**
+- `docs/archive/zkagent-prd.md` — now v1.1 in the working tree (see edits above). **Uncommitted.**
 - `CHANGELOG` — `[Unreleased]` entry added for the v1.1 amendment and the iPhone→platform-neutral wording fix. **Uncommitted.**
 - `README` — unchanged this session.
 - Commit policy: PRD + CHANGELOG edits are deliberately left uncommitted; commit only when the owner asks.

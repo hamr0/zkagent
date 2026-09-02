@@ -4,7 +4,7 @@
 (findings #2/#3)"), written after the fact from the orchestrator's own JUnit XML check, source diff,
 and two device sessions' logcat + the verifier's own transaction state, all produced this session.
 This file is the evidence `.claude/remember/findings.md` #2/#3's, #10's, and #11's status updates and
-`docs/product/zkagent-prd.md`'s D58 step-3 status line cite; it mirrors `M2-D58-STEP2-EVIDENCE.md`'s
+`docs/archive/zkagent-prd.md`'s D58 step-3 status line cite; it mirrors `M2-D58-STEP2-EVIDENCE.md`'s
 structure and value-free rule.
 
 **Rule for this file (carried from `M0-EVIDENCE.md` / `M2-D50-D53-EVIDENCE.md` /

@@ -75,7 +75,7 @@ Nothing committed. No code written. M0 still not run — that remains the top bl
 
 ## Doc/repo state
 
-- `docs/product/zkagent-prd.md` — now "PRD v1.3 (draft)" with amendment lines for v1.2
+- `docs/archive/zkagent-prd.md` — now "PRD v1.3 (draft)" with amendment lines for v1.2
   and v1.3 in the header. **Still uncommitted** (all of v1.1, v1.2, v1.3 are uncommitted).
 - `CHANGELOG.md` — updated with all v1.2/v1.3 changes under `[Unreleased]`.
   **Still uncommitted.**

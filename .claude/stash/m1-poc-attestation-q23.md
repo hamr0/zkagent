@@ -55,7 +55,7 @@ All uncommitted:
   `tee-run1/run2.pem`.
 - `docs/logs/M1-POC-EVIDENCE.md` (new, 110 lines, 8 findings + method
   findings + NOT established + decisions).
-- `docs/product/zkagent-prd.md`: now v1.7 (draft); M1 row rewritten;
+- `docs/archive/zkagent-prd.md`: now v1.7 (draft); M1 row rewritten;
   M1/M2 checkpoints updated; risk #4 and #8 annotated with POC results; Q14
   appended (parsing feasible; linkability → Q23; sub-item (d) pinned-but-
   expired root policy); Q23 added; version history row.

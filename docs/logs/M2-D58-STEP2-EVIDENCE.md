@@ -3,7 +3,7 @@
 **Status**: source record for `0d4daf7` ("D58 step 2 — PaneState owns the tab index (finding #1)"),
 written after the fact from the orchestrator's own JUnit XML check, source diff, and one filtered
 `uiautomator dump` capture per case, all produced this session. This file is the evidence
-`.claude/remember/findings.md` #1's status update and `docs/product/zkagent-prd.md`'s D58 step-2
+`.claude/remember/findings.md` #1's status update and `docs/archive/zkagent-prd.md`'s D58 step-2
 status line cite; it mirrors `M2-D58-STEP1-EVIDENCE.md`'s structure and value-free rule.
 
 **Rule for this file (carried from `M0-EVIDENCE.md` / `M2-D50-D53-EVIDENCE.md` /

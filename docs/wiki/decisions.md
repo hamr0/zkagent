@@ -1,0 +1,134 @@
+---
+type: reference
+title: zkagent — owner decisions D1–D60
+status: stable
+sources: [docs/archive/zkagent-prd.md]
+---
+
+# Owner decisions D1–D60
+
+Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
+decision and, where the row carried one, the owner's verbatim clause and a pointer to
+where status/evidence lives. Status-update narratives, commit-by-commit history, and
+test counts are dropped — see the cited evidence docs or `.claude/remember/findings.md`
+for those.
+
+**D1** — v1 trust root = government chip signature + OS attestation; no ZK circuits in v1, ZK named as a future tier. Amended by D24: ZK proofs allowed in v1 as an evidence plug, validation-grade only; no ZK circuits are "ours"; Track Z gates still govern any security claim. (zkagent-prd.md:1734)
+
+**D2** — Native thin scanner app, Android-first (wraps JMRTD); everything else web. iOS deferred until demand justifies Apple's $99/yr cost. Development device is Pixel, stock ROM — Huawei/China-market ROMs excluded (no Play Services, non-Google attestation root); rationale is attestation-quality debuggability, not NFC capability. (zkagent-prd.md:1735)
+
+**D3** — Stateless, 8een-style design: blocklist/nonce/trust stores are adopter-supplied; zkagent stores nothing. (zkagent-prd.md:1736)
+
+**D4** — The `ok`/`allowed` invariant (§3) is adopted verbatim. (zkagent-prd.md:1737)
+
+**D5** — `zktag = HMAC(chip-derived secret, verified service domain)` — client-side scope binding. Named `zktag` (not `tag`) to avoid colliding with RFC 9421's own `tag` signature parameter. (zkagent-prd.md:1738)
+
+**D6** — New repo; 8een is reused only as lessons learned, the `challenge.js` pattern, and verdict/test discipline — the 8een repo itself stays untouched. (zkagent-prd.md:1739)
+
+**D7** — Project named **zkagent**; verifier SDK ships via npm, scanner app via Play. Superseded in part by D12 (package name split). (zkagent-prd.md:1740)
+
+**D8** — Issuer-free derivation is named the riskiest assumption; M0 targets it before anything else is built. (zkagent-prd.md:1741)
+
+**D9** — The mode-B derivation field is the document number (present on every ICAO 9303 document); M0 evidence showed it deterministic and collision-free. Rejected: the optional/personal number (merges documents, against the cross-document-unification non-goal), the full-DG1 hash, and chip keys (absent on the US passport). See: docs/logs/M0-EVIDENCE.md Findings 3, 10, 11. (zkagent-prd.md:1742)
+
+**D10** — The mode-B derived secret has an enclave-enforced maximum age (default 30 days, configurable 30/60/90/180, MUST NOT exceed 180); a fresh scan renews it. Freshness is negotiated via one bit in the presentation, never an age in days (would fingerprint). Mode A caches no secret and is unaffected. (zkagent-prd.md:1743)
+
+**D11** — Age threshold is configurable (default 18); output stays a single `over_threshold` boolean, adopted verbatim from 8een. A proof of a threshold other than the one requested MUST be rejected, not accepted as close enough. (zkagent-prd.md:1744)
+
+**D12** — Project and published package names split: project `zkagent`, package `chiproof` (precedent: 8een/zk8een). `chiproof@0.0.0` reserved/published on npm 2026-08-07, Apache-2.0 licensed. (zkagent-prd.md:1745)
+
+**D13** — Disclosure has two modes: Mode A (anonymous, default) emits one bit, unlinkable across presentations; Mode B (pseudonymous, opt-in) additionally emits the domain-scoped zktag. Mode B MUST be requested explicitly, never inferred or defaulted. The rung-2 agent-delegation layer is structurally mode-B only. (zkagent-prd.md:1746)
+
+**D14** — Accepted document types are adopter-configurable; the default is greedy (every ICAO 9303 document the client can read), since document count `k` has no cost in mode A and is a mode-B-only trade-off. (zkagent-prd.md:1747)
+
+**D15** — FR6 (payload uniformity) is narrowed, not retired: uniformity is required within one client build/mode; cross-client distinguishability is accepted because the trust list (FR10) works by reading package name + signing-cert digest. (zkagent-prd.md:1748)
+
+**D16** — The derivation is a published, versioned specification (FR11) — a prerequisite of the borrowable core. (zkagent-prd.md:1749)
+
+**D17** — The trust list is held by the adopter, never by zkagent (FR10) — no API key, registry, or relationship with us. (zkagent-prd.md:1750)
+
+**D18** — Sequencing: the agent layer (rung 2) is not designed or discussed further until the age-verification leg (rung 1) ships, refused by default even on a passing owner request — "M0 first." (zkagent-prd.md:1751)
+
+**D19** — Disclosure has three tiers, defined by what the holder is told, not what the app decides. Tier A (anonymous, default): one boolean, no identifier. Tier B (pseudonymous): tier A plus the domain-scoped zktag. Tier C (attributed): booleans over identifying fields, gated to pinned challenge-issuer keys only (D20); refused, not downgraded, if unpinned. Supersedes "mode A/mode B" wording where it conflicts; D13's rules for A/B are unchanged. (zkagent-prd.md:1753)
+
+**D20** — Challenges are signed by their issuer; the issuer's public key is its identity (`trustedChallengeIssuers: [{pubkey, maxTier}]`, mirroring FR10). Unsigned challenges are accepted at tiers A/B (amended 2026-08-30: the nonce HMAC already seals every field, making them tamper-evident) but refused at tier C. (zkagent-prd.md:1754)
+
+**D21** — Always read, conditionally mint. The app reads whatever the document offers with no mode selection up front; minting is gated by the verifier (not the app alone), which enforces `chip_auth: passed|absent` policy at tiers B/C only. Tier A never emits `chip_auth`. See: docs/logs/M0-EVIDENCE.md Findings 4, 9. (zkagent-prd.md:1755)
+
+**D22** — Tier A's same-site unlinkability promise is relaxed from requirement to non-goal; cross-site unlinkability remains the requirement (nothing in the payload may be stable across sites). D19's tier-A wording changes accordingly; D1 stands. (zkagent-prd.md:1756)
+
+**D23** — Superseded by D24 same day (Play Integrity proved non-borrowable). As originally decided: v1 attestation is voucher-grade (Play Integrity), D1 stands, and a ZK-over-passport track is named with five explicit gates (audited Barretenberg release, independent circuit audit, measured on-device proving time, chain-free nullifier, open-source prover) before D1 is revisited. See: docs/logs/M1-Q23-EVIDENCE.md, docs/product/zk-due-diligence.md. (zkagent-prd.md:1757)
+
+**D24** — The core ships with an evidence slot; v1 works with the slot empty (bare mode), and what fills it is the adopter's choice. Each evidence type is a plug with contract `verifyEvidence(item, ctx) → {ok, valid, reason}` (never throws), binding nonce/claim/scope; registry entries include `zk-passport/1`, `signed-receipt/1`, `app-attest/1`, `key-attestation/1`. Reason: Play Integrity tokens are non-transferable, per-app-quota — non-borrowable. See: docs/product/learnings.md §3, §6.11, §2. (zkagent-prd.md:1759)
+
+**D25** — `zk-passport/1` ships in M1, tier ceiling A only — the zkPassport age circuit has no nonce input, so the challenge nonce is carried in `service_subscope`, making the nullifier per-request (fine for tier A, unusable for tier B/C). Tier B/C ZK evidence deferred to Track Z as Q26. No circuit is forked. See: docs/product/learnings.md §3. (zkagent-prd.md:1761)
+
+**D26** — Disclose (not hide) the DSC/`id_data` `vk_sha256` circuit-class bucket in tier A for `zk-passport/1` — the only cross-site-stable, document-dependent field M1b found, unremovable without an upstream zkPassport circuit change (NO-GO #7) or an adopter narrowing to one class. Closes Q15; opens Q27. See: docs/logs/M1B-EVIDENCE.md §4-5, spikes/m1b-unlink/leak-*.mjs. (zkagent-prd.md:1763)
+
+**D27** — The M2 reference scanner ships bare (`evidence: []`) as its one fixed evidence set — captcha-grade, no unvetted mobile prover, avoids carrying D26's disclosed bucket into the reference app. Amended by D30 (mode-B default becomes `sig-ed25519/1`). Closes Q25. (zkagent-prd.md:1765)
+
+**D28** — `current_date` is coarsened to midnight-UTC client-side before entering the age circuit; effective `max_scan_age` floor is 1 day. Eliminates second-level scan-session correlation across sites. Closes Q27. (zkagent-prd.md:1766)
+
+**D29** — Mode B accepts documents without chip authentication — the US passport lacks AA/CA (clone-replayable), the NL ID card has both; the verifier reports `chip_auth` true/false and adopters may tighten via config. A cloned non-chip-auth document mints the identical zktag as the genuine holder's. Closes Q18. See: docs/logs/M0-EVIDENCE.md Finding 9. (zkagent-prd.md:1767)
+
+**D30** — `sig-ed25519/1` becomes the DEFAULT evidence delivery for mode-B presentations (mode A stays bare per D27). Owner: "ed25519 can be default delivery with mode B, since every attestor can create their own private key." Linkability class 'signer', tier ceiling B. (zkagent-prd.md:1768)
+
+**D31** — The verifier accepts any one of an operator-configured *set* of attester-sig plugs, not a single fixed one — `sig-ed25519/1` and `sig-p256/1` become co-equal alternatives (the device picks the strongest it supports). Owner: "A yes, either." A presentation carrying two members of one alternatives group where any present member is invalid fails entirely — no fallback masking. Opened Q28, closed by D36. (zkagent-prd.md:1769)
+
+**D32** — Attester-sig plugs are the reference default, not a privileged mode-B requirement — an operator MAY substitute any registered chiproof evidence plug (e.g. `zk-passport/1`). Owner: "that signature can be changed/replaced by operators by anything else... or anything they want." Constraint unchanged: whatever is chosen must still pass the per-tier linkability gate. (zkagent-prd.md:1770)
+
+**D33** — The scanner preselects and locks the presentation mode from a pending handoff request's `zkagent.tier` field rather than leaving it to manual selection; an absent/invalid tier MUST fail loudly, never default. Owner: "B yes, app should preselect." Superseded in part by D51 (mode radio removed entirely, mode derived). (zkagent-prd.md:1771)
+
+**D34** — The scanner verifies the request object's JWS signature against a pinned/provisioned trusted request-signer key set before trusting any field inside it; failure or no match MUST refuse (log + report), never warn-and-continue. Narrows D20 for the M2 build specifically (D20's spec floor is unchanged). Owner: "C yes, it should verify." Opened Q29, closed by D37. (zkagent-prd.md:1772)
+
+**D35** — The last value-free report text MAY be retained in-memory across Activity recreation (`onSaveInstanceState`), never persisted to disk. Owner: "D yes." Already implemented; this records approval. (zkagent-prd.md:1773)
+
+**D36** — The device orders its own key/evidence capabilities by a fixed strength preference and attempts them in order, never choosing to downgrade among successes — it falls through only when its preferred combo fails on-device. Owner: "why would code/phone that is mechanical choose to downgrade?" Closes Q28. (zkagent-prd.md:1774)
+
+**D37** — Request trust is origin-bound (EU AV-profile shape), not authority-bound. `client_id`/`request_uri`/`response_uri` MUST resolve to one origin; the verifier's request-signing key is discovered at a well-known path under that origin over TLS. Tier C MAY additionally use an operator-curated allow-list. Owner: "verifier is not our issue... i also agree with os level and to cover av:// to ensure requesting website is the same." Closes Q29. (zkagent-prd.md:1775)
+
+**D38** — Mode-B attester keys are per-origin, and the verifier binds key→zktag on first sight (trust-on-first-use). Owner: "agree b+c." Stated limitation: first-sight binding has no re-enrolment mechanism — a factory reset permanently locks a user out at every site that already bound them (opened Q31, not resolved). See: `packages/chiproof/src/plugs/attester-sig.js:130` (`sig_unknown_key` finding). (zkagent-prd.md:1776)
+
+**D39** — The attester key is isolated per `(origin, zktag)`, not per origin alone — D38 narrowed, not reversed, closing a leak where one device key reused across two documents at one site let the verifier infer both pseudonyms were the same phone. Owner: "yeah, isolate, that's a small leak." (zkagent-prd.md:1777)
+
+**D40** — No issuer/country policy at tiers A/B; trust-anchor curation (which CSCAs a verifier loads) remains the legitimate mechanism, distinct from a forbidden protocol-level country filter. Tier C MAY carry issuer information. Owner: "id is id doesn't matter where it's from, maybe mode C of kyc should have that but others shouldnt." (zkagent-prd.md:1778)
+
+**D41** — `sig-ed25519/1`/`sig-p256/1` keep `linkability: 'signer'`, tier ceiling B unchanged — under D39 each key is scoped to (origin, zktag), not a stable per-device value. General rule settled here: linkability class is a property of a plug's actual payload, never inferred from its technology category. Owner: "leave it." (zkagent-prd.md:1779)
+
+**D42** — The zktag/attester-key signing scope is host-only; D37's origin-consistency check stays the full origin (scheme+host+port) — a scheme/port change shouldn't reset a returning user's identity, but request-object trust must be exact. Owner: "domain." Flags "host" vs. "registrable domain" as unresolved for a real subdomain deployment. Closes Q30. (zkagent-prd.md:1780)
+
+**D43** — Any outcome that ends a scan attempt and requires user action MUST be a blocking modal dialog with an OK action, never a self-dismissing Snackbar; transient UI stays for purely informational, no-state-change events. Owner, after a mistyped-number run vanished into a fading Snackbar: "when wrong data in, it is not pop up to dismiss but overlay notification that disappears, i should get pop up then ok then it resets." New §6.2 item 15. (zkagent-prd.md:1781)
+
+**D44** — The per-scan report moves into its own timestamped, in-app log view (new §6.2 item 16), fed by the same single `emitReport()` write path, in-memory only for the session. Owner: "the feedback of what happened every scan... should go to another tab as logs, same output with timestamp." Amended by D45-D49. (zkagent-prd.md:1782)
+
+**D45** — The log view's lifetime is decoupled from `wipeSession()`'s per-scan wipe — it accumulates for the whole app session, not one scan, correcting a self-contradiction in D44's original text. Amends D44/item 16. (zkagent-prd.md:1783)
+
+**D46** — Each log entry MUST be titled by the verified request origin (or the fixed label "Local scan (no site)" for a bare mode-A scan) and MUST legibly summarize the disclosure outcome, superseding D44's "no content change" clause to that extent. Owner: "logs should be safe... titled by timestamp, titled by website." Opens Q32 (exact wording). (zkagent-prd.md:1784)
+
+**D47** — The disclosure summary is a four-field plain-language block — `Result`/`Sent`/`Shared`/`Identity` — under the entry title, with a subordinate `▸ technical:` line; the "Local scan (no site)" label is confirmed. The four lines MUST be accurate to the actual outcome, never a fixed template. Closes Q32. (zkagent-prd.md:1785)
+
+**D48** — The `Identity` field's reused-key wording is confirmed ("known — recognized only here from previous visit" — "only here" is load-bearing); `Shared` MUST render the actual disclosed predicate and answer (threshold read from the verified request, answer never assumed true), and MUST say plainly when nothing was disclosed. Owner: "new — minted fresh for this site, known - recognized only here from previous visit... age above 18 yes shared." Flags an unmet MUST (hardcoded threshold=18) as Q35/Q36. (zkagent-prd.md:1786)
+
+**D49** — `Shared` renders a list of `<predicate>: <boolean>` lines (literal `true`/`false`, never "yes"/"no"), one per disclosed claim, followed by the standing negation line. Owner: "true/false always... same shape 'age > 18: true, expiry > 3 months: false, expired: true'." Today's list holds exactly one element pending Q34. (zkagent-prd.md:1787)
+
+**D50** — Positive finding: D39's per-(origin, zktag) key isolation confirmed on real hardware. Three amendments: log entries display newest-first; exactly one log entry per scan attempt (terminal outcome replaces the in-progress entry, never a second write); a consumed/expired handoff session MUST be cleared on delivery and refused up front on reuse. Opens Q37 (later closed by implementation). (zkagent-prd.md:1788)
+
+**D51** — Positive finding: D38's first-sight attester binding confirmed `matched` for a returning document. Three amendments: a new TRANSIENT chip-communication-failure bucket keeps MRZ/mode like access-establishment failures; the mode radio is removed entirely — mode is derived from the verified handoff tier (or mode A by default), eliminating F5's bug class by construction; the log block states mode and chip-authenticity (three states: verified/not-supported/failed) in plain language. The `onStop()` MRZ wipe (F1) is reaffirmed, not relaxed. (zkagent-prd.md:1789)
+
+**D52** — Positive finding: D38's binding now holds repeatedly across four consecutive transactions. A successful, delivered-and-accepted mint MUST also surface a blocking modal confirming success (previously silent) — using the same dialog mechanism as D43's failure dialogs, minimal wording only, no restated disclosure. Only accepted delivery qualifies; mode-A/bare scans get no such confirmation. (zkagent-prd.md:1790)
+
+**D53** — The `Mode` line is removed from the plain-language log block (redundant with `Sent`/`Shared`/`Identity`, and potentially misread as "we read less" when D21 means the chip is always read identically); chip-authenticity strings are approved verbatim (Verified/Not supported/Not verified). Owner: "no scary business for non tech savvy they may think we know and transfer more than what we do." Mode stays in `▸ technical:` and the on-screen derived-mode display. (zkagent-prd.md:1791)
+
+**D54** — Diagnostic finding: five identical `AccessDeniedException` failures pointed at an MRZ-derived key rejection, not a chip/code fault. Approved shortened dialog strings for access-establishment vs. transient failures (must stay two distinct strings). Real bug also fixed: failure classification order was wrong (access-establishment caught any exception before the transient classifier could run) — reclassified transient-first from exception evidence in the pure `FailureTransition` object. Corrected by D55 (the causal "same wrong details" reading was incomplete). (zkagent-prd.md:1792)
+
+**D55** — Root cause of D54's repeat failures: overlapping `FrameLayout` panes let the Log tab visually cover the MRZ form after a failure with no way back, so users literally could not reach the field to correct it. Fix: all three pane-visibility writes MUST go through one function (single-write-site discipline, mirroring `emitReport`), the pane decision MUST live in a pure, Android-free, unit-tested object, and `onTabReselected` MUST become idempotent. D54's diagnostic/classification-order fix is unaffected. (zkagent-prd.md:1793)
+
+**D56** — The tag-intent path MUST log (value-free) whether the three MRZ field values changed since the previous attempt in-process, to answer whether corrected details actually reached the app — costed an hour of code inspection to answer manually while D55's bug was live. Comparison uses an in-memory, per-process-salted hash only; never logs values, never persists. (zkagent-prd.md:1794)
+
+**D57 — FREEZE (not a feature).** After ~4,780 unreviewed LOC across seven isolated agent rounds and the D55 pane bug shipping, the owner froze new §6.2 items/enhancements and adopted a process reset (entry gate is FIX-vs-ENHANCEMENT, never LOC; every agent spawn carries prior history; one writer per mutable field; every async writer fenced; findings recorded durably in `.claude/remember/findings.md`, never code comments). **Exit criteria, all three required:** (1) every mutable UI/session field named in the ownership audit has a named single writer; (2) every async writer is fenced against Activity lifecycle; (3) `.claude/remember/findings.md` has no OPEN entry at consequence HIGH. **MUST NOT:** any new §6.2 item, enhancement, or UX change lands before the exit criterion is met. Criterion (2) reached 13 fenced sites as of commit `72e0b2c` (a `/branch-review` finding added 2 `BiometricPrompt` callback sites missed by the original 11-site grep-based sweep). The freeze does NOT lift — criterion (3) remains unmet (findings #10/#11 OPEN). See: .claude/remember/findings.md, docs/logs/M2-FENCE-EVIDENCE.md. (zkagent-prd.md:1795)
+
+**D58** — The ownership refactor (D57's exit criterion) executes in four ordered steps: (1) Report/Log cluster — single-owner `ReportLog`, closes finding #7; (2) Pane cluster — `PaneState` sole-owns tab index, closes finding #1; (3) lock-time `AuthorizedHandoff` snapshot threaded as a parameter, deletes both cross-thread reads, closes findings #2/#3; (4) re-derived Session boundary — landed in part as a pure `SessionDisplay` projection (not the single `SessionState` class originally proposed), closing findings #9/#14/#15. All four steps landed and device-confirmed on the Pixel 6a. `HandoffAdmission` was kept, not removed as originally expected, since it still guards field overwrite. Finding #5 (async-cancellation discipline) becomes the principal remaining blocker on D57's exit criterion. See: docs/logs/M2-D58-STEP1-EVIDENCE.md through STEP4. (zkagent-prd.md:1796)
+
+**D59** — `ReportLog`'s bound is 20 entries (one entry = one whole scan-outcome block), not the 200 D58 step 1 shipped provisionally — 200 entries would be an unusable scroll. Closes finding #13 as FIXED (no longer provisional). (zkagent-prd.md:1797)
+
+**D60 — Branch close-out; D57's freeze is CARRIED FORWARD, not lifted.** Owner: "we will exit here to close this branch... we can move to release and future freeze still there, we will take it with next module first thing, a continuation" and "i want to pause this and move on, otherwise its a perpetual delay." **D57 exit-criteria status at close:** (1) MET; (2) MET as of `72e0b2c` (13 fenced sites); (3) **NOT MET** — findings #10/#11 remain OPEN at consequence HIGH, mitigated not closed. **This is a deferral, not a lift:** no new §6.2 item, enhancement, or UX change may land while D57 stands; clearing criterion (3) is the first work item of the next module, not folded into it. Other pending items at close: findings #4, #6, #8, #16 open (not freeze-blocking); Q38 answered but not decided; Q43-Q48 deferred UI items stay deferred; verification debt on the `BiometricPrompt` fence guard (code-verified only, no device run) and the QR/manual-paste handoff path (never exercised under fence conditions). (zkagent-prd.md:1798)

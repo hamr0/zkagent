@@ -186,7 +186,7 @@ cd packages/chiproof && npm install && npm run typecheck && node --test
 Publish (idempotent, skips if already at latest): `gh workflow run
 publish.yml --ref main`.
 
-PRD: `docs/product/zkagent-prd.md` v1.13.
+PRD: `docs/archive/zkagent-prd.md` v1.13.
 
 Confirm `publish.yml` matches its pre-experiment state: `git show
 f5194d2:.github/workflows/publish.yml` vs. current `main`.

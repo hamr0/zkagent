@@ -260,7 +260,7 @@ adb shell svc power stayon usb
 adb shell am start -n com.zkagent.m2sessionpoc/com.tananaev.passportreader.RegularActivity
 ```
 
-PRD: `docs/product/zkagent-prd.md` v1.18.
+PRD: `docs/archive/zkagent-prd.md` v1.18.
 
 Evidence docs: `docs/logs/M2-*.md`, including `M2-SESSION-POC.md`.
 

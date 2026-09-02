@@ -1,6 +1,6 @@
 # zkagent M2 reference scanner
 
-The real Android reference-scanner app for zkagent, PRD `docs/product/zkagent-prd.md`
+The real Android reference-scanner app for zkagent, PRD `docs/archive/zkagent-prd.md`
 §6.2, items 1-11. This is a **rewrite**, not a graduated spike — code was
 drawn from `spikes/m2-scan` (masterlist/passive-auth read path) and
 `spikes/m2-session-poc` (StrongBox key + biometric composition, item 12's

@@ -3,7 +3,7 @@
 **Status**: source record only, written after the fact from three logcat captures already on disk
 — a value-free-baseline happy-path capture (`MainActivity:V`), a targeted D55 reproduction capture
 (`MainActivity:V`), and the earlier broken-filter capture that motivated redoing it. This file is
-the evidence `docs/product/zkagent-prd.md` §10 D55 and D56 cite; those rows already narrate the bug
+the evidence `docs/archive/zkagent-prd.md` §10 D55 and D56 cite; those rows already narrate the bug
 and the owner's decisions in full — this file exists so the underlying run data survives
 independently of the scratchpad it was produced in, and so a reader can check the PRD's claims
 against the source rather than trusting the prose alone.
@@ -104,7 +104,7 @@ unchanged.
 ## RESULT 3 — prior-session evidence, recorded here for completeness (2026-09-01, pre-fix)
 
 Not from a log file read for this document — carried forward from the PRD's own D55 text
-(`docs/product/zkagent-prd.md` §10 D55/D56 header), because it is the run the D55 fix was written
+(`docs/archive/zkagent-prd.md` §10 D55/D56 header), because it is the run the D55 fix was written
 against and belongs alongside this file's own captures as the "before" state. **pid 9948**, four
 consecutive `PACE unavailable (AccessDeniedException)` → `org.jmrtd.AccessDeniedException` failures
 at **23:52:35, 23:52:41 (D6 s later), 23:52:51 (D10 s), and 23:53:04 (D11 s)**, with one handoff

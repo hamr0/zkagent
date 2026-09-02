@@ -76,7 +76,7 @@ match, churn detection) — never the surveillance.
 The root of the stack, and deliberately only the root: one passport scan → one anonymous,
 unforgeable, blockable tag per service; agents act under revocable delegations from the
 tag. Captcha-grade v1 (chip signature + OS attestation, no ZK circuits), stateless,
-no CA, nothing stored. See `docs/product/zkagent-prd.md` — decisions D1–D8, NO-GO 1–10.
+no CA, nothing stored. See `docs/archive/zkagent-prd.md` — decisions D1–D8, NO-GO 1–10.
 
 Sequencing agreement: **root first.** Every parked idea below consumes the tag primitive;
 none of them can exist safely without it. Build order is dependency order.

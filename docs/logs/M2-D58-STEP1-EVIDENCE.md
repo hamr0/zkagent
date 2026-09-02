@@ -3,7 +3,7 @@
 **Status**: source record for `c856f42` ("D58 step 1 — ReportLog owns the report/log cluster"),
 written after the fact from the orchestrator's own JUnit XML check, source diff, and one logcat
 capture, all produced this session. This file is the evidence
-`.claude/remember/findings.md` #7 and #13's status updates and `docs/product/zkagent-prd.md`'s D58
+`.claude/remember/findings.md` #7 and #13's status updates and `docs/archive/zkagent-prd.md`'s D58
 step-1 status line cite; it mirrors `M2-D55-D56-EVIDENCE.md`'s structure and value-free rule.
 
 **Rule for this file (carried from `M0-EVIDENCE.md` / `M2-D50-D53-EVIDENCE.md` /

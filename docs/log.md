@@ -57,3 +57,7 @@
 ## [2026-09-02] index-flat | 27 row(s) (5 product, 21 logs, 1 archive)
 ## [2026-09-02] apply-reorg | moved 0, skipped 0, 0 oversized split candidate(s), 0 link(s) rewritten, 0 sync failure(s), 0 empty dir(s) removed, CLAUDE.md updated: true
 ## [2026-09-02] reorg | discover+apply-reorg+lint over 27 doc(s), due reported
+## [2026-09-02] validate | PASS — 0 gate failure(s)
+## [2026-09-02] archive | docs/product/zkagent-prd.md -> docs/archive/zkagent-prd.md, 44 link(s) rewritten
+## [2026-09-02] index-flat | 32 row(s) (9 product, 21 logs, 2 archive)
+## [2026-09-02] validate | PASS — 0 gate failure(s)
