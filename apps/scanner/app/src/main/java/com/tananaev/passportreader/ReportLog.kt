@@ -325,24 +325,30 @@ class ReportLog {
 
     companion object {
         /** D58 step 1 (finding #13, FIX not enhancement — see the step's
-         * report, Challenge C): the bound on [entries]' size, persisted
-         * Bundle size the constraint (`onSaveInstanceState` puts the whole
-         * snapshot into the outgoing `Bundle`, and a `Bundle` that grows
-         * past roughly 1MB risks `TransactionTooLargeException` at the next
-         * save — this is a real, externally-triggerable crash: a hostile
-         * app looping refused `av://` intents at a locked session used to
-         * append one entry per intent before 26f67ac, and any other
-         * high-frequency append path could do the same). A rendered entry
-         * in this file (title line + Result/Sent/Shared/Identity/Chip-auth
-         * + a multi-line `▸ technical:` block) runs roughly 400-900 bytes
+         * report, Challenge C) opened this bound on [entries]' size as
+         * PROVISIONAL at 200; **D59 (2026-09-02)** sets the owner-approved
+         * final value, **20**, and changes the deciding rationale: the cap
+         * counts ENTRIES, not lines — one entry is a whole scan-outcome
+         * block of roughly 20 rendered lines (title + Result/Sent/Shared/
+         * Identity/Chip-auth + a multi-line `▸ technical:` block) — and a
+         * 200-entry scroll is unusable for a human reading the log, which
+         * is the DECIDING reason for 20. The persisted-Bundle-size argument
+         * that originally motivated a bound at all still holds and is now
+         * far more comfortable, but is a secondary, no-longer-binding
+         * consideration: `onSaveInstanceState` puts the whole snapshot into
+         * the outgoing `Bundle`, and a `Bundle` that grows past roughly 1MB
+         * risks `TransactionTooLargeException` at the next save — this is a
+         * real, externally-triggerable crash (a hostile app looping refused
+         * `av://` intents at a locked session used to append one entry per
+         * intent before 26f67ac, and any other high-frequency append path
+         * could do the same). A rendered entry runs roughly 400-900 bytes
          * for the realistic content this class actually renders (see
-         * `ReportLogTest`'s own fixtures) — 200 entries is on the order of
-         * 100-180KB, a wide margin under the ~1MB transaction ceiling even
-         * before accounting for the rest of the Bundle's contents.
-         * PROPOSED, not final — the owner approves the exact number; the
+         * `ReportLogTest`'s own fixtures) — 20 entries is on the order of
+         * 8-18KB, a wide margin under the ~1MB transaction ceiling even
+         * before accounting for the rest of the Bundle's contents. The
          * eviction mechanism (oldest-first, in [append]) is what this step
          * actually delivers, and holds for any value here. */
-        const val MAX_ENTRIES = 200
+        const val MAX_ENTRIES = 20
 
         private val TIMESTAMP_FORMAT = SimpleDateFormat("HH:mm:ss", Locale.US)
 
