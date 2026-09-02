@@ -162,6 +162,14 @@ audit's own section for the full reasoning behind each row.
   an unbounded one (harmless to this cluster's worst-case size). The underlying defect — no
   `onDestroy`/cancellation/status check at any of the five `Thread{}` sites, so each still runs to
   completion regardless of Activity lifecycle — is untouched by step 1 and remains OPEN.
+- Status update 2026-09-02 (D58 step 4, `c38833d`): unaffected, still OPEN — this step closed findings
+  #9/#14/#15 (display projections) and left #10/#11 mitigated-not-closed (guard kept by
+  recommendation); #4 and #6 are also still OPEN, untouched. With #9/#13/#14/#15 now closed and #10/#11
+  mitigated, this finding — zero async-cancellation discipline at all five `Thread{}` sites — is now
+  **the principal remaining blocker on D57's exit criterion** (criterion (2): "every async writer is
+  fenced against Activity lifecycle"). No fix or further tracing this step; named here so the next
+  spawn touching any of the five `Thread{}` sites inherits this status rather than treating it as one
+  finding among several equally-open ones.
 
 ### 2026-09-02 — #6: `handleIncomingIntent` tag guard ignores `readInProgress`
 
@@ -230,6 +238,18 @@ audit's own section for the full reasoning behind each row.
 - **Status**: OPEN. **MUST NOT be touched before the structure pass lands** — see PRD Q40, which
   names this exact field as the seam a "Tap and scan" relabel would land on, and which the freeze
   (D57) blocks until ownership consolidation is done.
+- Status update 2026-09-02 (D58 step 4, `c38833d`): **CLOSED**. `lockButton.isEnabled` (alongside
+  `modeStatusView.text` and `handoffStatus.text`) is now one of four properties written EXCLUSIVELY by
+  `MainActivity.applySessionDisplay`, itself the sole caller-side consumer of the new pure
+  `SessionDisplay.render(lockedMode, handoffState)` function — orchestrator verified only
+  `MainActivity.kt:430-433` assign these four properties; the four prior write sites for
+  `lockButton.isEnabled` named by this finding are collapsed into that one applier and
+  `refreshModeStatus` (one of the four) is deleted outright. Closes by construction, same mechanism as
+  #14/#15 below — locked state takes unconditional precedence in `render`, so the join with the
+  handoff cluster (#2/#3) this finding named can no longer produce a fifth uncoordinated writer. Unit
+  tests 168→180 (JUnit XML, 0 failures), new `SessionDisplayTest` (12 tests) covers all six legal
+  locked×handoff-state projections including two "locked wins" cases. See
+  `docs/logs/M2-D58-STEP4-EVIDENCE.md`.
 
 ### 2026-09-02 — owner UX observations from the device run (deferred under freeze, PRD Q38/Q39/Q40)
 
@@ -331,6 +351,21 @@ audit's own section for the full reasoning behind each row.
   isolation (the mid-read refusal happened before the prompt appeared); the QR-scan/manual-paste
   handoff path has NO gate at all (see new finding #15, same class, asymmetric coverage). See
   `docs/logs/M2-D58-STEP3-EVIDENCE.md`.
+- Status update 2026-09-02 (D58 step 4, `c38833d`): still **MITIGATED, NOT CLOSED — guard KEPT, by
+  RECOMMENDATION, not by a still-live code dependency.** The specific reason step 3 gave for keeping
+  `HandoffAdmission` — `applyHandoffVerificationOutcome` rewriting `modeStatusView`/`lockButton`
+  without respecting `lockedMode` — is now CLOSED: `SessionDisplay.render` puts locked state in
+  unconditional precedence over any handoff state, so an admitted foreign verification cannot alter a
+  locked session's display even with the guard removed (this step's own commit message states this
+  explicitly, and `SessionDisplayTest` has two dedicated "locked wins" tests). **What the guard still
+  buys, precisely**: preventing a foreign handoff from overwriting the mutable
+  `pendingHandoff`/`verifiedRequest` fields while `lockedMode != null` or a read is in progress — field
+  overwrite only. **What no longer depends on it**: mint correctness (closed by step 3's
+  `AuthorizedHandoff` snapshot) and display corruption (closed by this step's `SessionDisplay`
+  projection). The coder RECOMMENDS keeping the guard anyway because the field-overwrite value has no
+  test coverage of its own and removing it was not this step's job; the owner has not ruled on removal.
+  No new device evidence against a genuinely foreign origin this step. See
+  `docs/logs/M2-D58-STEP4-EVIDENCE.md`.
 
 ### 2026-09-02 — #11: biometric prompt shows no origin/site/tier — consent defect, independent of and surviving #10's mitigations
 
@@ -375,6 +410,16 @@ audit's own section for the full reasoning behind each row.
   `lockButton`/rewriting `modeStatusView` without respecting `lockedMode`). **Guard removal is now
   explicitly blocked on `applyHandoffVerificationOutcome` respecting `lockedMode`** — D58 step 4. No
   new device evidence specific to the biometric prompt's content was gathered this session.
+- Status update 2026-09-02 (D58 step 4, `c38833d`): still **MITIGATED, NOT CLOSED — guard KEPT, by
+  RECOMMENDATION**, same status change and same reasoning as #10's own status update for this commit —
+  this finding shares the guard with #10 and is independent of it only in what it is about (consent
+  content, not mint correctness or display), not in what closes or keeps its mitigation. The
+  `applyHandoffVerificationOutcome`/`lockedMode` display defect that blocked guard removal is now
+  closed by `SessionDisplay`'s locked-wins precedence. **What the guard still buys**: preventing field
+  overwrite of `pendingHandoff`/`verifiedRequest` while locked or reading — unrelated to this finding's
+  own subject (the biometric prompt's content), which remains mitigated only by the site-named prompt
+  title from `730ef09`, untouched by this step. No new device evidence specific to the biometric
+  prompt's content was gathered this step either. See `docs/logs/M2-D58-STEP4-EVIDENCE.md`.
 
 ### 2026-09-02 — #12: reused `showBlockingOutcomeDialog` for the #10 refusal path would have let a refused foreign intent wipe the legitimate locked session — CLOSED-BY-CONSTRUCTION before commit
 
@@ -458,6 +503,22 @@ audit's own section for the full reasoning behind each row.
   class — a projection nobody rewrites when the state it describes changes.
 - **Status**: OPEN, consequence MEDIUM (user misled about which site a scan answers; no wrong data
   sent — the log entries were honest).
+- Status update 2026-09-02 (D58 step 4, `c38833d`): **CLOSED BY CONSTRUCTION**, exactly per this
+  entry's own classification above (a D58 step 4 projection defect, not a standalone fix). The mint
+  completion path now re-derives the whole `SessionDisplay` projection from `HandoffState`
+  (`None`/`Verifying`/`Verified`/`Refused`) rather than leaving a prior write in place: a consumed
+  session (`mintAndMaybeHandoff` nulls the handoff fields) or a wiped one re-renders through
+  `applySessionDisplay`, so `handoffStatus.text` cannot remain "verified/waiting" once nothing is
+  verified or waiting — the exact scenario this finding's device evidence captured (09:06:15 mint,
+  then two mode-A scans the owner mistook for mode B) is now structurally excluded rather than merely
+  patched at a fourth call site. `SessionDisplayTest` includes a test named for this finding's exact
+  defect. Device-level confirmation this session (2026-09-02, pid 21642): a scan on an already-
+  consumed session correctly logged `mint_gate: NOT MET — evidence: [] (D27)` / `verdict: PASS
+  (read)` — the data-level behaviour finding #14 named is confirmed not to recur. **Caveat, stated
+  plainly**: the on-screen `handoffStatus.text` line itself was NOT visually re-checked this session
+  (the owner was on the Log tab, where that view does not render, during the confirming runs) — this
+  finding is confirmed at the log/behaviour level, not re-verified by eye on screen. See
+  `docs/logs/M2-D58-STEP4-EVIDENCE.md`.
 
 ### 2026-09-02 — #15: `applyPendingHandoffText` (QR-scan/manual-paste handoff path) has NO `HandoffAdmission` gate at all — only the `av://` intent path is guarded
 
@@ -488,3 +549,14 @@ audit's own section for the full reasoning behind each row.
   used only the `av://` path). Belongs with D58 step 4 and the guard-removal decision alongside #10/
   #11 — whatever mechanism ends up gating admission for the ownership-refactored session boundary
   should cover this call site too, not just `handleIncomingIntent`'s `av://` branch.
+- Status update 2026-09-02 (D58 step 4, `c38833d`): **CLOSED**. `applyPendingHandoffText` (the QR-scan/
+  manual-paste path) now applies the SAME `HandoffAdmission.mayAdmitInboundHandoff` predicate as the
+  `av://` intent path before calling `beginHandoffVerification`, closing the asymmetric-coverage gap
+  this finding named — both call sites are gated identically. The refusal shape is likewise matched to
+  the `av://` path's already-established rule: `Log.e` + Snackbar + return, **no log entry** (per
+  finding #13's rule against an externally-triggerable append) and **no
+  `showBlockingOutcomeDialog`** (per finding #12's rule that a refusal path must never use the
+  terminal-outcome-with-state-transition dialog). Not exercised on device this session (device runs
+  this step used only the `av://` path, same as step 3); the underlying `HandoffAdmission` guard itself
+  remains KEPT-by-recommendation per #10/#11's own status updates for this commit, and this path now
+  shares that same status rather than having none. See `docs/logs/M2-D58-STEP4-EVIDENCE.md`.
