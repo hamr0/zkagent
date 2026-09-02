@@ -256,6 +256,14 @@ abstract class MainActivity : AppCompatActivity() {
     // branch), so the next attempt correctly reads as a first attempt. ----
     private var lastMrzHash: String? = null
 
+    // ---- FIX pass (D57 exit criterion 2 / findings.md #5) — per-instance
+    // fence for every unfenced background-thread main-thread landing this
+    // pass names. A plain instance field, NOT a companion object/`object`
+    // — see [LifecycleFence]'s class doc for why a singleton fence would be
+    // a correctness bug across Activity recreation, not merely a style
+    // choice. Retired in [onDestroy], read at every fenced call site. ----
+    private val fence = LifecycleFence()
+
     private lateinit var passportNumberView: EditText
     private lateinit var expirationDateView: EditText
     private lateinit var birthDateView: EditText
@@ -418,6 +426,20 @@ abstract class MainActivity : AppCompatActivity() {
 
         refreshSessionDisplay()
         handleIncomingIntent(intent)
+    }
+
+    /** FIX pass (D57 exit criterion 2 / findings.md #5) — the module's
+     * first `onDestroy` override (verified none existed anywhere in it
+     * before this pass, by grep). Retires [fence] so every background
+     * `Thread`/[ReadTask] landing still in flight against THIS instance
+     * drops its main-thread UI/state write instead of running against a
+     * destroyed Activity. Does NOT cancel or interrupt any in-flight work
+     * — see [LifecycleFence]'s class doc for why (a queued `direct_post` a
+     * verifier is already waiting on must not be aborted). */
+    override fun onDestroy() {
+        fence.retire()
+        Log.i(TAG, "M2 lifecycle: fence retired (onDestroy)")
+        super.onDestroy()
     }
 
     /** D58 step 4 (findings #9, #14; Q40) — the ONE place [modeStatusView],
@@ -803,7 +825,16 @@ abstract class MainActivity : AppCompatActivity() {
                 Log.e(TAG, "M2 stage: handoff verification threw", e)
                 RequestTrust.Outcome.Refused("verification threw ${e.javaClass.simpleName}: ${e.message}")
             }
-            runOnUiThread { applyHandoffVerificationOutcome(handoff, outcome) }
+            // FIX pass (findings.md #5): fenced — see [LifecycleFence]'s
+            // class doc. Verification itself is not cancelled; only this
+            // landing drops if the Activity that started it is destroyed.
+            runOnUiThread {
+                if (!fence.passes()) {
+                    Log.i(TAG, "M2 lifecycle: fence closed — dropped handoff verification outcome")
+                    return@runOnUiThread
+                }
+                applyHandoffVerificationOutcome(handoff, outcome)
+            }
         }.start()
     }
 
@@ -1360,6 +1391,29 @@ abstract class MainActivity : AppCompatActivity() {
             // true.
             paneState.readFinished()
             showPane()
+            // FIX pass (findings.md #5): same defect class as the five
+            // `Thread{}` sites, in scope for this pass per the owner's
+            // explicit decision (this is an `AsyncTask`, not a `Thread{}`,
+            // so it was not one of the five findings.md #5 originally
+            // named, but the framework dispatches [onPostExecute] on the
+            // main thread the same unguarded way `runOnUiThread` does).
+            // Deliberately placed AFTER [paneState.readFinished]/[showPane]
+            // above, never before: those two calls are the D55/D58-step-2
+            // invariant that MUST run on every exit path, fence or no
+            // fence — see [PaneState]'s doc. They are cheap, idempotent
+            // writes to this instance's own (possibly already-dead, if the
+            // Activity is destroyed) fields/views; skipping them would
+            // buy nothing (a recreated Activity gets its own fresh
+            // [PaneState] and pane layout regardless) while coupling a
+            // load-bearing invariant to a fence for no reason. Everything
+            // BELOW this point — emitReport, the blocking dialog, wipeSession,
+            // and starting the mint pipeline via [continueAfterRead] — is a
+            // genuine "user-visible landing against this Activity" and is
+            // what the fence exists to gate.
+            if (!fence.passes()) {
+                Log.i(TAG, "M2 lifecycle: fence closed — dropped read completion handling (report/dialog/mint start)")
+                return
+            }
             if (result != null) {
                 // 2026-09 real-device fix, second round (a real bug: a
                 // mid-PACE/mid-BAC tag-loss used to be mislabelled an
@@ -1600,7 +1654,13 @@ abstract class MainActivity : AppCompatActivity() {
                 .getOrNull()
             if (scopeDomain == null) {
                 Log.e(TAG, "M2 stage: verified origin has no parseable host — refusing to mint")
+                // FIX pass (findings.md #5): fenced — see [LifecycleFence]'s
+                // class doc.
                 runOnUiThread {
+                    if (!fence.passes()) {
+                        Log.i(TAG, "M2 lifecycle: fence closed — dropped mint-failure report (unparseable origin host)")
+                        return@runOnUiThread
+                    }
                     emitReport(
                         baseReport + "\nmint: FAILED — verified origin has no parseable host",
                         ReportLog.DisclosureSummary(
@@ -1620,7 +1680,13 @@ abstract class MainActivity : AppCompatActivity() {
             val zktag = candidates["document_number"]
             if (zktag == null) {
                 Log.w(TAG, "M2 stage: no document_number field to derive zktag from (D9)")
+                // FIX pass (findings.md #5): fenced — see [LifecycleFence]'s
+                // class doc.
                 runOnUiThread {
+                    if (!fence.passes()) {
+                        Log.i(TAG, "M2 lifecycle: fence closed — dropped mint-failure report (no document_number field)")
+                        return@runOnUiThread
+                    }
                     emitReport(
                         baseReport + "\nmint: FAILED — no document_number field to derive from (D9)",
                         ReportLog.DisclosureSummary(
@@ -1641,7 +1707,13 @@ abstract class MainActivity : AppCompatActivity() {
                 DeviceKey.ensureKey(applicationContext, alias)
             } catch (e: Exception) {
                 Log.e(TAG, "M2 stage: DeviceKey.ensureKey threw", e)
+                // FIX pass (findings.md #5): fenced — see [LifecycleFence]'s
+                // class doc.
                 runOnUiThread {
+                    if (!fence.passes()) {
+                        Log.i(TAG, "M2 lifecycle: fence closed — dropped mint-failure report (device key generation threw)")
+                        return@runOnUiThread
+                    }
                     emitReport(
                         baseReport + "\nmint: FAILED — device key generation threw ${e.javaClass.simpleName}: ${e.message}",
                         ReportLog.DisclosureSummary(
@@ -1657,7 +1729,17 @@ abstract class MainActivity : AppCompatActivity() {
                 }
                 return@Thread
             }
-            runOnUiThread { promptAndMint(keyState, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus, authorized) }
+            // FIX pass (findings.md #5): fenced — see [LifecycleFence]'s
+            // class doc. Dropping this landing means the biometric prompt
+            // is never shown against a destroyed Activity; key generation
+            // above is not undone.
+            runOnUiThread {
+                if (!fence.passes()) {
+                    Log.i(TAG, "M2 lifecycle: fence closed — dropped biometric prompt (promptAndMint)")
+                    return@runOnUiThread
+                }
+                promptAndMint(keyState, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus, authorized)
+            }
         }.start()
     }
 
@@ -1801,7 +1883,13 @@ abstract class MainActivity : AppCompatActivity() {
         val pubDer = DeviceKey.currentPublicKeyDer(keyState.alias)
         if (pubDer == null) {
             Log.e(TAG, "M2 stage: could not read the public key bytes for alias — refusing to mint (D38 evidence requires pubkey)")
+            // FIX pass (findings.md #5): fenced — see [LifecycleFence]'s
+            // class doc.
             runOnUiThread {
+                if (!fence.passes()) {
+                    Log.i(TAG, "M2 lifecycle: fence closed — dropped mint-failure report (public key bytes unreadable)")
+                    return@runOnUiThread
+                }
                 emitReport(
                     baseReport + "\nmint: FAILED — could not read the device key's public key bytes (D38 evidence requires pubkey)",
                     ReportLog.DisclosureSummary(
@@ -1923,7 +2011,15 @@ abstract class MainActivity : AppCompatActivity() {
         // this app has already given up on, which is exactly the "invites
         // another document tap that cannot succeed" defect from the owner's
         // Pixel 6a run.
+        // FIX pass (findings.md #5): fenced — see [LifecycleFence]'s class
+        // doc. If the Activity that started this mint is destroyed, these
+        // per-instance session fields are dead-instance state with nothing
+        // left to read them; skipping the write is harmless, not lossy.
         runOnUiThread {
+            if (!fence.passes()) {
+                Log.i(TAG, "M2 lifecycle: fence closed — dropped post-mint session clear/display refresh")
+                return@runOnUiThread
+            }
             pendingHandoff = null
             verifiedRequest = null
             // D58 step 3: cleared in the SAME lockstep as pendingHandoff/
@@ -2022,7 +2118,19 @@ abstract class MainActivity : AppCompatActivity() {
                 technicalNote = claimProofNote,
             )
         }
+        // FIX pass (findings.md #5): fenced — see [LifecycleFence]'s class
+        // doc. This is the mint-after-destroy report-loss case named in the
+        // FIX report: `direct_post` above has already completed regardless
+        // of this fence (never aborted), but if the Activity is destroyed
+        // by the time delivery resolves, this landing — and therefore
+        // BOTH emitReport (the log entry) and the success/failure dialog —
+        // is dropped. Not fixed here; see the report for why (ReportLog is
+        // never restored into a NEW Activity instance from an old one).
         runOnUiThread {
+            if (!fence.passes()) {
+                Log.w(TAG, "M2 lifecycle: fence closed — dropped mint report/confirmation (a COMPLETED result: evidence already left the device, nothing recorded or shown)")
+                return@runOnUiThread
+            }
             emitReport(report, summary, attemptId = attemptId)
             // 2026-09 real-device fix ("confirm success too" — the owner's
             // three follow-up scans were all genuine successes with nothing
@@ -2093,7 +2201,15 @@ abstract class MainActivity : AppCompatActivity() {
         }
         log.append("===== END =====")
         val text = log.toString()
-        runOnUiThread { emitReport(text, diagnosticSummary(failed = text.contains("PROBE FAILED") || text.contains("INVALID RUN"), label = "masterlist checks")) }
+        // FIX pass (findings.md #5): fenced — see [LifecycleFence]'s class
+        // doc. The probe itself is not cancelled; only this landing drops.
+        runOnUiThread {
+            if (!fence.passes()) {
+                Log.i(TAG, "M2 lifecycle: fence closed — dropped masterlist probe report")
+                return@runOnUiThread
+            }
+            emitReport(text, diagnosticSummary(failed = text.contains("PROBE FAILED") || text.contains("INVALID RUN"), label = "masterlist checks"))
+        }
     }
 
     /** Debug-only, zero-tap: exercises [DeviceKey.ensureKey]'s generate ->
@@ -2129,7 +2245,15 @@ abstract class MainActivity : AppCompatActivity() {
         }
         log.append("===== END =====")
         val text = log.toString()
-        runOnUiThread { emitReport(text, diagnosticSummary(failed = text.contains("PROBE FAILED") || text.contains("MISMATCH") || text.contains("UNEXPECTED"), label = "device key self-test")) }
+        // FIX pass (findings.md #5): fenced — see [LifecycleFence]'s class
+        // doc. The probe itself is not cancelled; only this landing drops.
+        runOnUiThread {
+            if (!fence.passes()) {
+                Log.i(TAG, "M2 lifecycle: fence closed — dropped device key probe report")
+                return@runOnUiThread
+            }
+            emitReport(text, diagnosticSummary(failed = text.contains("PROBE FAILED") || text.contains("MISMATCH") || text.contains("UNEXPECTED"), label = "device key self-test"))
+        }
     }
 
     private fun convertDate(input: String?): String? {
