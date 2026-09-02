@@ -46,6 +46,21 @@ audit's own section for the full reasoning behind each row.
   2026-09-01.
 - **Status**: OPEN. Held under the 2026-09-02 freeze (D57) — not fixed by the in-flight D55 change,
   which addresses the three-pane overlap but not this rotation-restore race specifically.
+- Status update 2026-09-02: CLOSED by construction in `0d4daf7` (D58 step 2) — the tab index becomes
+  app state owned by a new `PaneState` class (`PaneState.kt`), persisted in `onSaveInstanceState`
+  and restored in `onCreate` before `showPane()` runs; `showPane()` no longer READS
+  `tabLayout.selectedTabPosition` as an input at all, so the framework's own (still-default,
+  un-overridden) `onPostCreate` tab restore has nothing left to race — it can land whenever it lands.
+  `showPane()` instead DRIVES `tabLayout`'s selection from `PaneState`, behind a re-entry guard
+  (`applyingPaneStateToTabLayout`) so that programmatic move is never misread by the tab listener as
+  a fresh user tap. Unit tests 151→162 (JUnit XML, 0 failures; new `PaneStateTest`, 11 tests covering
+  all four legal states and both restore paths; failing-first demonstrated as 30 unresolved-reference
+  compile errors by moving `PaneState.kt` aside). Device-confirmed, Pixel 6a pid 17066, 2026-09-02,
+  four cases (Log tab survives recreation with log intact; Scan tab survives recreation; Log-tab
+  reselect then recreation survives with no flicker; two back-to-back recreations on Scan tab both
+  survive), tab state verified programmatically via a filtered `uiautomator dump` (not a screenshot —
+  the scan form renders real MRZ fields, unsafe to snapshot) rather than by eye. See
+  `docs/logs/M2-D58-STEP2-EVIDENCE.md`.
 
 ### 2026-09-02 — #2/#3: `verifiedRequest`/`pendingHandoff` — three writers, cross-thread reads, non-volatile
 
@@ -82,6 +97,19 @@ audit's own section for the full reasoning behind each row.
   a post-rotation state where the text is present but the app's own tracking fields are not? Not
   traced to a conclusion by the audit.
 - **Status**: OPEN.
+- Status update 2026-09-02 (D58 step 2, traced by the coder as a report-only deliverable, no fix,
+  verified at source by the orchestrator): the open question is narrowed, not closed. The lock-guard
+  half is now ANSWERED — the real guard, `lockModeAndArm`, checks only that `lockedMode` is null and
+  that the three MRZ fields are non-empty; it never reads `lastMrzHash` at all. So after a rotation,
+  `lockedMode` correctly comes back null and a Lock tap is treated as a fresh lock over the
+  framework-restored MRZ text — this behaves correctly, by omission rather than by design.
+  `lastMrzHash` is consulted in exactly one place, the NFC-tag branch of `handleIncomingIntent`,
+  feeding only `MrzChangeTracker`'s value-free `Log.i` diagnostic — it is never a gate. Consequence:
+  after a rotation, `lastMrzHash` is null, so the next scan's comparison reports "first attempt" even
+  when it is genuinely a later attempt in the same user session — a logcat mislabel only, no effect
+  on gating, security, or user-facing state. What remains OPEN: the `lastMrzHash` diagnostic mislabel
+  itself, plus the other ten of the eleven lost fields this finding names, none of which this step
+  touched. Belongs with `lastMrzHash`/`SessionState` in a later D58 step. Finding NOT closed.
 
 ### 2026-09-02 — #5: zero async-cancellation discipline
 
@@ -110,6 +138,14 @@ audit's own section for the full reasoning behind each row.
   intent arriving while a read is already in progress is not excluded by this guard on the evidence
   read.
 - **Status**: OPEN.
+- Status update 2026-09-02: unaffected by D58 step 2 (`0d4daf7`) — the `readInProgress` flag this
+  finding names moved ownership from a bare `MainActivity` field to `paneState.readInProgress` (both
+  its writers, `startSession` and `ReadTask.onPostExecute`, are read-lifecycle-only, per that step's
+  required survey). The only call site this step updated to the new location is
+  `HandoffAdmission.mayAdmitInboundHandoff` (the `av://` guard, finding #10's mitigation) — a
+  mechanical read-site update, semantics unchanged. `handleIncomingIntent`'s NFC-tag branch, the
+  guard this finding is actually about, still never consults `readInProgress` under either name.
+  The finding itself is unchanged and remains OPEN.
 
 ### 2026-09-02 — #7: `reportView.text` written outside `emitReport`, contradicting its own KDoc
 
