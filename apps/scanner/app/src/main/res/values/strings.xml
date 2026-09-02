@@ -18,7 +18,10 @@
     <string name="button_masterlist_probe">Run masterlist checks (no tap needed)</string>
     <string name="button_devicekey_probe">Run device key self-test (no tap needed)</string>
 
-    <string name="biometric_prompt_title">Authorize this presentation</string>
+    <!-- Finding #11 (.claude/remember/findings.md) FIX, provisional pending owner approval:
+         names the verified requesting site in the prompt's most visible line — see
+         MintPromptText.titleFor, which computes %1$s. -->
+    <string name="biometric_prompt_title_for_site">Authorize presentation to %1$s</string>
     <string name="biometric_prompt_subtitle">Required only to emit a result — the document has already been read</string>
 
     <string name="handoff_heading">Hand off to the verifier</string>

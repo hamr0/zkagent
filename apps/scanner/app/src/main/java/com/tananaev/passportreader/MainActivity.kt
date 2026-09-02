@@ -544,6 +544,44 @@ abstract class MainActivity : AppCompatActivity() {
         if (intent.action == Intent.ACTION_VIEW && data != null) {
             val handoff = HandoffClient.parseAvLink(data)
             if (handoff != null) {
+                // Finding #10 (.claude/remember/findings.md) MITIGATION: an
+                // av:// intent arriving while a session is locked, or while
+                // a chip read is literally in flight, previously overwrote
+                // pendingHandoff/verifiedRequest with no guard at all — see
+                // beginHandoffVerification's unconditional writes and
+                // HandoffAdmission's class doc for the full finding and why
+                // this is a MITIGATION, not the ownership fix (that is the
+                // lock-time SessionState snapshot in the refactor, not this
+                // change).
+                //
+                // MUST NOT use showBlockingOutcomeDialog here (2026-09-02
+                // coordinator correction, verified at source): that dialog's
+                // OK handler (see its doc / :905-909) is a TERMINAL-OUTCOME
+                // state transition — it nulls pendingHandoff/verifiedRequest
+                // and calls wipeSession(false), clearing lockedMode and the
+                // MRZ fields. A refused foreign intent is not a terminal
+                // outcome of the LOCKED SESSION; routing it through that
+                // dialog would let the user's own OK tap destroy the
+                // legitimate in-progress session the guard exists to
+                // protect — a one-tap DoS, and the exact two fields (finding
+                // #10) this mitigation exists to leave untouched. A
+                // non-blocking Snackbar (already this file's mechanism for a
+                // non-terminal notice, e.g. the QR-capture-cancelled/no-QR-
+                // found Snackbars above) causes no state transition at all.
+                if (!HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = lockedMode != null, readInProgress = readInProgress)) {
+                    Log.e(TAG, "M2 stage: av:// handoff REFUSED — session locked or read in progress (D57 mitigation for finding #10)")
+                    emitReport(
+                        "handoff: REFUSED — an incoming site request arrived while a session was already locked or a document read was in progress (D57 mitigation for finding #10)",
+                        ReportLog.DisclosureSummary(
+                            site = SITE_NO_HANDOFF,
+                            result = "Refused — another site's request arrived mid-session and was ignored",
+                            sent = "nothing left this device",
+                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                        ),
+                    )
+                    Snackbar.make(reportView, HANDOFF_REFUSED_MID_SESSION_MESSAGE, Snackbar.LENGTH_LONG).show()
+                    return
+                }
                 Log.i(TAG, "M2 stage: pendingHandoff captured from av:// intent")
                 beginHandoffVerification(handoff)
                 return
@@ -1388,8 +1426,14 @@ abstract class MainActivity : AppCompatActivity() {
             showBlockingOutcomeDialog("No usable device key or signature is available on this device.", isAccessEstablishmentFailure = false)
             return
         }
+        // Finding #11 (.claude/remember/findings.md) FIX, provisional pending
+        // owner approval: the title names the verified requesting site —
+        // [site] is the SAME siteTitleFor(verified.origin) value already
+        // computed for the log entry title (D46), threaded through
+        // unchanged; see MintPromptText's doc for why the DECISION lives
+        // there and this call site stays a thin getString() applier.
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle(getString(R.string.biometric_prompt_title))
+            .setTitle(getString(R.string.biometric_prompt_title_for_site, MintPromptText.titleFor(site)))
             .setSubtitle(getString(R.string.biometric_prompt_subtitle))
             .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
             .build()
@@ -1886,6 +1930,15 @@ abstract class MainActivity : AppCompatActivity() {
         // — the two are not meant to match; do not propagate one into the
         // other.
         private const val MINT_CONFIRMED_MESSAGE = "ID scanned successfully"
+
+        // Finding #10 (.claude/remember/findings.md) MITIGATION, not yet
+        // owner-approved (report requested back explicitly, per this
+        // project's rule that every user-facing string goes to the owner):
+        // shown in a Snackbar (non-terminal, no state transition — see
+        // handleIncomingIntent's doc) when HandoffAdmission refuses an
+        // inbound av:// handoff because a session is already locked or a
+        // read is in progress. Shortened 2026-09-02 to fit a Snackbar.
+        private const val HANDOFF_REFUSED_MID_SESSION_MESSAGE = "Ignored a site request that arrived mid-scan."
 
         // D56: per-process salt for [lastMrzHash] — a companion-object
         // field (not per-Activity-instance) so an Activity re-creation
