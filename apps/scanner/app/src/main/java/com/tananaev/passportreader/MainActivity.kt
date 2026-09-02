@@ -152,14 +152,36 @@ import kotlin.math.roundToInt
  * shows a neutral "pending" status instead of guessing — the actual
  * refusal is reported once the user tries to lock (item 13's fail-loud path,
  * UNCHANGED by the radio's removal: it now guards the derivation instead of
- * the preselect). [mintAndMaybeHandoff] later REUSES [verifiedRequest]
- * rather than re-fetching — same nonce, same verified fields, one fetch per
- * handoff. Any verification failure (origin mismatch, bad/missing/wrong-alg
- * signature, no resolvable key) is a refusal: [pendingHandoff] and
- * [verifiedRequest] are cleared, the derived mode status reverts to its
- * bare-scan default (no handoff is pending any more), and the refusal is
- * logged AND reported — never a silent downgrade to trusting the fields
- * anyway.
+ * the preselect). [mintAndMaybeHandoff] later REUSES the verified request
+ * — via [AuthorizedHandoff], see below — rather than re-fetching — same
+ * nonce, same verified fields, one fetch per handoff. Any verification
+ * failure (origin mismatch, bad/missing/wrong-alg signature, no resolvable
+ * key) is a refusal: [pendingHandoff] and [verifiedRequest] are cleared,
+ * the derived mode status reverts to its bare-scan default (no handoff is
+ * pending any more), and the refusal is logged AND reported — never a
+ * silent downgrade to trusting the fields anyway.
+ *
+ * ---------------------------------------------------------------------
+ * D58 step 3 (findings #2/#3) — the lock-time snapshot:
+ * ---------------------------------------------------------------------
+ * [pendingHandoff]/[verifiedRequest] above are read ONLY by pre-lock,
+ * main-thread UI-derivation code ([refreshModeStatus], [lockModeAndArm]
+ * itself, [applyHandoffVerificationOutcome]'s staleness check) — the ENTIRE
+ * post-lock read/mint pipeline ([lockModeAndArm] onward: [startSession],
+ * [ReadTask], [continueAfterRead] and its background `Thread`,
+ * [promptAndMint], [mintAndMaybeHandoff]) instead reads [authorizedHandoff],
+ * an immutable [AuthorizedHandoff] snapshot captured ONCE, at lock time, and
+ * threaded through every one of those functions as a PARAMETER. No function
+ * past [lockModeAndArm] reads [pendingHandoff]/[verifiedRequest] again, on
+ * any thread. This is what makes findings #2/#3's cross-thread,
+ * non-`@Volatile`, multi-writer hazard structurally moot for the mint path
+ * (a later write to those two mutable fields — a second handoff, or an
+ * ADMITTED `av://` intent, see [HandoffAdmission]'s doc — cannot reach back
+ * and change a snapshot already captured and handed off downstream) and why
+ * the old per-site staleness re-checks ([continueAfterRead]'s background
+ * `Thread`, [mintAndMaybeHandoff]) were removed rather than kept — see
+ * [AuthorizedHandoff]'s class doc for the full "why no guard is needed"
+ * story.
  */
 abstract class MainActivity : AppCompatActivity() {
 
@@ -174,7 +196,33 @@ abstract class MainActivity : AppCompatActivity() {
     // ---- verified handoff request object: see class doc items 13/14 ----
     // Set ONLY by [applyHandoffVerificationOutcome] on a successful verify;
     // cleared alongside [pendingHandoff] everywhere that is cleared.
+    // D58 step 3 (findings #2/#3): read ONLY by pre-lock, main-thread
+    // UI-derivation code from here on ([refreshModeStatus], [lockModeAndArm]
+    // itself, [applyHandoffVerificationOutcome]'s staleness check) — the
+    // ENTIRE post-lock read/mint pipeline ([startSession] onward) now reads
+    // [authorizedHandoff] instead. See that field's doc and
+    // [AuthorizedHandoff]'s class doc for the full story.
     private var verifiedRequest: RequestTrust.VerifiedRequest? = null
+
+    // ---- D58 step 3 (findings #2/#3): the lock-time snapshot of the
+    // verified request a session locks against — see [AuthorizedHandoff]'s
+    // class doc. Written ONCE, by [lockModeAndArm], at the SAME moment
+    // [lockedMode] itself is set: held here only so the value survives from
+    // that moment to the LATER, separate user action of tapping the
+    // document (mirroring exactly how [lockedMode] itself bridges those two
+    // moments — same single-writer-then-threaded-as-a-parameter shape).
+    // Read exactly ONCE after that, on the main thread, inside
+    // [handleIncomingIntent]'s NFC branch, then threaded from there on as an
+    // IMMUTABLE PARAMETER through the whole read/mint pipeline — no
+    // function past that point reads this field, or [pendingHandoff]/
+    // [verifiedRequest], again. `null` for a mode-A session with no handoff
+    // pending. Cleared in lockstep with [pendingHandoff]/[verifiedRequest] —
+    // see those two fields' writer sites ([showBlockingOutcomeDialog]'s OK
+    // handler, [mintAndMaybeHandoff]'s completion) — NOT by [wipeSession],
+    // matching their existing "wipeSession does not own this split" shape,
+    // so a kept retry (access-establishment / transient-chip failure) keeps
+    // the SAME snapshot exactly as it keeps [lockedMode].
+    private var authorizedHandoff: AuthorizedHandoff? = null
 
     // ---- §6.2 item 16 (D44): per-scan report log. D58 step 1: this class
     // is now also the sole owner of the last-rendered-report text (formerly
@@ -434,6 +482,13 @@ abstract class MainActivity : AppCompatActivity() {
 
         val handoff = pendingHandoff
         val mode: PresentationMode
+        // D58 step 3 (findings #2/#3): the lock-time snapshot, captured
+        // alongside [mode] itself — see [authorizedHandoff]'s doc and
+        // [AuthorizedHandoff]'s class doc. `null` unless a handoff is
+        // pending AND its tier resolves (the `TierOutcome.Ok` branch below);
+        // stays `null` for a bare mode-A scan, matching [handoff]'s own
+        // nullability.
+        var snapshot: AuthorizedHandoff? = null
         if (handoff != null) {
             val verified = verifiedRequest
             if (verified == null) {
@@ -467,7 +522,17 @@ abstract class MainActivity : AppCompatActivity() {
                 return
             }
             when (val outcome = tierOutcomeFor(verified)) {
-                is TierOutcome.Ok -> mode = outcome.mode
+                is TierOutcome.Ok -> {
+                    mode = outcome.mode
+                    // D58 step 3: captured HERE, from the SAME [verified]
+                    // local this branch already validated (tier + expiry,
+                    // above) — never re-read a second time from the mutable
+                    // field. siteTitleFor(verified.origin) is the SAME
+                    // derivation the pre-refactor pipeline computed
+                    // downstream at mint time; computing it once, here,
+                    // is what lets it travel as part of the snapshot.
+                    snapshot = AuthorizedHandoff(verified, verified.origin, siteTitleFor(verified.origin))
+                }
                 is TierOutcome.Unsupported -> {
                     Log.e(TAG, "M2 stage: pending handoff requests tier C — not supported in this build (item 13)")
                     val reason = "handoff: REFUSED — tier C requested, not supported in this build (no tier-C flow)"
@@ -510,6 +575,10 @@ abstract class MainActivity : AppCompatActivity() {
         }
 
         lockedMode = mode
+        // D58 step 3: written in the SAME statement group as [lockedMode]
+        // itself — the two fields' lifecycles are now identical (see
+        // [authorizedHandoff]'s doc).
+        authorizedHandoff = snapshot
         lockButton.isEnabled = false
         modeStatusView.text = "Locked: mode ${lockedMode} — tap your document now"
         armNfcDispatch()
@@ -612,6 +681,12 @@ abstract class MainActivity : AppCompatActivity() {
                     Log.i(TAG, "M2 stage: ignoring tag intent — no locked mode (dispatch should not have been armed)")
                     return
                 }
+                // D58 step 3 (findings #2/#3): read ONCE here, on the main
+                // thread, in lockstep with [mode] above (both were written
+                // together by [lockModeAndArm]) — threaded from here on as
+                // an immutable parameter through the whole read/mint
+                // pipeline. See [authorizedHandoff]'s doc.
+                val snapshot = authorizedHandoff
                 val passportRaw = passportNumberView.text?.toString()
                 val expirationRaw = convertDate(expirationDateView.text?.toString())
                 val birthRaw = convertDate(birthDateView.text?.toString())
@@ -634,7 +709,7 @@ abstract class MainActivity : AppCompatActivity() {
                 ))
                 lastMrzHash = currentMrzHash
                 val bacKey: BACKeySpec = BACKey(passportRaw, birthRaw, expirationRaw)
-                startSession(IsoDep.get(tag), bacKey, mode)
+                startSession(IsoDep.get(tag), bacKey, mode, snapshot)
             }
         }
     }
@@ -971,6 +1046,9 @@ abstract class MainActivity : AppCompatActivity() {
                 if (!keepMrzAndMode) {
                     pendingHandoff = null
                     verifiedRequest = null
+                    // D58 step 3: cleared in the SAME lockstep — see
+                    // [authorizedHandoff]'s doc.
+                    authorizedHandoff = null
                 }
                 wipeSession(keepMrzAndMode = keepMrzAndMode)
             }
@@ -1032,16 +1110,21 @@ abstract class MainActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------- session
-    private fun startSession(isoDep: IsoDep, bacKey: BACKeySpec, mode: PresentationMode) {
+    private fun startSession(isoDep: IsoDep, bacKey: BACKeySpec, mode: PresentationMode, snapshot: AuthorizedHandoff?) {
         paneState.readStarted()
         showPane()
-        ReadTask(isoDep, bacKey, mode).execute()
+        ReadTask(isoDep, bacKey, mode, snapshot).execute()
     }
 
     private inner class ReadTask(
         private val isoDep: IsoDep,
         private val bacKey: BACKeySpec,
         private val mode: PresentationMode,
+        // D58 step 3 (findings #2/#3): the lock-time snapshot, threaded
+        // through exactly like [mode] — see [authorizedHandoff]'s doc.
+        // Read by [onPostExecute]'s failure branch (never a re-read of
+        // [verifiedRequest]) and passed on to [continueAfterRead].
+        private val snapshot: AuthorizedHandoff?,
     ) : AsyncTask<Void?, Void?, Exception?>() {
 
         private lateinit var dg1File: DG1File
@@ -1217,7 +1300,10 @@ abstract class MainActivity : AppCompatActivity() {
                 emitReport(
                     "verdict: FAIL\nfailure: ${result.javaClass.simpleName}: ${result.message}\n$masterlistReport",
                     ReportLog.DisclosureSummary(
-                        site = siteTitleFor(verifiedRequest?.origin),
+                        // D58 step 3 (findings #2/#3): from the snapshot
+                        // threaded into this ReadTask at construction, never
+                        // a re-read of verifiedRequest.
+                        site = snapshot?.site ?: SITE_NO_HANDOFF,
                         result = when {
                             accessFailure -> "Couldn't read — check your details"
                             transientChipFailure -> "Couldn't read — card moved"
@@ -1238,7 +1324,7 @@ abstract class MainActivity : AppCompatActivity() {
             // session — only an access-establishment failure (or, as of
             // 2026-09, a transient chip-communication failure) keeps it (F3).
             wipeSession(keepMrzAndMode = false)
-            continueAfterRead(mode, passiveAuthVerdict!!, chipAuthStatus, accessProtocol, masterlistReport, dg1File)
+            continueAfterRead(mode, passiveAuthVerdict!!, chipAuthStatus, accessProtocol, masterlistReport, dg1File, snapshot)
         }
     }
 
@@ -1254,6 +1340,12 @@ abstract class MainActivity : AppCompatActivity() {
         accessProtocol: String,
         masterlistReport: String,
         dg1File: DG1File,
+        // D58 step 3 (findings #2/#3): the lock-time snapshot threaded from
+        // [ReadTask] — see [authorizedHandoff]'s doc. Every use of
+        // `verifiedRequest`/`pendingHandoff` this function and everything
+        // it spawns used to make is replaced by a read of THIS parameter;
+        // neither mutable field is read anywhere below this point any more.
+        snapshot: AuthorizedHandoff?,
     ) {
         // 2026-09 real-device fix: the technical D21 payload field now has a
         // genuine third value ("failed") where before it only ever said
@@ -1274,6 +1366,15 @@ abstract class MainActivity : AppCompatActivity() {
             append("passive_auth: $verdict\n")
         }
 
+        // §6.2 item 16 (D46) / D58 step 3: [site] is derived ONCE here, from
+        // the snapshot's own [AuthorizedHandoff.site] (itself computed once,
+        // at lock time, from the verified origin) — never re-read from
+        // `verifiedRequest`/`pendingHandoff`, and never re-derived a second
+        // way further down this function (the pre-step-3 code had a SECOND,
+        // later `siteTitleFor(origin)` call computing the identical value —
+        // removed as a duplicate, not merely relocated).
+        val site = snapshot?.site ?: SITE_NO_HANDOFF
+
         // Single source of truth (MintGate) — see its doc for the root-cause
         // note on why the branch below now goes through emitReport.
         val mayMint = MintGate.mayMint(mode == PresentationMode.B, verdict)
@@ -1281,7 +1382,7 @@ abstract class MainActivity : AppCompatActivity() {
             emitReport(
                 baseReport + "\nmint_gate: NOT MET — evidence: [] (D27${if (mode == PresentationMode.B) ", item 3: masterlist/passive-auth gate not satisfied" else ""})\nverdict: ${if (verdict.ok) "PASS (read)" else "FAIL (could not check)"}",
                 ReportLog.DisclosureSummary(
-                    site = siteTitleFor(verifiedRequest?.origin),
+                    site = site,
                     result = when {
                         !verdict.ok -> "Read finished, but the document could not be verified"
                         mode == PresentationMode.A -> "Read OK — nothing sent"
@@ -1301,7 +1402,8 @@ abstract class MainActivity : AppCompatActivity() {
         // the biometric prompt ever shows, rather than falling back to a
         // demo/local "manual" key scope (owner-escalated choice, this
         // session: refuse-loudly over a `zkagent_attester_manual` alias).
-        val origin = verifiedRequest?.origin
+        // D58 step 3: from the snapshot, never `verifiedRequest?.origin`.
+        val origin = snapshot?.origin
         if (mode == PresentationMode.B && origin == null) {
             Log.e(TAG, "M2 stage: mode B mint REFUSED — no verified request origin to scope the attester key to (D38)")
             emitReport(
@@ -1329,7 +1431,9 @@ abstract class MainActivity : AppCompatActivity() {
         // `zkagent.challenge.expires_at` field off the already-verified
         // request object via [RequestTrust.expiresAtOf]/[isExpired] — no
         // network round-trip, nothing invented.
-        val verifiedForExpiry = verifiedRequest
+        // D58 step 3: from the snapshot's own verified request, never
+        // `verifiedRequest`.
+        val verifiedForExpiry = snapshot?.request
         if (mode == PresentationMode.B && verifiedForExpiry != null) {
             val expiresAt = RequestTrust.expiresAtOf(verifiedForExpiry.json)
             if (expiresAt != null && RequestTrust.isExpired(expiresAt, System.currentTimeMillis())) {
@@ -1337,7 +1441,7 @@ abstract class MainActivity : AppCompatActivity() {
                 emitReport(
                     baseReport + "\nmint: REFUSED — verification session expired before minting could complete (expires_at=$expiresAt)",
                     ReportLog.DisclosureSummary(
-                        site = siteTitleFor(verifiedForExpiry.origin),
+                        site = site,
                         result = "Refused — verification session expired",
                         chipAuthenticity = chipAuthLabel(chipAuthStatus),
                         sent = "nothing left this device",
@@ -1349,12 +1453,9 @@ abstract class MainActivity : AppCompatActivity() {
             }
         }
 
-        // §6.2 item 16 (D46): [site] is derived ONCE here, from the SAME
-        // verified origin [origin] this mint is already scoped to (D38/D42)
-        // — never re-read from mutable state downstream — and threaded
-        // through the mint pipeline the same way zktag/scopeDomain already
-        // are (see the Thread block below's doc).
-        val site = siteTitleFor(origin)
+        // [site] is threaded through the mint pipeline the same way
+        // zktag/scopeDomain already are (see the Thread block below's doc)
+        // — computed once, above, from [snapshot].
         // 2026-09-01 real-device fix ("fix 2" — the stale "In progress"
         // entry): one fresh id per mint attempt, threaded through every
         // emitReport call below (Thread block, promptAndMint,
@@ -1376,6 +1477,22 @@ abstract class MainActivity : AppCompatActivity() {
             attemptId = attemptId,
             pending = true,
         )
+        // D58 step 3 (findings #2/#3): mode B is only reachable past this
+        // point because the D38 check above already refused when [origin]
+        // (equivalently, [snapshot]) is null — see [AuthorizedHandoff]'s
+        // class doc for the full "why no staleness guard is needed" story.
+        // [authorized] is a `val`, captured once here, on the MAIN thread;
+        // the Thread{} below closes over this SAME immutable reference, so
+        // nothing that runs on another thread — or a LATER, unrelated
+        // beginHandoffVerification/admitted av:// intent — can change what
+        // it already captured. This replaces the OLD staleness re-check
+        // this Thread{} used to make (independently re-reading
+        // pendingHandoff/verifiedRequest, cross-thread, non-@Volatile, with
+        // no guarantee it would see the same value [origin] above did) —
+        // !! documents the invariant the same way [origin]'s own !! below
+        // already does, rather than reintroducing a null branch that can
+        // now never fire.
+        val authorized = snapshot!!
         Thread {
             // D38 amendment (2026-09-01 live-run finding, owner decision:
             // "isolate" — see DeviceKey class doc): the attester key alias
@@ -1387,38 +1504,12 @@ abstract class MainActivity : AppCompatActivity() {
             // before ensureKey/key generation — key generation itself also
             // needs no user auth.
             //
-            // Same "one source, never re-derived a second way" discipline
-            // as everywhere else in this file: handoff/verified are read
-            // once here (and re-checked, in case the pending handoff was
-            // cleared/replaced on the main thread in the interim — the same
-            // defensive re-check mintAndMaybeHandoff always did), and the
-            // resulting zktag/scopeDomain are threaded through
-            // promptAndMint -> mintAndMaybeHandoff as parameters rather than
-            // re-derived down there.
-            val handoff = pendingHandoff
-            val verified = verifiedRequest
-            if (handoff == null || verified == null) {
-                Log.e(TAG, "M2 stage: pending handoff / verifiedRequest disappeared before zktag derivation — refusing (D38)")
-                runOnUiThread {
-                    emitReport(
-                        baseReport + "\nmint: FAILED — no verified request object to mint against (D38)",
-                        ReportLog.DisclosureSummary(
-                            site = SITE_NO_HANDOFF,
-                            result = "Failed — the site's request disappeared before this could finish",
-                            chipAuthenticity = chipAuthLabel(chipAuthStatus),
-                            sent = "nothing left this device",
-                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
-                        ),
-                        attemptId = attemptId,
-                    )
-                    showBlockingOutcomeDialog("No verified handoff request to mint against.", isAccessEstablishmentFailure = false)
-                }
-                return@Thread
-            }
             // scope_domain comes from ONE source — the VERIFIED request's own
-            // origin ([RequestTrust.originOf], D37) — not a fresh, unverified
-            // re-parse of pendingHandoff.requestUri's host (items 13/14).
-            val scopeDomain = runCatching { URI(verified.origin).host }
+            // origin ([RequestTrust.originOf], D37), via [authorized] — not a
+            // fresh, unverified re-parse of pendingHandoff.requestUri's host
+            // (items 13/14), and not a re-read of the mutable
+            // pendingHandoff/verifiedRequest fields (D58 step 3).
+            val scopeDomain = runCatching { URI(authorized.origin).host }
                 .onFailure { e -> Log.w(TAG, "M2 stage: could not parse verified origin host: ${e.javaClass.simpleName}: ${e.message}") }
                 .getOrNull()
             if (scopeDomain == null) {
@@ -1459,10 +1550,7 @@ abstract class MainActivity : AppCompatActivity() {
                 }
                 return@Thread
             }
-            // origin is guaranteed non-null here for mode B (checked above,
-            // and a local val is stable across the lambda capture) — !! documents
-            // that invariant rather than silently defaulting to an empty-string alias.
-            val alias = DeviceKey.aliasForOriginAndZktag(origin!!, zktag)
+            val alias = DeviceKey.aliasForOriginAndZktag(authorized.origin, zktag)
             val keyState = try {
                 DeviceKey.ensureKey(applicationContext, alias)
             } catch (e: Exception) {
@@ -1483,11 +1571,11 @@ abstract class MainActivity : AppCompatActivity() {
                 }
                 return@Thread
             }
-            runOnUiThread { promptAndMint(keyState, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus) }
+            runOnUiThread { promptAndMint(keyState, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus, authorized) }
         }.start()
     }
 
-    private fun promptAndMint(keyState: DeviceKey.KeyState, baseReport: String, zktag: String, scopeDomain: String, site: String, attemptId: String, mode: PresentationMode, chipAuthStatus: M0Probe.ChipAuthStatus) {
+    private fun promptAndMint(keyState: DeviceKey.KeyState, baseReport: String, zktag: String, scopeDomain: String, site: String, attemptId: String, mode: PresentationMode, chipAuthStatus: M0Probe.ChipAuthStatus, authorized: AuthorizedHandoff) {
         val sig = DeviceKey.initSignature(keyState)
         if (sig == null) {
             Log.w(TAG, "M2 stage: DeviceKey.initSignature returned null — no usable device key/signature")
@@ -1506,13 +1594,17 @@ abstract class MainActivity : AppCompatActivity() {
             return
         }
         // Finding #11 (.claude/remember/findings.md) FIX, provisional pending
-        // owner approval: the title names the verified requesting site —
-        // [site] is the SAME siteTitleFor(verified.origin) value already
-        // computed for the log entry title (D46), threaded through
-        // unchanged; see MintPromptText's doc for why the DECISION lives
-        // there and this call site stays a thin getString() applier.
+        // owner approval: the title names the verified requesting site.
+        // D58 step 3 (item 6): reads [authorized.site] — the SNAPSHOT —
+        // directly, rather than the loose [site] string parameter (which
+        // carries the identical value today, since both derive from the
+        // same lock-time capture), so what the user authorizes here and
+        // what [mintAndMaybeHandoff] signs are the SAME object by
+        // construction, not merely equal by coincidence. See
+        // MintPromptText's doc for why the DECISION lives there and this
+        // call site stays a thin getString() applier.
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle(getString(R.string.biometric_prompt_title_for_site, MintPromptText.titleFor(site)))
+            .setTitle(getString(R.string.biometric_prompt_title_for_site, MintPromptText.titleFor(authorized.site)))
             .setSubtitle(getString(R.string.biometric_prompt_subtitle))
             .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
             .build()
@@ -1534,7 +1626,7 @@ abstract class MainActivity : AppCompatActivity() {
                     // [authorizedSig] later on another thread does not risk
                     // the auth window expiring the way a validity-duration
                     // key would.
-                    Thread { mintAndMaybeHandoff(keyState, authorizedSig, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus) }.start()
+                    Thread { mintAndMaybeHandoff(keyState, authorizedSig, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus, authorized) }.start()
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -1564,16 +1656,27 @@ abstract class MainActivity : AppCompatActivity() {
      * [continueAfterRead]'s Thread already derived, BEFORE key generation —
      * D38 amendment, see [DeviceKey] class doc — and threaded through
      * [promptAndMint]) with the ALREADY-AUTHORIZED device key, and — if a
-     * [pendingHandoff] is queued — POSTs `direct_post`. zktag is never
+     * [authorized] handoff is queued — POSTs `direct_post`. zktag is never
      * fully rendered on screen; only a truncated hash, matching this
      * project's value-free logging discipline elsewhere.
      *
      * **Runs on a background thread** (see [promptAndMint]'s
      * `onAuthenticationSucceeded`) — `HandoffClient.fetchRequest` and
      * `postDirectPost` are blocking network calls. Every [emitReport] call
-     * below is therefore wrapped in [runOnUiThread], and [pendingHandoff] is
-     * cleared on the main thread too, once the handoff has definitively
-     * completed or failed — never mid-flight.
+     * below is therefore wrapped in [runOnUiThread], and [MainActivity
+     * .pendingHandoff]/[MainActivity.verifiedRequest] are cleared on the
+     * main thread too, once the handoff has definitively completed or
+     * failed — never mid-flight.
+     *
+     * D58 step 3 (findings #2/#3): [authorized] is the SAME lock-time
+     * snapshot [continueAfterRead]'s Thread already asserted non-null and
+     * passed through [promptAndMint] — this function no longer re-reads
+     * `pendingHandoff`/`verifiedRequest` at all (the OLD third, independent
+     * cross-thread re-check — this function runs on its OWN background
+     * thread, separate from [continueAfterRead]'s — is removed rather than
+     * kept: [authorized] cannot have changed between the two reads, because
+     * there is only one read left, of an already-immutable value, not two
+     * that could ever disagree). See [AuthorizedHandoff]'s class doc.
      *
      * @param zktag the SAME value [continueAfterRead]'s Thread derived to
      *   build [keyState]'s (origin, zktag)-scoped alias — never re-derived
@@ -1582,42 +1685,19 @@ abstract class MainActivity : AppCompatActivity() {
      * @param scopeDomain likewise, the same verified-origin host already
      *   used to derive [keyState]'s alias.
      * @param site likewise, [siteTitleFor] of the same verified origin —
-     *   the §6.2 item 16 (D46) log-entry title. */
-    private fun mintAndMaybeHandoff(keyState: DeviceKey.KeyState, signature: Signature, baseReport: String, zktag: String, scopeDomain: String, site: String, attemptId: String, mode: PresentationMode, chipAuthStatus: M0Probe.ChipAuthStatus) {
-        // D38: a mode-B mint always has a pending, VERIFIED handoff by the
-        // time it reaches here — continueAfterRead's D38 guard refuses
-        // before this function is ever entered otherwise (no verified
-        // origin -> no key scope -> refused before the biometric prompt).
-        // Guarded again anyway rather than ever mint against an absent or
-        // unverified request object.
-        val handoff = pendingHandoff
-        val verified = verifiedRequest
-        if (handoff == null || verified == null) {
-            Log.e(TAG, "M2 stage: reached mint with no pending handoff / verifiedRequest — refusing to proceed (D38)")
-            runOnUiThread {
-                emitReport(
-                    baseReport + "\nmint: local signature OK, but handoff: REFUSED — no verified request object to mint against (D38)",
-                    ReportLog.DisclosureSummary(
-                        site = SITE_NO_HANDOFF,
-                        result = "Failed — the site's request disappeared before this could finish",
-                        chipAuthenticity = chipAuthLabel(chipAuthStatus),
-                        sent = "nothing left this device",
-                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
-                    ),
-                    attemptId = attemptId,
-                )
-                showBlockingOutcomeDialog("No verified handoff request to mint against.", isAccessEstablishmentFailure = false)
-            }
-            return
-        }
+     *   the §6.2 item 16 (D46) log-entry title.
+     * @param authorized the lock-time snapshot ([AuthorizedHandoff]) this
+     *   mint is against — its [AuthorizedHandoff.request] is what gets
+     *   signed and reported below. */
+    private fun mintAndMaybeHandoff(keyState: DeviceKey.KeyState, signature: Signature, baseReport: String, zktag: String, scopeDomain: String, site: String, attemptId: String, mode: PresentationMode, chipAuthStatus: M0Probe.ChipAuthStatus, authorized: AuthorizedHandoff) {
         val threshold = 18
         val claim = mapOf("over_threshold" to true, "threshold" to threshold)
         // §6.2 items 13/14: reuse the request object already fetched and
         // ES256-verified at capture time ([beginHandoffVerification]) —
         // never re-fetch here. Same nonce, same verified fields, one fetch
         // per handoff.
-        val requestObject: JSONObject = verified.json
-        Log.i(TAG, "M2 stage: using pre-verified handoff request object — origin=${verified.origin} signature_verified=true (no re-fetch)")
+        val requestObject: JSONObject = authorized.request.json
+        Log.i(TAG, "M2 stage: using pre-verified handoff request object — origin=${authorized.request.origin} signature_verified=true (no re-fetch)")
         // OpenID4VP request-object JSON, TOP LEVEL — response_uri/state/
         // client_id/response_mode live here (server.mjs ~line 230-270), NOT
         // inside zkagent.challenge (which carries only nonce/tier/expiry).
@@ -1625,7 +1705,7 @@ abstract class MainActivity : AppCompatActivity() {
         // `challenge`, so a live verifier's request object always looked
         // like it "carried no response_uri" even though it was present one
         // level up.
-        val zkagent = verified.json.optJSONObject("zkagent") ?: verified.json
+        val zkagent = authorized.request.json.optJSONObject("zkagent") ?: authorized.request.json
         val challenge = zkagent.optJSONObject("challenge") ?: JSONObject()
         val nonce = challenge.optString("nonce", "")
         Log.i(TAG, "M2 stage: handoff challenge parsed — nonce_present=${nonce.isNotEmpty()} response_uri_present=${requestObject.has("response_uri")}")
@@ -1674,7 +1754,7 @@ abstract class MainActivity : AppCompatActivity() {
         // is KeyInfo's GENERATED/IMPORTED provenance field — different
         // "origin"). Already shown at consent time (handoffStatus); this is
         // the same value-free string, now also in the mint report.
-        val keyScopeLine = "key_scope: ${verified.origin}\n"
+        val keyScopeLine = "key_scope: ${authorized.request.origin}\n"
         val evidencePlug = "${evidence.type}/${evidence.version}"
         // "requested=" was misleading once D31's any-of evidence_required
         // shipped: a verifier's evidence_required lists ACCEPTED
@@ -1707,9 +1787,10 @@ abstract class MainActivity : AppCompatActivity() {
             "zktag_sha256_prefix (value-free, never the raw zktag): $zktagHashPrefix\n" +
             "scope_domain: $scopeDomain\n"
 
-        // D38: handoff is guaranteed non-null here (guarded above) — mode B
-        // always has a pending handoff to answer now, so this is no longer
-        // conditional the way it was pre-D38.
+        // D38: [authorized] is guaranteed present here — a mode-B mint
+        // always has a verified handoff to answer now, so this is no longer
+        // conditional the way it was pre-D38 (and, since D58 step 3, is a
+        // function PARAMETER rather than a re-read, non-nullable).
         //
         // §6.2 item 16 (D46): [deliveryResult] tracks which of the four
         // delivery sub-outcomes actually happened, so the log entry's
@@ -1759,6 +1840,9 @@ abstract class MainActivity : AppCompatActivity() {
         runOnUiThread {
             pendingHandoff = null
             verifiedRequest = null
+            // D58 step 3: cleared in the SAME lockstep as pendingHandoff/
+            // verifiedRequest — see [authorizedHandoff]'s doc.
+            authorizedHandoff = null
             refreshModeStatus()
         }
         report += "\nverdict: PASS (minted)"

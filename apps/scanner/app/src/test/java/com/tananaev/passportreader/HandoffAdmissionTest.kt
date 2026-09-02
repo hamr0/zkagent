@@ -15,10 +15,15 @@ import org.junit.Test
  * pinned independently of `Intent`/`Log` plumbing, which is unassertable
  * under this module's `unitTests.isReturnDefaultValues = true`.
  *
- * THIS IS A MITIGATION, NOT THE FIX: the ownership-refactor's `SessionState`
- * snapshot (taken at lock time) is the structural fix for finding #10; once
- * it lands, the timing window this predicate closes should not exist any
- * more, and this guard becomes redundant.
+ * THIS WAS A MITIGATION, NOT THE FIX: D58 step 3 landed the ownership
+ * refactor's `AuthorizedHandoff` snapshot (taken at lock time), which
+ * closes the MINT-CORRECTNESS half of finding #10 by construction — see
+ * that class's doc. This guard is KEPT anyway (a deliberate D58 step 3
+ * decision, not an oversight): tracing what an admitted foreign intent
+ * does mid-session found a separate, still-live UI-projection regression
+ * (`applyHandoffVerificationOutcome` stomping the locked session's mode
+ * display) that only this guard prevents today — see [HandoffAdmission]'s
+ * doc for the full trace.
  */
 class HandoffAdmissionTest {
 

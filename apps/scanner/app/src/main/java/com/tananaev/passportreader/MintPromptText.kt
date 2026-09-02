@@ -23,9 +23,15 @@ package com.tananaev.passportreader
  * [MintPromptTextTest], never by a real call site today.
  *
  * NOTE: this is a MITIGATION for finding #11's consent defect — it makes
- * the destination visible in the prompt, but it does nothing about finding
- * #10's induced-handoff race (a separate, open finding); see
- * [HandoffAdmission]'s doc for that one.
+ * the destination visible in the prompt. D58 step 3 (findings #2/#3)
+ * separately closed the induced-handoff MINT-correctness race by
+ * construction (see [AuthorizedHandoff]'s doc) and, per that step, now
+ * feeds [titleFor] from the SAME lock-time snapshot the mint signs against
+ * (`MainActivity.promptAndMint` passes `authorized.site`, not the loose
+ * `site` parameter) — so what the user authorizes here and what gets
+ * signed are the same object by construction, not merely equal by
+ * coincidence. See [HandoffAdmission]'s doc for why its guard is still
+ * kept regardless.
  */
 object MintPromptText {
     /** Matches [MainActivity.SITE_NO_HANDOFF] verbatim (kept as one string
