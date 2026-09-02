@@ -212,6 +212,8 @@ audit's own section for the full reasoning behind each row.
 - Status update 2026-09-02: MITIGATED in 730ef09 — `HandoffAdmission.mayAdmitInboundHandoff` gating
   the av:// branch; remains OPEN for the ownership fix (lock-time snapshot / SessionState); the
   guard is to be REMOVED when that lands.
+- Status update 2026-09-02: mitigation DEVICE-CONFIRMED (build 26f67ac) — see
+  docs/logs/M2-D55-D56-EVIDENCE.md; still OPEN for the ownership fix.
 
 ### 2026-09-02 — #11: biometric prompt shows no origin/site/tier — consent defect, independent of and surviving #10's mitigations
 

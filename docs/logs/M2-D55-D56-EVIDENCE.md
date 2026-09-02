@@ -158,3 +158,50 @@ pattern and the failure-class repetition alone, exactly as already recorded in t
 field names, verdict strings, timings, truncated identifiers, hashes, and exception text only — and
 every quoted line was checked against that rule before inclusion, per this file's own rule and the
 project standard it inherits from `M0-EVIDENCE.md` / `M2-D50-D53-EVIDENCE.md`.
+
+---
+
+## Finding #10 mitigation — induced-handoff test on device (2026-09-02 09:15-09:16)
+
+**Setup:** Pixel 6a, build `26f67ac` installed, verifier `spikes/m2-handoff` with `LINK_SCHEME=av`,
+one app process (pid 14408). The orchestrator created a SECOND verifier transaction (`POST
+/ui/presentations`, mode B, `transactionId fPFnvTpH4fmrZUgC`) and, after the owner had locked a
+session on a fresh legitimate link, delivered its `av://authorize` link from a second process with
+`adb shell am start -a android.intent.action.VIEW -d <link>` — the exact path an installed hostile
+app would use. adb reported "intent has been delivered to currently running top-most instance"
+(`singleTop` → `onNewIntent`).
+
+**Timeline:**
+- 09:15:43.107 — legitimate handoff captured.
+- 09:15:43.208 — legitimate handoff verified (origin `127.0.0.1:8787`, dev-pinned key); owner
+  locked, did not tap.
+- 09:16:22.235 — hostile intent delivered → `M2 stage: av:// handoff REFUSED — session locked or
+  read in progress (D57 mitigation for finding #10)`. Owner reported the Snackbar. No `pendingHandoff
+  captured` line for the hostile intent; no report entry emitted (grep "handoff: REFUSED" = 0).
+- 09:16:40 — MRZ input first attempt.
+- 09:16:43 — PACE.
+- 09:16:46 — `using pre-verified handoff request object — origin=http://127.0.0.1:8787`; `direct_post`
+  200; verdict PASS (minted).
+- Verifier log: `verdict transactionId=_a10IjU09TN4xyAj tier=B ok=true allowed=true
+  reason=evidence-verified evidence=["sig-p256/1"] attester=matched` — the owner's transaction.
+  Transaction `fPFnvTpH4fmrZUgC` (the hostile one) received NO verdict.
+
+**Caveat, stated plainly:** this exercises the lock→tap window only; the mid-read and PIN-prompt
+windows are covered by the same predicate (`lockedMode` stays non-null throughout — audit:
+`lockedMode` assigned only at `:498` set / `:772` null) but were not separately timed on device. The
+attacker transaction was on the SAME verifier origin as the legitimate one; a different-origin
+attacker must additionally pass `RequestTrust`'s well-known fetch, which is a stronger condition, so
+this test is the weaker (easier-to-pass-for-the-attacker) case.
+
+**Also observed in the same capture, earlier:** two fresh-link scans (NL/PACE →
+`JH21Hb69xZwifs74`, US/BAC → `H4T9TCTKyYwyg9zt`, both `allowed=true attester=matched`) confirm cold
+handoffs are still admitted and the site-named prompt renders — the mitigation does not block
+legitimate handoffs.
+
+**What this run did and did NOT establish:**
+- Did establish: on real hardware, an `av://` intent delivered by a second process while a session
+  is locked is refused (Snackbar, log line, no report entry, no state mutation), and the legitimate
+  concurrent session mints and delivers normally, receiving the only verdict.
+- Did NOT establish: coverage of the mid-read or biometric-prompt timing windows specifically (same
+  guard predicate, not separately exercised); behavior against a genuinely different-origin attacker
+  (this run used the same origin for both transactions, the weaker case for the attacker).
