@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="true" />
+
+    <!-- §6.2 item 8 — direct_post to the verifier's response_uri over HTTPS
+         only (item 10's network_security_config forbids cleartext outright
+         in release; debug carries exactly one 10.0.2.2/localhost exception
+         for the local test verifier). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- §6.2 item 2 — biometric-or-device-credential gate before minting. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!-- allowBackup is deliberately false: nothing here should ever be
+         carried by Android auto-backup. There is nothing to back up by
+         design (no MRZ/session persistence — see MainActivity's lifecycle
+         wipe rules, §6.2 item 6), but this is defense-in-depth. -->
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:name=".MainApplication"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <!-- No ResultActivity — PRD §6.2 item 5: removed, not deprioritized.
+             No screen in this app ever renders a DG1/MRZ/personal field. -->
+
+    </application>
+
+</manifest>

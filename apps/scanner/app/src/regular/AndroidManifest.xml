@@ -1,0 +1,35 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <activity
+            android:name=".RegularActivity"
+            android:screenOrientation="fullSensor"
+            android:launchMode="singleTop"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- §6.2 item 8 — same-device handoff primary path: a verifier
+                 website opens av://authorize?client_id=...&request_uri=...
+                 (the AV Profile's custom-scheme app link, per M2-CAPTURE.md
+                 Finding 1). NOT an https App Link here: a real https App
+                 Link needs Digital Asset Links host verification this repo
+                 does not own a domain to serve — flagged in README.md /
+                 the conformance report as an escalation, not silently
+                 substituted for. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="av" android:host="authorize" />
+            </intent-filter>
+
+        </activity>
+
+    </application>
+
+</manifest>

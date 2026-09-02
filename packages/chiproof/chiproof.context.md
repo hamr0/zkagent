@@ -28,6 +28,11 @@ you at construction.
   evidence of anything beyond that.
 - `zk-passport/1`, the one real cryptographic-proof plug shipped in this
   version, is **tier-A-only** — see "What's NOT in chiproof, and why".
+- `sig-ed25519/1` and `sig-p256/1` (D30/FR12, PRD §6.2 items 1/9/11) are the
+  attester-key plug family, tier ceiling **B** — see "Attester-key evidence
+  plug family" below. `sig-p256/1` is a **candidate plug name under a
+  pending decision number (`Dn`)**, not an owner-numbered decision the way
+  `sig-ed25519/1`/D30 is.
 - It does not run an HTTP server, a queue, or a background job. There is no
   `gate`-style helper in this version (M1 spec §5 B4) — you wire challenge
   issuance and verification into your own request handlers.
@@ -78,8 +83,8 @@ accepted and weakened later.
 | `trustedClients` | `{name?, package, certDigest, specVersion?}[]` | `[]` | FR10 trust list. If `ctx.clientIdentity` is supplied to `verify()` and this list is non-empty, the identity must match an entry (`package` + `certDigest`, and `specVersion` if both sides supply it) or the presentation is refused (`client_untrusted`). |
 | `scopeDomain` | non-empty `string` | **required** | This verifier's own scope. Bound into `signed-receipt/1`'s signed message and `zk-passport/1`'s `service_scope` field; passed to every plug via `ctx.scopeDomain`. |
 | `masterlistRoot` | `string` | `undefined` | Not validated by the core. Passed through unchanged to plugs via `ctx.masterlistRoot` for a plug that needs it (e.g. to check which masterlist snapshot a document's chain was verified against). The core does not read or fetch a masterlist itself — masterlist verification is the phone's job (M1 spec §1). |
-| `evidence.plugs` | `Record<string, Plug>` | `{}` | Plugs to register, keyed by `"type/version"` (e.g. `"zk-passport/1"`). Each value is the object returned by a plug factory (`zkPassport(...)`, `signedReceipt(...)`, or your own). Registration runs `assertPlug` and throws on a malformed plug — see "Evidence plug contract". |
-| `evidence.require` | `string[]` or `{A?, B?, C?}` | `[]` | Evidence types (registry keys) that **must** be present and valid, or `verify()` refuses (`evidence_required_missing`). Empty = bare mode. The plain-array form applies at **every** tier (the 0.2.0 semantics, unchanged); the per-tier object form lets ONE instance serve a bare tier A next to an evidence-required tier B (D27/D30) — a tier absent from the object requires nothing at that tier. Every entry must name a plug registered in `evidence.plugs`, or construction throws. |
+| `evidence.plugs` | `Record<string, Plug>` | `{}` | Plugs to register, keyed by `"type/version"` (e.g. `"zk-passport/1"`). Each value is the object returned by a plug factory (`zkPassport(...)`, `signedReceipt(...)`, `sigEd25519(...)`, `sigP256(...)`, or your own). Registration runs `assertPlug` and throws on a malformed plug — see "Evidence plug contract". |
+| `evidence.require` | `RequireEntry[]` or `{A?: RequireEntry[], B?: RequireEntry[], C?: RequireEntry[]}` | `[]` | Evidence that **must** be present and valid, or `verify()` refuses (`evidence_required_missing`). Empty = bare mode. The plain-array form applies at **every** tier (the 0.2.0 semantics, unchanged); the per-tier object form lets ONE instance serve a bare tier A next to an evidence-required tier B (D27/D30) — a tier absent from the object requires nothing at that tier. A `RequireEntry` is a registry-key string (all-of, e.g. `'sig-ed25519/1'`) **or** a non-empty array of registry-key strings — an **alternatives group** (D31/D36, 0.4.0): satisfied when at least one member is present and verifies, e.g. `require: { B: [['sig-ed25519/1', 'sig-p256/1']] }`. A group member that is present but fails verification is a real no exactly like any other checked item — it is never masked by another member of the same group passing. Every string named anywhere in `require` (bare or inside a group) must name a plug registered in `evidence.plugs`, or construction throws. |
 | `evidence.accept` | `string[]` | `[]` | Evidence types checked **if present**, but not required. Same registration constraint as `require`. |
 | `evidence.maxItems` | integer ≥ 1 | `4` | Hard cap on `presentation.evidence.length`, enforced before any plug runs — a presentation cannot buy N plug verifications for the price of one. |
 | `evidence.maxItemBytes` | integer ≥ 1 | `262144` | Hard cap on one evidence item's canonical-JSON byte size, enforced before any plug runs. |
@@ -103,15 +108,21 @@ Every export below is re-exported from the package root (`import { ... } from 'c
 | `verifyChallenge(challenge, opts)` | **Never throws** on untrusted `challenge` input. Returns `{ok, valid, reason}`. |
 | `spendNonce(challenge, store, opts)` | **Never throws** — a store that rejects or throws is mapped to `{ok:false, valid:null, reason:'nonce_store_unreachable'}`. Returns `Promise<{ok, valid, reason}>`. |
 | `InMemoryNonceStore` | Test-only `NonceStore`. See "Gotchas". |
+| `InMemoryAttesterStore` | Test-only `AttesterStore` (D38). See "AttesterStore contract". |
 | `EvidenceRegistry` | `new EvidenceRegistry()`; `.registerPlug(type, plug)` **throws** via `assertPlug` on a malformed plug; `.has(type)`, `.get(type)`. |
 | `assertPlug(type, plug)` | **Throws** `TypeError` describing the first defect in a plug's declaration. Used internally by `registerPlug`; exported so you can validate a custom plug before registering it. |
-| `routeEvidence(slot, items, tier, ctx)` | **Never throws.** Returns either `{verified: string[], warnings: string[]}` on success, or a verdict (`realNo(...)`/`cannotCheck(...)`) on refusal — the internal pipeline `createVerifier` wires up for you; documented for anyone building an alternative pipeline around the same plugs. `slot.require` may be a plain array (0.2.0 form, same list at every tier) or a per-tier `{A, B, C}` object. |
-| `normalizeRequire(raw)` | **Throws** `TypeError` on a shape that is neither an array nor a per-tier `{A?, B?, C?}` object (or whose values are not string arrays). Returns the frozen `{A, B, C}` object `createVerifier` builds from `config.evidence.require` — exported for anyone wiring `routeEvidence` directly. |
+| `routeEvidence(slot, items, tier, ctx)` | **Never throws.** Returns either `{verified: string[], warnings: string[]}` on success, or a verdict (`realNo(...)`/`cannotCheck(...)`) on refusal — the internal pipeline `createVerifier` wires up for you; documented for anyone building an alternative pipeline around the same plugs. `slot.require` may be a plain array (0.2.0 form, same list at every tier) or a per-tier `{A, B, C}` object; each entry may be a string or an alternatives-group array (0.4.0, D31). `verified` lists every registry key actually checked, in presentation order — including which member of a satisfied alternatives group was used (D31: "the verdict MUST record which plug was actually used"); `verify()` re-exposes this unchanged as `Verdict.evidence`. |
+| `normalizeRequire(raw)` | **Throws** `TypeError` on a shape that is neither an array nor a per-tier `{A?, B?, C?}` object, or whose entries are not a registry-key string or a non-empty array of registry-key strings. Returns the frozen `{A, B, C}` object `createVerifier` builds from `config.evidence.require` — exported for anyone wiring `routeEvidence` directly. |
 | `signedReceipt({keys})` | **Throws** `TypeError` at registration if `keys` is empty/malformed or has a duplicate `key_id`. Returns a `Plug` (linkability `'signer'`, tier ceiling `'C'`) whose `verify()` never throws. |
 | `receiptMessage(claim, nonce, scopeDomain)` | Pure. Returns the exact `Buffer` a signer must sign for `signed-receipt/1`. Propagates `canonicalize`'s throw if `claim` is unsignable (e.g. contains a float). |
 | `zkPassport({bbPath, vks, threshold, timeoutMs?, tmpDir?})` | **Throws** `TypeError` at registration if `bb` cannot be run at `bbPath`, reports a version other than `5.0.0`, `threshold` has no pinned `param_commitment`, or `vks` is malformed. Returns a `Plug` (linkability `'none'`, tier ceiling `'A'`) whose `verify()` never throws (bb failures map to `ok:false`, never a thrown error). |
 | `subscopeFromNonce(nonce)` / `scopeField(scopeDomain)` | Pure. Each returns a 32-byte `Buffer` (first byte `0x00`, then the first 31 bytes of `sha256(utf8(input))`) — see "Constraints" for why this construction, not `@zkpassport/utils`'s. |
 | `paramCommitment(threshold)` | Pure. Returns the pinned 32-byte `Buffer` for a threshold from the vendored table, or `undefined` if unpinned. |
+| `sigEd25519({keys, attesterStore})` | **Throws** `TypeError` at registration if `keys` is malformed, has a duplicate `key_id`, or is empty/absent WITHOUT an `attesterStore` also supplied (D38: a store-only registration, no pinned keys at all, is valid); also throws if `attesterStore` is supplied but doesn't implement `{get, bind}`. Returns a `Plug` (linkability `'signer'`, tier ceiling `'B'`, `binds.zktag: true`) whose `verify()` never throws — see "Attester-key evidence plug family" for the D38 pinned/store key-resolution order. |
+| `sigEd25519Message(claim, nonce, scopeDomain, zktag)` | Pure. Returns the exact `Buffer` an attester must sign for `sig-ed25519/1` — `sha256(preimage)`. Propagates `canonicalize`'s throw if `claim` is unsignable. |
+| `sigP256({keys, attesterStore})` | Same contract as `sigEd25519({keys, attesterStore})`, for the candidate `sig-p256/1` plug (`Dn` pending). |
+| `sigP256Message(claim, nonce, scopeDomain, zktag)` | Pure. Returns the exact `Buffer` an attester must sign for `sig-p256/1` — the raw `preimage`, unhashed (see "Attester-key evidence plug family"). |
+| `keyIdFor(publicKeyDer)` | Pure (D38). `sha256(publicKeyDer)` as lowercase hex, truncated to 16 chars (8 bytes) — MUST stay byte-identical to the scanner's Kotlin `EvidenceSigner.keyIdFor`. Used to recompute and verify a presented item's `key_id` from its carried `pubkey`; exported so a client/adopter can produce the same id. |
 
 ## NonceStore contract
 
@@ -141,6 +152,43 @@ NonceStore { setIfAbsent(key: string, ttlMs: number): Promise<boolean> }
   instance that didn't see the first use is accepted. `createVerifier`
   refuses to boot with it unless `NODE_ENV==='test'` or
   `allowInMemoryStore:true` is passed explicitly.
+
+## AttesterStore contract (D38)
+
+```
+AttesterStore {
+  get(key: {scope: string, zktag: string}): Promise<{key_id: string, pubkey: Buffer}|undefined>
+  bind(binding: {scope: string, zktag: string, key_id: string, pubkey: Buffer}): Promise<void>
+}
+```
+
+Passed as `attesterStore` to `sigEd25519({keys?, attesterStore})` /
+`sigP256({keys?, attesterStore})` (D38) — NOT wired through
+`createVerifier`'s `stores` config, unlike `NonceStore`: each attester-sig
+plug takes its own, the same way `signedReceipt`/`zkPassport` take their own
+options, since which plug instance owns which store is a per-plug choice,
+not a verifier-wide one.
+
+- `get` returning `undefined` means "no binding yet for this `(scope,
+  zktag)`" — first sight. A defined result means a prior presentation was
+  already verified and bound; the plug refuses (`attester_key_mismatch`) any
+  later presentation for the same pair carrying a DIFFERENT `pubkey`.
+- `bind` is called **only after** a signature has verified successfully —
+  never before, and never on a failed or unverifiable presentation. A store
+  therefore never records an unproven key.
+- Either method throwing (or rejecting) is **not** a "no" — the plug maps it
+  to `{ok:false, valid:null, reason:'attester_store_unreachable'}`, which
+  `verify()` turns into `{ok:false, allowed:null}` upstream, same discipline
+  as `NonceStore`'s `nonce_store_unreachable`.
+- `InMemoryAttesterStore` (exported) satisfies the interface with a plain
+  `Map` in one process. It is **test-only**, same caveats as
+  `InMemoryNonceStore`: no persistence, no cross-replica sharing — behind two
+  replicas, the SAME device could bind under a different key on whichever
+  replica it happens to hit next, exactly the hijack the real contract
+  exists to prevent. A real deployment needs a real shared, atomic store
+  keyed on `scope` + `zktag` (Redis/Postgres/etc — no `setIfAbsent`-style
+  atomicity requirement here since a plain conditional write suffices: the
+  plug itself, not the store, decides "match vs. mismatch vs. first sight").
 
 ## Evidence plug contract
 
@@ -238,6 +286,119 @@ throws a `TypeError` naming the defect:
   about a person. You do not need your own top-level try/catch for this
   specific guarantee, but you should still use one to attach a useful
   `reason`/`ok:false` yourself rather than relying on the generic fallback.
+
+## Attester-key evidence plug family (`sig-ed25519/1`, `sig-p256/1`)
+
+The D30 attester-key plugs (PRD §6.2 items 1/9/11, FR12): an app's own
+device-bound signing key (its Android Keystore attester key, D30 — never fed
+into zktag derivation) signs the challenge binding. `sig-ed25519/1` is the
+reference default for mode-B presentations (D30); `sig-p256/1` is a
+**candidate plug name under a pending decision number (`Dn`)**, added because
+Ed25519 is unavailable as an AndroidKeyStore key on the Pixel 6a, at either
+security level, by either entry point (`docs/logs/M2-SESSION-POC.md` F2) —
+P-256 is what StrongBox actually offers on that device.
+
+Both share ONE preimage definition, stated once, so their implementation
+cannot drift apart:
+
+```
+preimage = utf8(PLUG_TYPE + "\n")
+         ‖ sha256(canonical(claim))
+         ‖ base64urlDecode(nonce)
+         ‖ utf8(scopeDomain)
+         ‖ utf8(zktag)
+```
+
+`PLUG_TYPE` is the literal plug string (`"sig-ed25519/1"` or `"sig-p256/1"`)
+— the domain separator that makes a signature minted for one algorithm
+unusable as the other, even over an otherwise-identical claim/nonce/scope/
+zktag. The nonce bytes are base64url-**decoded**, not the UTF-8 string, same
+convention as `signed-receipt/1`.
+
+The two algorithms differ only in **where** sha256 is applied, and that
+difference is forced by each platform's own signing primitive, not chosen:
+
+- **`sig-ed25519/1`**: `Ed25519(sha256(preimage))` — Ed25519 has no prehash
+  step in the Node/JCA APIs, so the signer is handed the 32-byte digest, not
+  the raw preimage.
+- **`sig-p256/1`**: `ECDSA-P256-with-SHA256(preimage)` — Android Keystore's
+  `SHA256withECDSA` (and Node's `crypto.sign('sha256', ...)`) hashes its own
+  input, so the signer is handed the raw preimage and SHA-256 happens inside
+  the signing primitive.
+
+Applying SHA-256 in each algorithm's own native place is what keeps this ONE
+preimage definition true on both sides. **This reading of item 9's layout for
+the P-256 case is an orchestrator recommendation, not an owner decision — it
+may be vetoed.**
+
+`item.data = { key_id, pubkey?, sig }` (base64), following `signed-receipt/1`'s
+precedent (`pubkey` added in D38, see below). The **P-256 signature is
+DER-encoded ECDSA** — Node's `crypto.verify` default, and what Android
+Keystore produces by default for a `SHA256withECDSA` key. No IEEE-P1363/raw
+`r‖s` decoding is implemented: it is an explicit-opt-in-only shape per the
+build instructions, and nothing built so far needs it, so it was left out
+rather than added speculatively.
+
+Which algorithm a given presentation used is identified by **the plug type
+itself** (item 9: "MUST be reported alongside the evidence, not inferred by
+the verifier") — there is no in-band `alg` field the verifier trusts; the
+registry key (`sig-ed25519/1` vs `sig-p256/1`) is the only source of truth.
+
+Both plugs: `binds: { nonce: true, claim: true, scope: true, zktag: true }`,
+`linkability: 'signer'`, `tierCeiling: 'B'` (a signer key stable across sites
+would break tier A's cross-site bar, D22/FR9 — the ceiling is
+orchestrator-recommended, owner may veto it, same as `sig-ed25519/1`'s
+original FR12 entry). **D38 keeps this declaration unchanged (`'signer'`) —
+flagged, not silently reconsidered:** `evidence.js`'s tier gating (the
+`tier === 'A' && plug.linkability !== 'none'` check) treats `'signer'` and
+`'device'` identically today, so nothing in the code forced either answer;
+per-origin keys (below) are, if anything, a weaker cross-site linkability
+signal than a hardware attestation chain (`key-attestation/1`'s literal
+`'device'` example in FR12) would be, since each site sees a *different* key
+for the same physical device — closer to "a party the adopter trusts signs"
+than to a stable hardware fingerprint. See owner escalation in the D38 report.
+
+### D38 (2026-09-01): per-origin device keys, trust-on-first-sight
+
+The scanner now generates the mode-B attester key **per origin** (site/scope)
+rather than one fixed device key, and a presentation MAY carry the key's own
+`pubkey` (SubjectPublicKeyInfo DER, base64) alongside `key_id` — the verifier
+never trusts a caller-declared `key_id` on its own once a `pubkey` is
+carried: `key_id` is always independently recomputed via `keyIdFor(pubkey)`
+and a mismatch is `sig_key_id_mismatch`, never silently accepted.
+
+**Key resolution, in order:**
+
+1. **Operator-pinned** (`keys` at registration) — unchanged pre-D38
+   behaviour. An item without `pubkey` is only ever accepted this way.
+2. **Else, `attesterStore`-backed (D38)**, only if the item carries
+   `pubkey` and a store was configured: look up the binding for
+   `(ctx.scopeDomain, ctx.zktag)` (D37: scope = the challenge's scope
+   domain).
+   - **Binding exists** — the carried `pubkey` MUST equal the bound one, or
+     it's `attester_key_mismatch` (`valid:false`) — a DIFFERENT key showing
+     up for an already-recognised `(scope, zktag)` is refused outright,
+     never silently re-bound (that would let a relay hijack a recognised
+     zktag under its own key).
+   - **No binding (first sight)** — the carried `pubkey` verifies the
+     signature; **only on success** is the binding recorded
+     (`attesterStore.bind`, never before verification). The plug result
+     carries the non-fatal note `attester_bound_first_sight` in its
+     `warnings` array (the existing pass-through channel — `evidence.js`
+     forwards `result.warnings` onto `Verdict.warnings` unchanged; no
+     parallel field was added).
+3. **Neither applies** (unpinned, no store configured, or no `pubkey`
+   carried): `sig_unknown_key`, same reason as pre-D38.
+
+A tier-A presentation never reaches any of this: `binds.zktag: true` means
+the router refuses it upstream as `evidence_zktag_unavailable`
+(`cannotCheck`) before `verify()` is ever called — D38 changes nothing here,
+it was already the existing zktag-unavailable path (confirmed, not
+re-implemented).
+
+`attesterStore.get`/`.bind` throwing (or rejecting) is `ok:false` /
+`allowed:null`, never surfaced as a "no" — see "AttesterStore contract"
+below, same discipline as `NonceStore`.
 
 ## What's NOT in chiproof, and why
 

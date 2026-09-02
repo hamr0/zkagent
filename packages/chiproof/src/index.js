@@ -12,9 +12,13 @@ export { cannotCheck, realNo, yes } from './verdict.js';
 export { canonicalize, sha256 } from './canonical.js';
 export { issueChallenge, verifyChallenge, spendNonce } from './challenge.js';
 export { InMemoryNonceStore } from './stores/memory.js';
+export { InMemoryAttesterStore } from './stores/attester.js';
 export { EvidenceRegistry, assertPlug, routeEvidence, normalizeRequire } from './evidence.js';
 export { signedReceipt, receiptMessage } from './plugs/signed-receipt.js';
 export { zkPassport, subscopeFromNonce, scopeField, paramCommitment } from './plugs/zk-passport.js';
+export {
+  sigEd25519, sigEd25519Message, sigP256, sigP256Message, keyIdFor,
+} from './plugs/attester-sig.js';
 
 import { cannotCheck, realNo, yes } from './verdict.js';
 import {
@@ -111,8 +115,13 @@ export function createVerifier(config) {
   // (D27) next to an evidence-required tier B (D30). Normalized to {A,B,C}.
   const requireByTier = normalizeRequire(ev.require);
   for (const tierKey of /** @type {const} */ (['A', 'B', 'C'])) {
-    for (const t of requireByTier[tierKey]) {
-      if (!registry.has(t)) throw new TypeError(`createVerifier: config.evidence.require names "${t}" but no such plug is registered`);
+    for (const entry of requireByTier[tierKey]) {
+      // An entry is a registry-key string (all-of) or an alternatives GROUP
+      // — a non-empty array of registry-key strings (D31/D36) — every member
+      // of a group must itself name a registered plug.
+      for (const t of Array.isArray(entry) ? entry : [entry]) {
+        if (!registry.has(t)) throw new TypeError(`createVerifier: config.evidence.require names "${t}" but no such plug is registered`);
+      }
     }
   }
   const bound = (name, dflt) => {

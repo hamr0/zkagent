@@ -131,15 +131,44 @@
  */
 
 /**
- * Per-tier evidence requirements: registry keys that MUST be present and
- * valid at each presented tier. A tier absent from the object requires
- * nothing (bare) at that tier. The plain-array form of `evidence.require`
- * remains the instance-global equivalent (same list at every tier).
+ * An adopter-supplied trust-on-first-sight store for the D38 per-origin
+ * attester-sig binding (`sig-ed25519/1`/`sig-p256/1`, `attester-sig.js`): the
+ * FIRST verified pubkey seen for a `(scope, zktag)` pair is bound, and every
+ * later presentation for that same pair must carry the identical pubkey.
+ * `get` returning `undefined` means "no binding yet" (first sight); `bind`
+ * records one. Neither may throw an unhandled error out of the plug's
+ * `verify()` — a plug wraps both in its own try/catch and maps a throw to
+ * `ok:false` (never a "no") — but the store itself is free to reject/throw;
+ * that is exactly what the plug's wrapper is for.
+ *
+ * @typedef {object} AttesterStore
+ * @property {(key: {scope: string, zktag: string}) => Promise<{key_id: string, pubkey: Buffer}|undefined>} get
+ * @property {(binding: {scope: string, zktag: string, key_id: string, pubkey: Buffer}) => Promise<void>} bind
+ */
+
+/**
+ * One `evidence.require` entry: a registry key (all-of — this plug MUST be
+ * present and valid), or a non-empty array of registry keys — an
+ * ALTERNATIVES GROUP (D31/D36, 2026-09-01): satisfied when at least one
+ * member is present and valid. A present-but-invalid group member still
+ * fails the whole presentation (same per-item failure path as a plain
+ * string entry) — it is never masked by another member of the same group
+ * passing.
+ *
+ * @typedef {string|string[]} RequireEntry
+ */
+
+/**
+ * Per-tier evidence requirements: entries that MUST be satisfied at each
+ * presented tier (each a `RequireEntry` — a single registry key, or an
+ * alternatives group). A tier absent from the object requires nothing
+ * (bare) at that tier. The plain-array form of `evidence.require` remains
+ * the instance-global equivalent (same list at every tier).
  *
  * @typedef {object} RequireByTier
- * @property {string[]} [A]
- * @property {string[]} [B]
- * @property {string[]} [C]
+ * @property {RequireEntry[]} [A]
+ * @property {RequireEntry[]} [B]
+ * @property {RequireEntry[]} [C]
  */
 
 /**
@@ -152,7 +181,7 @@
  * @property {{max: 'A'|'B'|'C'}} [tiers]
  * @property {{pubkey: unknown, key_id: string, maxTier: 'A'|'B'|'C'}[]} [trustedChallengeIssuers]
  * @property {{name?: string, package: string, certDigest: string, specVersion?: string}[]} [trustedClients]
- * @property {{require?: string[]|RequireByTier, accept?: string[], plugs?: Record<string, Plug>, maxItems?: number, maxItemBytes?: number}} [evidence]
+ * @property {{require?: RequireEntry[]|RequireByTier, accept?: string[], plugs?: Record<string, Plug>, maxItems?: number, maxItemBytes?: number}} [evidence]
  * @property {string} scopeDomain
  * @property {string} [masterlistRoot]
  * @property {boolean} [allowInMemoryStore]

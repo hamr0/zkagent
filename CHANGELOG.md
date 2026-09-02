@@ -5,6 +5,205 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **`apps/scanner` — D57 exit criterion (2) met: every async writer fenced
+  against the Activity lifecycle (commits `b8e0e05`, then `72e0b2c`), with
+  a completeness correction found by `/branch-review` recorded plainly, not
+  buried.** Before this pass the module had NO `onDestroy` override and no
+  lifecycle guard of any kind — `runOnUiThread` changes which thread code
+  runs on, not whether the Activity it touches is still alive. New pure
+  `LifecycleFence` (`alive`/`retire()`/`passes()`), held as a
+  per-Activity-INSTANCE field, retired in a new `onDestroy` — deliberately
+  not a singleton, since a shared fence retired by a dying instance would
+  permanently block the next one. Owner-decided semantics: a fence drops a
+  main-thread LANDING; it never cancels or aborts in-flight work — aborting
+  a `direct_post` already in flight would be worse than letting it complete
+  unobserved. Every drop and the retirement itself are logged (static,
+  zero-interpolation messages), because an unlogged drop is
+  indistinguishable from a crash — the same defect class as this project's
+  earlier un-logged `reportView.text` write. No new Gradle dependencies.
+  Unit tests 180 → 184.
+  **The completeness correction**: `b8e0e05` enumerated its fence targets
+  by grepping `runOnUiThread` (10 hits) plus `ReadTask.onPostExecute` and
+  claimed 11 fenced sites — WRONG IN SCOPE, because that enumeration was
+  syntactic, not by the actual hazard predicate. `/branch-review` found
+  `BiometricPrompt.AuthenticationCallback`, dispatched on the main executor,
+  unfenced: `onAuthenticationError` called `emitReport` then
+  `showBlockingOutcomeDialog`, which does `AlertDialog.Builder(this).show()`
+  against a possibly-destroyed Activity. Fixed in `72e0b2c` — **13 sites,
+  not 11**; the same guard added to `onAuthenticationError` and, for
+  defence-in-depth, `onAuthenticationFailed` (placed after its existing
+  diagnostic log line so it never suppresses it). `onAuthenticationSucceeded`
+  is unchanged — it only starts a `Thread{}` whose landings were already
+  fenced. **Criterion (2) was NOT actually met between `b8e0e05` and
+  `72e0b2c`**; it IS met now, at 13 sites.
+  **Why the gap was reachable, bytecode-verified in `androidx.biometric`
+  1.1.0** (worth recording — it is counter-intuitive): a destroyed host is
+  *normally* never called back, because
+  `BiometricPrompt$ResetCallbackObserver.resetCallback()` is annotated
+  `@OnLifecycleEvent(ON_DESTROY)` and nulls
+  `BiometricViewModel.mClientCallback`, after which `getClientCallback()`
+  substitutes a no-op default. BUT `addObservers()` is invoked ONLY from the
+  library's two `Fragment` constructors; both `FragmentActivity`
+  constructors call neither `addObservers` nor `getLifecycle`. `MainActivity`
+  is an `AppCompatActivity` using the `FragmentActivity` overload, so that
+  protection is not active here — the safe behaviour exists and is one
+  constructor overload away from being true.
+  **Device evidence** (Pixel 6a, real NL ID card, `spikes/m2-handoff`
+  verifier): six tests. Three verifier-cross-checked happy-path mints; a
+  singleton-trap test proving `LifecycleFence` is constructed fresh per
+  Activity instance — a property no unit test can give — via two in-process
+  Activity recreations followed by a clean mint on the third instance with
+  zero drops; a mid-verification drop; a mid-read drop with no mint and no
+  stranded UI; and a mid-mint drop. **Limitations stated, not softened**:
+  the mid-verification and mid-mint drop windows were reachable only via an
+  artificial test-harness delay proxy (app and verifier both unmodified;
+  natural windows ~12-28ms on localhost), and the `72e0b2c` biometric fix
+  has NO device evidence at all — code/bytecode-verified only. Full record:
+  `docs/logs/M2-FENCE-EVIDENCE.md`.
+  **New finding #16, open by owner decision, not an oversight**: a
+  completed delivery whose Activity died before `direct_post` resolved
+  still posts — the verifier records a full tier-B verdict — while the
+  report and confirmation dialog are dropped, so nothing is written to
+  `ReportLog` and nothing is shown to the user. Render-only fencing did NOT
+  create this loss: unfenced, the report would have landed in the dead
+  instance's `ReportLog`, which is never restored to a later instance
+  anyway — the fence turned a silent, accidental loss into an explicit,
+  logged one. A disclosure question for the owner, not a bug left undone.
+  **Q38 answered by device evidence, not decided**: `ReportLog` survives
+  Activity recreation via saved instance state; nothing survives process
+  death. **Q47/Q48 opened**: input focus steals back to the document-number
+  field while typing date fields, corrupting entered MRZ (suspected — not
+  confirmed — cause of one run's `SW 0x6985` access-establishment failure);
+  and the three installed reader apps are indistinguishable on the
+  launcher (only `com.zkagent.scanner` declares the `av://` VIEW filter,
+  so intent routing is deterministic on this device — a
+  human-identification problem, not a security one; does not bear on
+  findings #10/#11).
+  **D60 — branch close-out.** The D57 freeze is CARRIED FORWARD, not lifted
+  and not abandoned: clearing it is the FIRST work item of the next module,
+  ahead of that module's own work. Exit criteria (1) and (2) are met;
+  criterion (3) is not — findings #10 and #11 remain OPEN at consequence
+  HIGH, mitigated (commit `730ef09`) not closed, and are the entire reason
+  the freeze does not lift. This is a deferral, not a lift: no new §6.2
+  item, enhancement, or UX change lands while D57 stands, and every UI item
+  already deferred under D57 (Q43-Q48) stays deferred.
+- **`spikes/m2-handoff` — real-device scope-domain bug found and fixed
+  (D37), plus the test-suite blind spot that let it pass — 23/23 spike
+  tests, 191/191 chiproof tests.** A live Pixel 6a mode-B run returned
+  `sig_invalid` (pinned key resolved fine — never `sig_unknown_key`): the
+  scanner signs scope = host of its verified request origin (D37,
+  `MainActivity.kt:876`, e.g. `127.0.0.1`), while `server.mjs`'s
+  `SCOPE_DOMAIN` was hardcoded to an unrelated literal (`'m2-handoff.test'`)
+  — one differing string in the signed preimage, every real-device
+  signature fails. Fixed: `SCOPE_DOMAIN` now defaults to `BIND_HOST`
+  (`'127.0.0.1'`, the address the server always binds), still overridable
+  by env var. Decision recorded: derived ONCE at startup from the bind
+  address (not per-transaction from the request origin) — chiproof's
+  `createVerifier` takes `scopeDomain` as fixed boot-time config with no
+  per-call override in `verify()`, so per-transaction derivation would need
+  one verifier instance per origin; fine for a single-origin spike, flagged
+  as awkward for chiproof's current API on a genuinely multi-origin
+  deployment. **Escalated for the PRD, not decided here:** scope is HOST
+  ONLY (matching the scanner) while D37's origin-consistency check (D34)
+  uses the FULL scheme+host+port origin — a deliberate difference in
+  granularity between two different jobs, recommended to stay that way,
+  needs owner confirmation; the PRD file was not edited. The suite itself
+  had carried its own hardcoded `SCOPE_DOMAIN` copies
+  (`tests/tier-b.test.mjs`, `scripts/fake-wallet.mjs`) that happened to
+  match the server's old literal — proving nothing about a real client's
+  derivation, which is exactly why 17/17 passed while the real device
+  failed. Fixed to derive independently: the fake wallet now derives scope
+  from `requestObject.response_uri`'s host AFTER verifying that request
+  object's JWS (the same verified-origin mechanism D37 specifies for the
+  real scanner); the test file derives it from `new URL(srv.url).hostname`
+  once the ephemeral server is up. Neither hardcodes a scope or imports the
+  server's constant anymore, so a future scope-config regression fails for
+  the right reason instead of silently agreeing with a copied literal.
+- **`chiproof` 0.4.0 (still unpublished) — per-origin attester keys,
+  trust-on-first-sight (D38) — 191/191 tests passing (173 + 18 new).**
+  `sig-ed25519/1`/`sig-p256/1` items may now carry `data.pubkey`
+  trust-on-first-sight (D38) — 191/191 tests passing (173 + 18 new).**
+  `sig-ed25519/1`/`sig-p256/1` items may now carry `data.pubkey`
+  (SubjectPublicKeyInfo DER, base64) alongside `key_id`; the verifier always
+  recomputes `key_id` from `pubkey` via the new exported `keyIdFor(der)`
+  (`sha256(der)` hex, first 16 chars — byte-identical construction to the
+  scanner's Kotlin `EvidenceSigner.keyIdFor`) and refuses a mismatch
+  (`sig_key_id_mismatch`). Key resolution order: operator-pinned `keys`
+  (unchanged, still the only path that accepts an item without `pubkey`),
+  else a new pluggable `attesterStore` (`{get({scope,zktag}),
+  bind({scope,zktag,key_id,pubkey})}`, `InMemoryAttesterStore` reference
+  implementation in `src/stores/attester.js`, same conventions as
+  `InMemoryNonceStore`) binds an unpinned key to `(scope, zktag)` on first
+  sight — only after its signature verifies, never before — and surfaces
+  `attester_bound_first_sight` via the plug's existing `warnings` channel (no
+  parallel field); a later presentation for the same `(scope, zktag)`
+  carrying a DIFFERENT key is `attester_key_mismatch`, never silently
+  re-bound. Store `get`/`bind` throwing maps to `ok:false`/`allowed:null`,
+  never a "no" — same discipline as `NonceStore`. `sigEd25519`/`sigP256` now
+  accept construction with an `attesterStore` and NO pinned `keys` at all
+  (pre-D38: an empty/absent `keys` list always threw); `verify()` is now
+  `async` (the store lookup needs it) — one pre-existing direct-call test
+  updated to `await` it, no behavioural change. New test file
+  `tests/integration/attester-sig-d38.test.js` (18 tests: pinned-path
+  unaffected/pinned-precedence-over-store, first-sight bind then match (both
+  algorithms), first-sight then a different key, pubkey/key_id mismatch,
+  unpinned-no-pubkey, store `get`/`bind` throwing, bind-only-after-verify,
+  registration validation, `InMemoryAttesterStore` itself). Types
+  regenerated (`AttesterStore` typedef, `InMemoryAttesterStore` export).
+  **Escalated, not decided:** whether the D30 `linkability: 'signer'`
+  declaration is still the right one now that the key is per-origin rather
+  than a single fixed device key — `evidence.js`'s tier gating treats
+  `'signer'` and `'device'` identically today, so nothing in the code forces
+  either answer; left unchanged pending owner sign-off (see PR/report).
+  `spikes/m2-handoff` wired an `InMemoryAttesterStore` into its verifier so a
+  real device binds on first sight, keeping the env-override pinned key path
+  working; `tests/tier-b.test.mjs` and `scripts/fake-wallet.mjs` updated to
+  send `pubkey`.
+- **`chiproof` 0.4.0 (still unpublished) — `evidence.require` alternatives
+  groups (D31/D36) — 173/173 tests passing (165 + 8 new).** A `require`
+  entry may now be a registry-key string (all-of, unchanged since 0.2.0) or
+  a non-empty array of registry-key strings — an alternatives GROUP,
+  satisfied when at least one member is present and verifies, e.g.
+  `require: { B: [['sig-ed25519/1', 'sig-p256/1']] }` lets the verifier
+  accept whichever attester-sig algorithm a device's Keystore actually
+  produced (D31 supersedes D30's single-required-plug framing; D36: the
+  device never chooses to downgrade, only falls through on failure).
+  `normalizeRequire` and `routeEvidence` (`src/evidence.js`) both extended;
+  `Verdict.evidence` (already exposed, §6.2 item 9) continues to list every
+  registry key actually checked, so which group member was used needs no
+  new field — a present-but-invalid group member is a real no exactly like
+  any other checked item, never masked by a different member of the same
+  group passing. New test file
+  `tests/integration/evidence-alternatives.test.js` (8 tests). Types
+  regenerated (`RequireEntry = string | string[]`); `spikes/m2-handoff`
+  updated to register both `sig-ed25519/1` and `sig-p256/1` and require the
+  any-of group for tier B, retiring its local `sig-ed25519-plug.mjs` in
+  favor of chiproof's own `sig-ed25519/1`/`sig-p256/1` plugs.
+- **`chiproof` 0.4.0 — attester-key evidence plug family (`sig-ed25519/1`,
+  `sig-p256/1`), PRD §6.2 items 1/9/11 + FR12/D30 — 165/165 tests passing.**
+  One shared preimage (`src/plugs/attester-sig.js`) drives both plugs so
+  their byte layouts cannot drift: `utf8(PLUG_TYPE + "\n") ‖
+  sha256(canonical(claim)) ‖ base64urlDecode(nonce) ‖ utf8(scopeDomain) ‖
+  utf8(zktag)`, domain-separated by the literal plug-type string so a
+  signature minted for one algorithm cannot verify as the other.
+  `sig-ed25519/1` (D30, the mode-B reference default) signs
+  `sha256(preimage)` — Ed25519 has no prehash step in the Node/JCA APIs;
+  `sig-p256/1` (candidate name, `Dn` pending, permitted by the §6.2 item 11
+  amendment because Ed25519 is unavailable as an AndroidKeyStore key on the
+  Pixel 6a, `docs/logs/M2-SESSION-POC.md` F2) signs the raw `preimage` with
+  `ECDSA-P256-with-SHA256`, whose native prehash does the same job — applying
+  sha256 in each algorithm's own native place is what keeps one preimage
+  definition true on both sides (orchestrator-recommended reading of item
+  9's layout for the P-256 case, not owner-decided — flagged for veto). Both:
+  `binds: {nonce, claim, scope, zktag: true}`, `linkability: 'signer'`,
+  `tierCeiling: 'B'`. P-256 signatures are DER-encoded (Node's default, and
+  what Android Keystore produces); no raw r‖s support added. New test suite
+  (`tests/integration/attester-sig.test.js`, 39 tests) covers both happy
+  paths, cross-algorithm replay in both directions, wrong
+  nonce/claim/scope/zktag each paired with a passing control, unknown
+  `key_id`, malformed signatures, wrong key type pinned per plug, a proof
+  that base64url-decoded nonce bytes (not the utf8 string) are what's
+  signed, and a throwing plug mapping to `ok:false` never `allowed:false`.
 - **`chiproof` M1 verifier core (buckets B1–B4) implemented and tested — 116/116
   passing, zero runtime deps.** Spec: `docs/product/m1-verifier-core-spec.md`.
   B1: the `ok`/`allowed` verdict invariant (`src/verdict.js`) structurally

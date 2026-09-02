@@ -1,0 +1,32 @@
+zkagent M0 spike
+Copyright 2026 hamr
+
+This directory is a modified copy of:
+
+    e-Passport NFC Reader
+    https://github.com/tananaev/passport-reader
+    Copyright Anton Tananaev
+
+Upstream states Apache License 2.0 in its README but ships no LICENSE file.
+The Apache-2.0 text in ./LICENSE is supplied here on the basis of that stated
+licence, and matches the licence of this repository. If upstream's licensing is
+ever clarified to be otherwise, this directory must be revisited before any
+distribution.
+
+Modifications made for zkagent M0 (see README.md for the full list and reasons):
+  - removed the Google product flavour, Firebase analytics/crashlytics and
+    Play Ads/Review, and upstream's google-services.json
+  - removed upstream's PRIVACY.md (a Play-listing policy for upstream's app)
+  - removed the DG2 (facial image) read and the jnbis dependency
+  - pinned compileSdk/targetSdk to 36
+  - added M0Probe.kt (timings, ok/allowed verdicts, AA/CA probes, derivation
+    candidates, planted negative tests) and stage logging in the read path
+
+The package name and namespace remain upstream's (com.tananaev.passportreader)
+and MUST be changed before this code is distributed in any form. This is a
+throwaway spike and is not intended for distribution.
+
+This product includes software developed by third parties:
+  JMRTD (LGPL), SCUBA (LGPL), SpongyCastle/BouncyCastle (MIT-style),
+  Apache Commons IO (Apache-2.0), Material Components (Apache-2.0).
+These are resolved from Maven and are not vendored here.
