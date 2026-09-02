@@ -170,6 +170,30 @@ audit's own section for the full reasoning behind each row.
   fenced against Activity lifecycle"). No fix or further tracing this step; named here so the next
   spawn touching any of the five `Thread{}` sites inherits this status rather than treating it as one
   finding among several equally-open ones.
+- Status update 2026-09-02 (FIX, uncommitted at time of writing — new `LifecycleFence.kt`, new
+  `LifecycleFenceTest.kt`, modified `MainActivity.kt`): **FIXED, device-proven.** A pure
+  `LifecycleFence` class (`alive` flag, `retire()`, `passes()`) held as a per-Activity-instance field
+  (`MainActivity.kt:265`), retired in a new `onDestroy` (`:439-442`, the module's first-ever
+  `onDestroy`); 11 sites fenced (10 `runOnUiThread` blocks plus `ReadTask.onPostExecute`, an
+  `AsyncTask` the owner explicitly put in scope — not one of the five originally-named `Thread{}`
+  sites, same defect class). Owner-decided semantics: a fence drops a main-thread landing, it never
+  cancels or aborts in-flight work. A logged line at every drop plus retirement (12 static,
+  zero-interpolation messages; `:2131` is the only `Log.w`). Unit tests 180→184 (new
+  `LifecycleFenceTest`, 4 cases including cross-instance independence), 0 failures, JUnit XML.
+  Orchestrator-verified at source: per-instance not singleton; all 11 guards present;
+  `applySessionDisplay` still the sole writer of the four `SessionDisplay` view properties; D55
+  ordering intact; diff 128 insertions / 4 deletions, every non-comment added line is fence plumbing
+  or a log line. **Device-proven on the Pixel 6a (real NL ID card) across six tests** — see
+  `docs/logs/M2-FENCE-EVIDENCE.md`: T2 proved per-instance construction (a property no unit test
+  can prove) via two in-process recreations then a clean mint on the third instance with zero
+  `fence closed` lines; T3 dropped a mid-verification landing without affecting the next instance;
+  T4 dropped a mid-read landing with no mint and no stranded UI (D55 invariant held); T5 dropped a
+  post-mint landing AFTER a real `direct_post` 200 and verifier tier-B verdict — evidence left the
+  device with nothing recorded or shown on the phone beyond the one `Log.w` line (see new finding
+  #16). **D57 exit criterion (2) is now MET. The freeze does NOT lift** — criterion (3) is not met;
+  findings #10/#11 remain open-but-mitigated. T3/T5's drop windows were only reachable via an
+  artificial test-harness delay proxy (natural windows ~12-28ms on localhost); the QR-scan/
+  manual-paste path was not exercised under fence conditions this session.
 
 ### 2026-09-02 — #6: `handleIncomingIntent` tag guard ignores `readInProgress`
 
@@ -560,3 +584,32 @@ audit's own section for the full reasoning behind each row.
   this step used only the `av://` path, same as step 3); the underlying `HandoffAdmission` guard itself
   remains KEPT-by-recommendation per #10/#11's own status updates for this commit, and this path now
   shares that same status rather than having none. See `docs/logs/M2-D58-STEP4-EVIDENCE.md`.
+
+### 2026-09-02 — #16: mint-report loss after Activity destruction (evidence left the device, nothing recorded or shown)
+
+- **Source**: device run (`docs/logs/M2-FENCE-EVIDENCE.md`, T5)
+- **Anchor**: `MainActivity.kt:2131` (`Log.w` site, fenced post-mint report/confirmation landing),
+  uncommitted `LifecycleFence` pass at time of writing
+- **Finding**: a completed delivery whose Activity was destroyed before `direct_post` resolved
+  still posts successfully — real evidence leaves the device and the verifier records a full
+  tier-B verdict (T5: `bllTnDusyX9bISKQ` done, tier B, ok/allowed true, evidence-verified,
+  `sig-p256/1`) — while the report and confirmation dialog are DROPPED by the fence, so NOTHING is
+  written to `ReportLog` and nothing is shown to the user, on this instance or any later one. The
+  only trace left on the device is the single `Log.w` line at `:2131`. **Render-only fencing did
+  NOT create this loss**: unfenced, the report would have landed in the dead instance's
+  `ReportLog`, which is never restored to a later instance anyway (Q38: no disk persistence, only
+  saved-instance-state survival across recreation, nothing survives process death) — so the report
+  was equally invisible before this pass. The fence changed a silent, accidental loss into an
+  explicit, logged one; it did not introduce the loss itself.
+- **Consequence**: HIGH-adjacent but not classified HIGH here — a real presentation completes and
+  is verifiable server-side, but the device holding it has zero record and shows the user nothing,
+  which is a disclosure/trust gap (a user cannot confirm what left their device) rather than a
+  security break (no unauthorized data left, no session confusion, no forgeable state). Judgement
+  call: this is a product/disclosure question for the owner (does a completed presentation need a
+  durable, destruction-surviving on-device record — the same question Q38 already opens), not a
+  code defect with an obvious fix, since the fence's own job is exactly to prevent a dead instance
+  from writing to a UI/state surface a later instance owns.
+- **Status**: OPEN, unfixed BY DECISION. Not a bug left undone — a disclosure/product question for
+  the owner, adjacent to and overlapping Q38 (log lifetime). Device-proven both sides in
+  `docs/logs/M2-FENCE-EVIDENCE.md` T5 (drop) and T1 (the same path succeeding normally when no
+  recreation intervenes).
