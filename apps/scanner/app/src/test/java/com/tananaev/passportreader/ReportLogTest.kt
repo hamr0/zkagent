@@ -258,6 +258,86 @@ class ReportLogTest {
         assertFalse("owner's spelling is \"recognized\" with a z, not \"recognised\"", entries[1].contains("recognised"))
     }
 
+    // D58 step 1 (Report/Log cluster) — ReportLog absorbs `lastReportText`
+    // (finding #7's owner is now this class, not MainActivity split across
+    // two call sites): [ReportLog.lastText] mirrors exactly what the most
+    // recent [append] or [restore] was given, so a single owner can answer
+    // "what should reportView show" without MainActivity keeping its own
+    // parallel field.
+    @Test
+    fun `lastText is null before any report is ever appended or restored`() {
+        val log = ReportLog()
+        assertEquals(null, log.lastText)
+    }
+
+    @Test
+    fun `append sets lastText to the exact report text, overwriting on each call`() {
+        val log = ReportLog()
+        log.append("first report", summary(), nowMillis = 0L)
+        assertEquals("first report", log.lastText)
+        log.append("second report", summary(), nowMillis = 1000L)
+        assertEquals("second report", log.lastText)
+    }
+
+    @Test
+    fun `a pending-replace append still updates lastText to the replacing text`() {
+        val log = ReportLog()
+        log.append("in progress", summary(), attemptId = "a1", pending = true, nowMillis = 0L)
+        assertEquals("in progress", log.lastText)
+        log.append("terminal", summary(), attemptId = "a1", nowMillis = 1000L)
+        assertEquals("terminal", log.lastText)
+    }
+
+    @Test
+    fun `restore sets lastText from its argument, defaulting to null when omitted`() {
+        val log = ReportLog()
+        log.append("stale", summary(), nowMillis = 0L)
+        log.restore(listOf("09:00:00 · site-a.test\n\nResult    restored"))
+        assertEquals("restore with no lastText argument defaults to null, never re-derives from entries", null, log.lastText)
+
+        val log2 = ReportLog()
+        log2.restore(listOf("09:00:00 · site-a.test\n\nResult    restored"), lastText = "restored report text")
+        assertEquals("restored report text", log2.lastText)
+    }
+
+    // D58 step 1 / finding #13 (unbounded ReportLog.entries growth,
+    // TransactionTooLargeException reachable via looped av:// intents) — a
+    // FIX per the owner's position (Challenge C): externally-triggerable
+    // unbounded persisted growth is a crash risk, not a cosmetic gap.
+    @Test
+    fun `append evicts the oldest entry once entries exceed the bound, keeping the newest`() {
+        val log = ReportLog()
+        repeat(ReportLog.MAX_ENTRIES + 1) { i ->
+            log.append("report $i", summary(site = "site-$i.test"), nowMillis = i.toLong())
+        }
+        val entries = log.entriesSnapshot()
+        assertEquals("bound is enforced — size never exceeds MAX_ENTRIES", ReportLog.MAX_ENTRIES, entries.size)
+        assertFalse("the oldest entry (report 0) was evicted", entries.any { it.contains("report 0") && it.contains("site-0.test") })
+        assertTrue("the newest entry is intact", entries.last().contains("report ${ReportLog.MAX_ENTRIES}") && entries.last().contains("site-${ReportLog.MAX_ENTRIES}.test"))
+        assertTrue("the entry right after the evicted one is now the oldest survivor", entries.first().contains("report 1") && entries.first().contains("site-1.test"))
+    }
+
+    @Test
+    fun `eviction shifts a still-open pending index so its later terminal outcome still replaces correctly`() {
+        val log = ReportLog()
+        // Open a pending entry as entry #0, then push MAX_ENTRIES more
+        // unrelated appends so #0's pending entry is evicted — a genuinely
+        // late Thread{} landing (finding #5) must not corrupt a DIFFERENT,
+        // still-open pending entry's index.
+        log.append("in progress for the survivor", summary(), attemptId = "survivor", pending = true, nowMillis = 0L)
+        repeat(ReportLog.MAX_ENTRIES) { i ->
+            log.append("filler $i", summary(site = "filler-$i.test"), nowMillis = (i + 1).toLong())
+        }
+        // The survivor's pending entry has now been evicted (it was oldest).
+        // Its terminal outcome must not corrupt an unrelated index — since
+        // its pending marker is gone, the terminal outcome appends fresh
+        // rather than silently overwriting whatever now occupies index 0.
+        log.append("survivor terminal", summary(), attemptId = "survivor", nowMillis = 9999L)
+        val entries = log.entriesSnapshot()
+        assertTrue("the terminal outcome for an evicted pending entry appends rather than clobbering an unrelated entry", entries.last().contains("survivor terminal"))
+        assertFalse("index 0 (now some filler entry) was not overwritten by the evicted attempt's terminal outcome", entries[0].contains("survivor terminal"))
+    }
+
     @Test
     fun `clear empties the log`() {
         // Pins the clearing primitive itself, independent of whether any

@@ -161,6 +161,20 @@ class ReportLog {
     // (see its doc, the 2026-09-01 real-device fix: newest-first display).
     private val entries = mutableListOf<String>()
 
+    /** D58 step 1 (Report/Log cluster, finding #7): the exact text of the
+     * most recently emitted or restored report — this class is now the
+     * SINGLE owner of this value, absorbing what used to be
+     * `MainActivity.lastReportText`, a field written at two independent
+     * sites (`emitReport` and the `onCreate` restore branch) that
+     * [emitReport]'s own KDoc claimed, incorrectly, was the only one. Null
+     * before any report has ever been appended or restored (fresh app
+     * launch, or a restore payload that carried no report text). Set by
+     * [append] (always, to its `text` argument, regardless of the
+     * append-vs-replace-pending branch below) and by [restore] (to its
+     * `lastText` argument) — no other function may write it. */
+    var lastText: String? = null
+        private set
+
     // §6.2 item 16 (2026-09-01 real-device fix, "the stale in-progress
     // entry"): which stored index (if any) currently holds an unresolved
     // in-progress entry for a given attempt id. A scan's mint pipeline
@@ -196,6 +210,7 @@ class ReportLog {
      * @param nowMillis defaults to the real clock; a test may pass a fixed
      *   value so the timestamp is deterministic without sleeping. */
     fun append(text: String, summary: DisclosureSummary, attemptId: String? = null, pending: Boolean = false, nowMillis: Long = System.currentTimeMillis()) {
+        lastText = text
         val timestamp = TIMESTAMP_FORMAT.format(Date(nowMillis))
         val rendered = renderEntry(timestamp, summary, text)
         val existingIndex = attemptId?.let { pendingIndexByAttempt[it] }
@@ -204,6 +219,27 @@ class ReportLog {
             pendingIndexByAttempt.remove(attemptId)
         } else {
             entries.add(rendered)
+            // D58 step 1 (finding #13): a genuinely NEW entry (never a
+            // pending-replace, which never grows the list) can push
+            // [entries] past [MAX_ENTRIES] — evict the single oldest entry
+            // to hold the bound, oldest-first, matching [rendered]'s own
+            // "storage order is append order" invariant (only the display
+            // order is ever reversed). Every remaining pending index must
+            // shift down by one to keep pointing at the SAME logical entry
+            // it pointed at before the eviction; a pending index that
+            // pointed at the now-evicted slot 0 is dropped — its own
+            // eventual terminal outcome (finding #5's late Thread{}
+            // landing is exactly this case) then appends fresh rather than
+            // silently overwriting whatever unrelated entry now occupies
+            // index 0.
+            if (entries.size > MAX_ENTRIES) {
+                entries.removeAt(0)
+                val iterator = pendingIndexByAttempt.entries.iterator()
+                while (iterator.hasNext()) {
+                    val pendingEntry = iterator.next()
+                    if (pendingEntry.value == 0) iterator.remove() else pendingEntry.setValue(pendingEntry.value - 1)
+                }
+            }
         }
         if (pending && attemptId != null) {
             pendingIndexByAttempt[attemptId] = existingIndex ?: entries.lastIndex
@@ -213,7 +249,10 @@ class ReportLog {
     /** Empties the log. Not called anywhere in production as of D45 — a
      * per-scan session wipe MUST NOT call this (see class doc) — kept as
      * the single clearing primitive for tests and any future, explicitly-
-     * scoped trigger. */
+     * scoped trigger. Does NOT touch [lastText] — [lastText] mirrors the
+     * report view, which D45/`wipeSession` also never clears; only an
+     * explicit [restore] with a null `lastText` argument (or a fresh
+     * instance) ever nulls it. */
     fun clear() {
         entries.clear()
         pendingIndexByAttempt.clear()
@@ -230,11 +269,19 @@ class ReportLog {
      * recreation (D35). Never re-renders or re-timestamps. Any in-progress
      * pending tracking is dropped: [MainActivity]'s own attempt-id locals
      * do not survive recreation either, so nothing could ever reference a
-     * stale pending index after this call. */
-    fun restore(saved: List<String>) {
+     * stale pending index after this call.
+     *
+     * @param lastText (D58 step 1) the report text to restore [lastText]
+     *   to — the sibling half of this same restore, now owned here rather
+     *   than split across a second `MainActivity` field. Defaults to null:
+     *   an ordinary restore that supplies only [saved] (no report text —
+     *   e.g. a test pinning entry-restore behaviour in isolation) leaves
+     *   [lastText] null, never re-derived from [saved]'s content. */
+    fun restore(saved: List<String>, lastText: String? = null) {
         entries.clear()
         entries.addAll(saved)
         pendingIndexByAttempt.clear()
+        this.lastText = lastText
     }
 
     /** The log view's full text, NEWEST entry first (2026-09-01 real-device
@@ -277,6 +324,26 @@ class ReportLog {
     }
 
     companion object {
+        /** D58 step 1 (finding #13, FIX not enhancement — see the step's
+         * report, Challenge C): the bound on [entries]' size, persisted
+         * Bundle size the constraint (`onSaveInstanceState` puts the whole
+         * snapshot into the outgoing `Bundle`, and a `Bundle` that grows
+         * past roughly 1MB risks `TransactionTooLargeException` at the next
+         * save — this is a real, externally-triggerable crash: a hostile
+         * app looping refused `av://` intents at a locked session used to
+         * append one entry per intent before 26f67ac, and any other
+         * high-frequency append path could do the same). A rendered entry
+         * in this file (title line + Result/Sent/Shared/Identity/Chip-auth
+         * + a multi-line `▸ technical:` block) runs roughly 400-900 bytes
+         * for the realistic content this class actually renders (see
+         * `ReportLogTest`'s own fixtures) — 200 entries is on the order of
+         * 100-180KB, a wide margin under the ~1MB transaction ceiling even
+         * before accounting for the rest of the Bundle's contents.
+         * PROPOSED, not final — the owner approves the exact number; the
+         * eviction mechanism (oldest-first, in [append]) is what this step
+         * actually delivers, and holds for any value here. */
+        const val MAX_ENTRIES = 200
+
         private val TIMESTAMP_FORMAT = SimpleDateFormat("HH:mm:ss", Locale.US)
 
         /** Pure: the character range of each entry's title line (the

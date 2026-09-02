@@ -176,15 +176,15 @@ abstract class MainActivity : AppCompatActivity() {
     // cleared alongside [pendingHandoff] everywhere that is cleared.
     private var verifiedRequest: RequestTrust.VerifiedRequest? = null
 
-    // ---- last rendered report, for onSaveInstanceState only — see
-    // [emitReport] and the item 6 note there. Never written to disk. ----
-    private var lastReportText: String? = null
-
-    // ---- §6.2 item 16 (D44): per-scan report log. An ADDITIONAL CONSUMER of
-    // [emitReport]'s single write path — see that function's doc. In-memory
-    // only; restored/saved across Activity recreation the same way
-    // [lastReportText] is (D35), cleared inside [wipeSession]'s
-    // `!keepMrzAndMode` branch alongside everything else that branch resets. ----
+    // ---- §6.2 item 16 (D44): per-scan report log. D58 step 1: this class
+    // is now also the sole owner of the last-rendered-report text (formerly
+    // a separate `lastReportText` field here, written at two independent
+    // sites — see [ReportLog.lastText]'s doc for why that was finding #7).
+    // An ADDITIONAL CONSUMER of [emitReport]'s single write path — see that
+    // function's doc. In-memory only; restored/saved across Activity
+    // recreation via [restoreReport]/`onSaveInstanceState` (D35), cleared
+    // inside [wipeSession]'s `!keepMrzAndMode` branch alongside everything
+    // else that branch resets. ----
     private val reportLog = ReportLog()
 
     // ---- D55: whether a chip read is currently in flight — the ONLY input
@@ -275,25 +275,19 @@ abstract class MainActivity : AppCompatActivity() {
         // No SharedPreferences/DataStore read or write anywhere in this
         // activity — MRZ fields start empty every launch (NO-GO #9).
 
-        // ESCALATION (flagged for owner, see final report): restores the
-        // last value-free report text ONLY, across an Activity re-creation
-        // (config change / background memory reclaim) — an in-memory Bundle
-        // via onSaveInstanceState, never disk. wipeSession() never touches
-        // reportView, so within one Activity instance the report already
-        // survived onStop; this additionally survives the instance itself
-        // being destroyed and recreated, which is what actually looked like
-        // "onStop wiped the report" from the UI.
-        savedInstanceState?.getString(STATE_LAST_REPORT)?.let { text ->
-            lastReportText = text
-            reportView.text = text
-        }
-        // §6.2 item 16 (D44): the accumulated log gets the same in-memory,
-        // across-recreation retention as lastReportText above (D35) — never
-        // disk. Restored verbatim (ReportLog.restore never re-timestamps).
-        savedInstanceState?.getStringArrayList(STATE_LOG_ENTRIES)?.let { saved ->
-            reportLog.restore(saved)
-            logView.text = reportLog.rendered(titleSizePx = logTitleSizePx())
-        }
+        // D58 step 1 (finding #7): restores the report/log cluster across
+        // an Activity re-creation (config change / background memory
+        // reclaim) — an in-memory Bundle via onSaveInstanceState, never
+        // disk. wipeSession() never touches reportView, so within one
+        // Activity instance the report already survived onStop; this
+        // additionally survives the instance itself being destroyed and
+        // recreated, which is what actually looked like "onStop wiped the
+        // report" from the UI. See [restoreReport]'s doc — this used to be
+        // two direct view-write sites here, bypassing [emitReport] entirely
+        // (finding #7's exact defect); now a NAMED sibling of [emitReport]
+        // on the same owner (ReportLog), the only other writer of this
+        // cluster's state.
+        restoreReport(savedInstanceState)
 
         // D55: tab state and the restored log are both in place above —
         // one call so a recreated Activity is never left in a stale
@@ -529,7 +523,9 @@ abstract class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        lastReportText?.let { outState.putString(STATE_LAST_REPORT, it) }
+        // D58 step 1: reads FROM the owner (reportLog.lastText), not a
+        // parallel MainActivity field — see ReportLog.lastText's doc.
+        reportLog.lastText?.let { outState.putString(STATE_LAST_REPORT, it) }
         outState.putStringArrayList(STATE_LOG_ENTRIES, ArrayList(reportLog.entriesSnapshot()))
     }
 
@@ -786,15 +782,25 @@ abstract class MainActivity : AppCompatActivity() {
     }
 
     // ---------------------------------------------------------------------
-    /** §6.2 items 5/6 — the ONE place a report is ever rendered to
-     * [reportView]. Every terminal outcome (success, failure, refusal,
-     * gate-not-met, exception) and every intermediate progress state MUST go
-     * through this function and ONLY this function — see [MintGate]'s doc
-     * for why: the 2026-08-31 stall (runs 2/3 producing an on-screen verdict
-     * with ZERO logcat trace) was exactly a `reportView.text = ...` site
-     * that never called `Log.i`. Value-free by construction — callers pass
-     * only verdict booleans, step names, counts, hashes, algorithm names,
-     * timings; never MRZ/DG1 field values or the raw zktag. */
+    /** §6.2 items 5/6 — the ONE place a NEW report is ever rendered to
+     * [reportView] (its sibling, [restoreReport], is the ONLY other writer
+     * of this cluster's state — see that function's doc; together they are
+     * now the true "ONE place per event category" this KDoc originally
+     * claimed alone, closing finding #7). Every terminal outcome (success,
+     * failure, refusal, gate-not-met, exception) and every intermediate
+     * progress state MUST go through this function and ONLY this function
+     * — see [MintGate]'s doc for why: the 2026-08-31 stall (runs 2/3
+     * producing an on-screen verdict with ZERO logcat trace) was exactly a
+     * `reportView.text = ...` site that never called `Log.i`. Value-free by
+     * construction — callers pass only verdict booleans, step names,
+     * counts, hashes, algorithm names, timings; never MRZ/DG1 field values
+     * or the raw zktag.
+     *
+     * D58 step 1: [reportLog] (specifically [ReportLog.append]) is now the
+     * SINGLE owner of this cluster's state (`lastText`, `entries`) — this
+     * function writes the two real Android views ([reportView], [logView])
+     * from what the owner returns, and is otherwise a thin renderer; it no
+     * longer holds a parallel `lastReportText` field of its own. */
     /** @param attemptId identifies a scan/mint attempt so its eventual
      *   terminal outcome can REPLACE its own "In progress" entry — see
      *   [ReportLog.append]'s doc (2026-09-01 real-device fix). Null for
@@ -802,8 +808,6 @@ abstract class MainActivity : AppCompatActivity() {
      * @param pending true ONLY for the one "In progress" report a mint
      *   attempt emits while awaiting biometric authorization. */
     private fun emitReport(text: String, summary: ReportLog.DisclosureSummary, attemptId: String? = null, pending: Boolean = false) {
-        reportView.text = text
-        lastReportText = text
         // §6.2 item 16 (D46): the log tab is an ADDITIONAL CONSUMER of this
         // one write site — never a second write site. [text] is exactly
         // what reportView shows, unmodified; [summary] is the value-free,
@@ -813,8 +817,34 @@ abstract class MainActivity : AppCompatActivity() {
         // requires — [attemptId]/[pending] are the same discipline applied
         // to the 2026-09-01 stale-in-progress-entry fix.
         reportLog.append(text, summary, attemptId = attemptId, pending = pending)
+        reportView.text = reportLog.lastText
         logView.text = reportLog.rendered(titleSizePx = logTitleSizePx())
         Log.i(TAG, "\n===== M2 REPORT (value-free) =====\n$text\n===== END =====")
+    }
+
+    /** §6.2 item 16 (D44/D35) — D58 step 1: the NAMED sibling of
+     * [emitReport] on the SAME owner ([reportLog]), for the one other event
+     * category this cluster's state has — restoring across Activity
+     * recreation, from `onCreate`'s `savedInstanceState`. Before this step,
+     * `onCreate` wrote [reportView]/[logView]/`lastReportText` directly,
+     * bypassing [emitReport] entirely (finding #7's exact defect) and, as a
+     * direct consequence, never calling the `Log.i` [emitReport] ends with
+     * — the same class of bug [emitReport]'s own doc says it exists to
+     * prevent. This function calls the SAME `Log.i` shape (labelled RESTORE
+     * rather than REPORT, so a real report and a restore are still
+     * distinguishable in logcat) and is now the ONLY other writer of
+     * [reportView]/[logView]/[reportLog]'s state — a no-op (no Bundle, or a
+     * Bundle with neither key) leaves both views at their XML defaults,
+     * matching the pre-step-1 behaviour exactly. */
+    private fun restoreReport(savedInstanceState: Bundle?) {
+        if (savedInstanceState == null) return
+        val text = savedInstanceState.getString(STATE_LAST_REPORT)
+        val entries = savedInstanceState.getStringArrayList(STATE_LOG_ENTRIES)
+        if (text == null && entries == null) return
+        reportLog.restore(entries ?: emptyList(), lastText = text)
+        if (text != null) reportView.text = reportLog.lastText
+        if (entries != null) logView.text = reportLog.rendered(titleSizePx = logTitleSizePx())
+        Log.i(TAG, "M2 stage: restored report/log across Activity recreation (text=${text != null}, log_entries=${entries?.size ?: 0})")
     }
 
     /** §6.2 item 16 (2026-09-01, second real-device fix — "one point bigger,
