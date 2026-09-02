@@ -81,4 +81,40 @@ object ChipAuthClassification {
         M0Probe.ChipAuthStatus.FAILED -> "failed"
         M0Probe.ChipAuthStatus.NOT_SUPPORTED -> "absent"
     }
+
+    /**
+     * The Active Authentication decision, the remaining half of finding #8
+     * ([M0Probe.tryActiveAuth] — status update on the finding, `651ecd5`):
+     * that function held its own separate inline VERIFIED/NOT_SUPPORTED/
+     * FAILED decision, with no direct unit test of its own. Same two-
+     * independent-failure-points shape as [fromDg14]/[combine]: the DG15
+     * lookup itself failing (this document doesn't carry AA at all) is
+     * NEVER conflated with DG15 being present but `service.doAA` throwing
+     * (the protocol ran and failed).
+     *
+     * ONLY the decision moves here — `service.getInputStream`, `DG15File`
+     * parsing, and `service.doAA` all stay inline in
+     * [M0Probe.tryActiveAuth]; this takes the plain outcome of that I/O
+     * (booleans/strings, never the JMRTD/exception types themselves) so it
+     * needs no `PassportService`/`SODFile` to test. [dg15LookupFailureClass]
+     * is checked first regardless of [aaSucceeded] — a lookup failure means
+     * `doAA` was never reached, so nothing else in the call is meaningful.
+     * The three detail strings are byte-identical to what was inline
+     * before.
+     */
+    fun fromActiveAuth(
+        dg15LookupFailureClass: String?,
+        aaSucceeded: Boolean,
+        keyAlgorithm: String? = null,
+        sigAlgorithm: String? = null,
+        aaFailureClass: String? = null,
+        aaFailureMessage: String? = null,
+    ): Pair<M0Probe.ChipAuthStatus, String> = when {
+        dg15LookupFailureClass != null ->
+            M0Probe.ChipAuthStatus.NOT_SUPPORTED to "AA not supported (no DG15): $dg15LookupFailureClass"
+        aaSucceeded ->
+            M0Probe.ChipAuthStatus.VERIFIED to "AA succeeded (key=$keyAlgorithm, sig=$sigAlgorithm)"
+        else ->
+            M0Probe.ChipAuthStatus.FAILED to "AA declared (DG15 present) but failed: $aaFailureClass ${aaFailureMessage ?: ""}"
+    }
 }

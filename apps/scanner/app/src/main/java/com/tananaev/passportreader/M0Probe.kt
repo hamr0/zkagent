@@ -234,21 +234,42 @@ object M0Probe {
      * each its own try/catch, so "this document doesn't carry DG15 at all"
      * (NOT_SUPPORTED) is never conflated with "DG15 is present but the
      * challenge-response itself failed" (FAILED) — before this restructure
-     * both landed in the same catch block and were indistinguishable. */
+     * both landed in the same catch block and were indistinguishable.
+     *
+     * Finding #8 (`.claude/remember/findings.md`) FIX, remaining half: the
+     * three-state DECISION (which branch below returns which status/detail)
+     * moved to [ChipAuthClassification.fromActiveAuth], unit-tested there —
+     * this function keeps ONLY the JMRTD I/O (`service.getInputStream`,
+     * `DG15File` parsing, `service.doAA`), same discipline as
+     * [ChipAuthClassification.fromDg14] leaving `ReadTask`'s DG14 I/O
+     * inline. Detail strings are byte-identical to before. */
     fun tryActiveAuth(service: PassportService, sod: SODFile): Pair<ChipAuthStatus, String> {
         val dg15 = try {
             DG15File(service.getInputStream(PassportService.EF_DG15))
         } catch (e: Exception) {
-            return ChipAuthStatus.NOT_SUPPORTED to "AA not supported (no DG15): ${e.javaClass.simpleName}"
+            return ChipAuthClassification.fromActiveAuth(
+                dg15LookupFailureClass = e.javaClass.simpleName,
+                aaSucceeded = false,
+            )
         }
         return try {
             val pub: PublicKey = dg15.publicKey
             val challenge = ByteArray(8).also { java.security.SecureRandom().nextBytes(it) }
             val sigAlg = if (pub.algorithm.contains("EC")) "SHA256withECDSA" else "SHA1withRSA/ISO9796-2"
             service.doAA(pub, sod.digestAlgorithm, sigAlg, challenge)
-            ChipAuthStatus.VERIFIED to "AA succeeded (key=${pub.algorithm}, sig=$sigAlg)"
+            ChipAuthClassification.fromActiveAuth(
+                dg15LookupFailureClass = null,
+                aaSucceeded = true,
+                keyAlgorithm = pub.algorithm,
+                sigAlgorithm = sigAlg,
+            )
         } catch (e: Exception) {
-            ChipAuthStatus.FAILED to "AA declared (DG15 present) but failed: ${e.javaClass.simpleName} ${e.message ?: ""}"
+            ChipAuthClassification.fromActiveAuth(
+                dg15LookupFailureClass = null,
+                aaSucceeded = false,
+                aaFailureClass = e.javaClass.simpleName,
+                aaFailureMessage = e.message,
+            )
         }
     }
 

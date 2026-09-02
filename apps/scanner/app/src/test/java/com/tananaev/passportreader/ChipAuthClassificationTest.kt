@@ -125,4 +125,79 @@ class ChipAuthClassificationTest {
         assertNotEquals(technicals[1], technicals[2])
         assertNotEquals(technicals[0], technicals[2])
     }
+
+    // ---------------------------------------------------------- fromActiveAuth
+    //
+    // finding #8's remaining half (status update on the finding, `651ecd5`):
+    // [M0Probe.tryActiveAuth] held its own separate inline three-state
+    // decision with no direct unit test. Two INDEPENDENT failure points,
+    // read straight from `tryActiveAuth`'s source rather than assumed: the
+    // DG15 lookup itself throwing (this document has no AA at all) vs. DG15
+    // present but `service.doAA` throwing (the protocol ran and failed) —
+    // never conflated, same discipline as [fromDg14] above. Expected detail
+    // strings below are typed out by hand from `tryActiveAuth`'s three
+    // `return`/terminal-expression sites, not derived by calling the
+    // function under test.
+
+    @Test
+    fun `DG15 lookup failure is NOT_SUPPORTED with the lookup exception class in the detail`() {
+        val (status, detail) = ChipAuthClassification.fromActiveAuth(
+            dg15LookupFailureClass = "InvalidObjectException",
+            aaSucceeded = false,
+        )
+        assertEquals(M0Probe.ChipAuthStatus.NOT_SUPPORTED, status)
+        assertEquals("AA not supported (no DG15): InvalidObjectException", detail)
+    }
+
+    @Test
+    fun `DG15 present and doAA succeeds is VERIFIED with key and sig algorithm in the detail`() {
+        val (status, detail) = ChipAuthClassification.fromActiveAuth(
+            dg15LookupFailureClass = null,
+            aaSucceeded = true,
+            keyAlgorithm = "EC",
+            sigAlgorithm = "SHA256withECDSA",
+        )
+        assertEquals(M0Probe.ChipAuthStatus.VERIFIED, status)
+        assertEquals("AA succeeded (key=EC, sig=SHA256withECDSA)", detail)
+    }
+
+    @Test
+    fun `DG15 present but doAA throws is FAILED with the AA exception class and message in the detail`() {
+        val (status, detail) = ChipAuthClassification.fromActiveAuth(
+            dg15LookupFailureClass = null,
+            aaSucceeded = false,
+            aaFailureClass = "CardServiceException",
+            aaFailureMessage = "challenge rejected",
+        )
+        assertEquals(M0Probe.ChipAuthStatus.FAILED, status)
+        assertEquals("AA declared (DG15 present) but failed: CardServiceException challenge rejected", detail)
+    }
+
+    @Test
+    fun `FAILED detail omits the literal word null when the AA exception carries no message`() {
+        val (status, detail) = ChipAuthClassification.fromActiveAuth(
+            dg15LookupFailureClass = null,
+            aaSucceeded = false,
+            aaFailureClass = "CardServiceException",
+            aaFailureMessage = null,
+        )
+        assertEquals(M0Probe.ChipAuthStatus.FAILED, status)
+        assertEquals("AA declared (DG15 present) but failed: CardServiceException ", detail)
+        assertFalse(detail.contains("null"))
+    }
+
+    @Test
+    fun `NOT_SUPPORTED beats a stale aaSucceeded flag when DG15 lookup already failed`() {
+        // dg15LookupFailureClass must be checked FIRST — if a caller passed
+        // aaSucceeded=true alongside a lookup failure (should never happen
+        // from tryActiveAuth's own control flow, but the predicate is
+        // pure and must not trust its caller), NOT_SUPPORTED still wins.
+        val (status, _) = ChipAuthClassification.fromActiveAuth(
+            dg15LookupFailureClass = "InvalidObjectException",
+            aaSucceeded = true,
+            keyAlgorithm = "EC",
+            sigAlgorithm = "SHA256withECDSA",
+        )
+        assertEquals(M0Probe.ChipAuthStatus.NOT_SUPPORTED, status)
+    }
 }
