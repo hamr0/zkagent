@@ -50,18 +50,39 @@ package com.tananaev.passportreader
  *
  * **Thread-safety, reasoned explicitly rather than assumed:** [retire] is
  * called from exactly one place, `MainActivity.onDestroy`, which the
- * Android framework always calls on the main thread. [passes] is read
- * from every fenced call site, and every one of those reads is itself
- * inside a `runOnUiThread { ... }` block (or, for the one `AsyncTask`
- * site, inside `onPostExecute`, which the framework also always dispatches
- * on the main thread) — so every write and every read of [alive] happens
- * on the main thread, never concurrently with each other. No
- * `@Volatile`/lock is added: there is no genuinely cross-thread read to
- * guard against. If a future call site reads [passes] from a background
- * thread instead, that call site is wrong and should be fixed to check
- * from the `runOnUiThread`/main-thread callback instead, not "fixed" by
- * adding synchronization here to paper over a race this class was
- * designed not to have.
+ * Android framework always calls on the main thread. The actual
+ * invariant this class relies on is that every [passes] read happens on
+ * the main thread — never that it happens inside any particular syntactic
+ * form. As of this pass, the 13 fenced call sites in `MainActivity` use
+ * three different main-thread-landing forms (this is a list of forms
+ * OBSERVED at the time of writing, not an exhaustive enumeration of forms
+ * this class supports): ten `runOnUiThread { ... }` blocks; one
+ * `AsyncTask.onPostExecute` (`MainActivity.ReadTask`), which the
+ * framework also always dispatches on the main thread; and two
+ * `BiometricPrompt.AuthenticationCallback` overrides
+ * (`onAuthenticationError`/`onAuthenticationFailed`) dispatched via an
+ * executor obtained from `ContextCompat.getMainExecutor(this)` — a third
+ * pattern that was originally missed because it was enumerated by
+ * grepping for `runOnUiThread` rather than by the hazard predicate below,
+ * and was only caught by a later `/branch-review` pass (see
+ * `72e0b2c`). Because all three forms land on the main thread, every
+ * write and every read of [alive] happens on the main thread, never
+ * concurrently with each other, so no `@Volatile`/lock is added: there is
+ * no genuinely cross-thread read to guard against.
+ *
+ * **The criterion for whether a new call site needs [passes], and where
+ * to call it from, is the hazard predicate — main-thread landing of a
+ * late framework/executor callback that may run after `onDestroy` —
+ * never membership in the list of forms above.** A future call site that
+ * matches this predicate (e.g. a new executor-dispatched callback, a
+ * `Handler.post`, a coroutine resumed on `Dispatchers.Main`, or any other
+ * form not yet seen in this file) is exactly as much a hazard as the
+ * three already fenced, and should be checked from within its own
+ * main-thread landing the same way. Conversely, if a future call site
+ * reads [passes] from a background thread instead, that call site is
+ * wrong and should be fixed to check from a main-thread landing instead,
+ * not "fixed" by adding synchronization here to paper over a race this
+ * class was designed not to have.
  */
 class LifecycleFence {
 
