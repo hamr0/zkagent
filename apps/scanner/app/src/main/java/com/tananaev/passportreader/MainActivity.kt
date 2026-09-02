@@ -56,6 +56,7 @@ import org.jmrtd.lds.icao.DG1File
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.net.URI
+import java.security.SecureRandom
 import java.security.Signature
 import java.text.ParseException
 import java.text.SimpleDateFormat
@@ -186,6 +187,20 @@ abstract class MainActivity : AppCompatActivity() {
     // `!keepMrzAndMode` branch alongside everything else that branch resets. ----
     private val reportLog = ReportLog()
 
+    // ---- D55: whether a chip read is currently in flight — the ONLY input
+    // to [showPane] besides the tab selection itself. Set ONLY by
+    // [startSession] (true) and as the FIRST statement of
+    // [ReadTask.onPostExecute] (false, on every exit path) — see
+    // [showPane]'s doc. ----
+    private var readInProgress: Boolean = false
+
+    // ---- D56: salted hash of the previous read attempt's MRZ fields, held
+    // ONLY in memory — never rendered, never logged, never persisted. See
+    // [MrzChangeTracker]'s class doc for why it is salted. Reset to null
+    // wherever the MRZ itself is cleared ([wipeSession]'s `!keepMrzAndMode`
+    // branch), so the next attempt correctly reads as a first attempt. ----
+    private var lastMrzHash: String? = null
+
     private lateinit var passportNumberView: EditText
     private lateinit var expirationDateView: EditText
     private lateinit var birthDateView: EditText
@@ -245,18 +260,16 @@ abstract class MainActivity : AppCompatActivity() {
         handoffStatus = findViewById(R.id.handoff_status)
         handoffManualInput = findViewById(R.id.handoff_manual_input)
 
-        // §6.2 item 16 (D44): tab selection only toggles which of
-        // [mainLayout]/[logLayout] is visible — no other state changes.
-        // [loadingLayout] is left alone: it only shows mid-read, an edge
-        // case not covered by items 15/16.
+        // §6.2 item 16 (D44) / D55: tab selection only changes which pane
+        // [showPane] computes — see that function's doc for the single-
+        // write-site invariant this listener now defers to entirely.
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab) {
-                val showLog = tab.position == 1
-                mainLayout.visibility = if (showLog) View.GONE else View.VISIBLE
-                logLayout.visibility = if (showLog) View.VISIBLE else View.GONE
-            }
+            override fun onTabSelected(tab: TabLayout.Tab) { showPane() }
             override fun onTabUnselected(tab: TabLayout.Tab) {}
-            override fun onTabReselected(tab: TabLayout.Tab) {}
+            // D55: was a no-op — part of why a user stranded on the Log
+            // tab after a failed read had no way back. Now idempotent:
+            // re-tapping the current tab re-applies [showPane]'s decision.
+            override fun onTabReselected(tab: TabLayout.Tab) { showPane() }
         })
 
         // No SharedPreferences/DataStore read or write anywhere in this
@@ -281,6 +294,11 @@ abstract class MainActivity : AppCompatActivity() {
             reportLog.restore(saved)
             logView.text = reportLog.rendered(titleSizePx = logTitleSizePx())
         }
+
+        // D55: tab state and the restored log are both in place above —
+        // one call so a recreated Activity is never left in a stale
+        // both-visible (or wrong-pane) combination. See [showPane]'s doc.
+        showPane()
 
         lockButton.setOnClickListener { lockModeAndArm() }
 
@@ -546,6 +564,20 @@ abstract class MainActivity : AppCompatActivity() {
                     Log.i(TAG, "M2 stage: ignoring tag intent — MRZ fields empty (stale/re-delivered intent)")
                     return
                 }
+                // D56: value-free diagnostic — did the MRZ details actually
+                // CHANGE since the previous attempt in this process? See
+                // [MrzChangeTracker]'s class doc: never the field values
+                // themselves, only the comparison verdict, the document
+                // number's LENGTH, and whether each date parsed (both
+                // always true here — the guard above already required it —
+                // named explicitly because [MrzChangeTracker] is a general
+                // helper, not because either can be false at this call
+                // site today).
+                val currentMrzHash = MrzChangeTracker.hash(passportRaw, birthRaw, expirationRaw, mrzHashSalt)
+                Log.i(TAG, MrzChangeTracker.logLine(
+                    MrzChangeTracker.compare(lastMrzHash, currentMrzHash, docLen = passportRaw.length, dobOk = true, expOk = true)
+                ))
+                lastMrzHash = currentMrzHash
                 val bacKey: BACKeySpec = BACKey(passportRaw, birthRaw, expirationRaw)
                 startSession(IsoDep.get(tag), bacKey, mode)
             }
@@ -702,6 +734,10 @@ abstract class MainActivity : AppCompatActivity() {
             lockedMode = null
             lockButton.isEnabled = true
             refreshModeStatus()
+            // D56: the MRZ itself is cleared above — the next attempt must
+            // correctly read as a first attempt, not "unchanged" against a
+            // hash of details that no longer exist on screen.
+            lastMrzHash = null
             // §6.2 item 16 (D45): the log's lifetime is DECOUPLED from this
             // branch — a per-scan session wipe, successful or not, MUST NOT
             // clear it. See ReportLog's class doc for why (D44's literal
@@ -852,10 +888,37 @@ abstract class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * D55 — THE ONLY place in this file that writes `.visibility` on
+     * [mainLayout], [logLayout] or [loadingLayout]. Enforced the same way
+     * [emitReport] is the only place that writes [reportView]'s text: any
+     * future call site that wants a different pane shown must set
+     * [readInProgress] and/or the tab selection, then call this function —
+     * never touch a view's `.visibility` directly.
+     *
+     * WHY: `activity_main.xml` places these three views as overlapping
+     * siblings inside one `FrameLayout` — so more than one `VISIBLE` at
+     * once means one draws over another. Before D55, four scattered
+     * writes (the tab listener; `startSession`; `ReadTask.onPostExecute`)
+     * each owned a different pair of these views and could disagree with
+     * each other, which is exactly how a user got stranded on the Log tab
+     * with no way back to the MRZ form — see [PaneVisibility]'s class doc
+     * for the full root cause. This function always sets all THREE views
+     * on every call, from [PaneVisibility.choosePane]'s single decision,
+     * so the both-visible state is unrepresentable rather than merely
+     * avoided by convention.
+     */
+    private fun showPane() {
+        val pane = PaneVisibility.choosePane(readInProgress, tabLayout.selectedTabPosition)
+        mainLayout.visibility = if (pane == PaneVisibility.Pane.SCAN) View.VISIBLE else View.GONE
+        logLayout.visibility = if (pane == PaneVisibility.Pane.LOG) View.VISIBLE else View.GONE
+        loadingLayout.visibility = if (pane == PaneVisibility.Pane.LOADING) View.VISIBLE else View.GONE
+    }
+
     // ------------------------------------------------------------- session
     private fun startSession(isoDep: IsoDep, bacKey: BACKeySpec, mode: PresentationMode) {
-        mainLayout.visibility = View.GONE
-        loadingLayout.visibility = View.VISIBLE
+        readInProgress = true
+        showPane()
         ReadTask(isoDep, bacKey, mode).execute()
     }
 
@@ -1004,8 +1067,13 @@ abstract class MainActivity : AppCompatActivity() {
         }
 
         override fun onPostExecute(result: Exception?) {
-            mainLayout.visibility = View.VISIBLE
-            loadingLayout.visibility = View.GONE
+            // D55: FIRST statement, on every exit path (including the
+            // early `return` below in the failure branch) — see
+            // [showPane]'s doc. No future branch can add a new exit
+            // without also clearing [readInProgress], because there is
+            // nothing left after this point that still needs it true.
+            readInProgress = false
+            showPane()
             if (result != null) {
                 // 2026-09 real-device fix, second round (a real bug: a
                 // mid-PACE/mid-BAC tag-loss used to be mislabelled an
@@ -1818,5 +1886,16 @@ abstract class MainActivity : AppCompatActivity() {
         // — the two are not meant to match; do not propagate one into the
         // other.
         private const val MINT_CONFIRMED_MESSAGE = "ID scanned successfully"
+
+        // D56: per-process salt for [lastMrzHash] — a companion-object
+        // field (not per-Activity-instance) so an Activity re-creation
+        // (config change / background memory reclaim) does not invalidate
+        // the previous-attempt comparison by silently re-salting it, which
+        // would make every post-recreation attempt read as "first attempt"
+        // regardless of whether the MRZ actually changed. Generated ONCE
+        // per process, held ONLY in memory, NEVER logged, rendered, or
+        // persisted — see [MrzChangeTracker]'s class doc for why an
+        // unsalted digest of a short document number would itself be PII.
+        private val mrzHashSalt: ByteArray = ByteArray(32).also { SecureRandom().nextBytes(it) }
     }
 }
