@@ -755,8 +755,13 @@ abstract class MainActivity : AppCompatActivity() {
                 // diagnostic below, so a refused re-tap mid-read does not
                 // disturb lastMrzHash.
                 //
-                // Refusal shape mirrors the av:// branch above (findings
-                // #12/#13): Log + Snackbar + return, assigning nothing — no
+                // Refusal shape (owner decision 2026-09-02, superseding the
+                // PROPOSED Snackbar this branch shipped with): NO
+                // user-facing message. A tag intent refused here is, in the
+                // normal case, the same physical card the user is already
+                // holding against the reader — the refusal is not new
+                // information for them, and the log line below is the
+                // record. Log + return, assigning nothing — no
                 // showBlockingOutcomeDialog (that dialog is a state
                 // transition) and no reportLog/emitReport append (this
                 // Activity is exported and ACTION_TECH_DISCOVERED can be
@@ -764,7 +769,6 @@ abstract class MainActivity : AppCompatActivity() {
                 // dispatch).
                 if (!HandoffAdmission.mayStartTagRead(sessionLocked = true, readInProgress = paneState.readInProgress)) {
                     Log.w(TAG, "M2 stage: ignoring tag intent — a read is already in progress")
-                    Snackbar.make(reportView, TAG_REFUSED_MID_READ_MESSAGE, Snackbar.LENGTH_SHORT).show()
                     return
                 }
                 // D58 step 3 (findings #2/#3): read ONCE here, on the main
@@ -2382,16 +2386,6 @@ abstract class MainActivity : AppCompatActivity() {
         // inbound av:// handoff because a session is already locked or a
         // read is in progress. Shortened 2026-09-02 to fit a Snackbar.
         private const val HANDOFF_REFUSED_MID_SESSION_MESSAGE = "Ignored a site request that arrived mid-scan."
-
-        // Finding #6 (.claude/remember/findings.md) FIX, not yet
-        // owner-approved (report requested back explicitly, per this
-        // project's rule that every user-facing string goes to the owner):
-        // shown in a Snackbar (non-terminal, no state transition — see
-        // handleIncomingIntent's doc) when HandoffAdmission.mayStartTagRead
-        // refuses a tag intent because a read is already in progress.
-        // Deliberately styled after HANDOFF_REFUSED_MID_SESSION_MESSAGE
-        // above.
-        private const val TAG_REFUSED_MID_READ_MESSAGE = "Ignored a tag that arrived mid-read."
 
         // Q40 (owner UX, PROVISIONAL — not yet owner-approved wording, per
         // this project's rule that every user-facing string goes back to
