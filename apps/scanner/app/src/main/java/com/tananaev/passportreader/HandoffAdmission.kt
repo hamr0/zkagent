@@ -29,25 +29,34 @@ package com.tananaev.passportreader
  * "if removal is not safe yet, keep it and report why" rule — tracing what
  * an ADMITTED foreign intent does mid-session (with the guard hypothetically
  * removed) found a SEPARATE, still-live regression this guard alone
- * prevents: `applyHandoffVerificationOutcome` (the async verify callback
- * `beginHandoffVerification` schedules) calls `refreshModeStatus()` and sets
- * `lockButton.isEnabled = true` UNCONDITIONALLY on a successful verify —
- * `refreshModeStatus`'s own doc says it must "NEVER [be] called while
- * [lockedMode] is set," but nothing in code enforces that; only THIS guard
- * refusing the intent before `beginHandoffVerification` ever runs today
- * keeps that invariant. Removing this guard would let an admitted foreign
- * intent (mid-lock) stomp the "Locked: mode X — tap your document now"
- * banner with the attacker's "verifying…"/tier text and cosmetically
- * re-enable the lock button (inert — `lockModeAndArm`'s own `lockedMode !=
- * null` early return still no-ops a second tap) while the LOCKED session's
- * evidence remains completely uncorrupted (the snapshot already handles
- * that). Fixing THAT display defect is `modeStatusView`/`lockButton
- * .isEnabled` territory — explicitly out of D58 step 3's scope (that step's
- * MUST NOT list) — so this guard stays until whichever step owns that
- * projection cluster (D58 step 4, session projections) either fixes
- * `applyHandoffVerificationOutcome` to respect `lockedMode` itself, or
- * confirms some other reason removal is safe. Do not remove this guard on
- * the strength of the snapshot alone.
+ * prevented AT THAT TIME: `applyHandoffVerificationOutcome` (the async
+ * verify callback `beginHandoffVerification` schedules) called
+ * `refreshModeStatus()` and set `lockButton.isEnabled = true`
+ * UNCONDITIONALLY on a successful verify — `refreshModeStatus`'s own doc
+ * said it must "NEVER [be] called while [lockedMode] is set," but nothing
+ * in code enforced that; only this guard refusing the intent before
+ * `beginHandoffVerification` ever ran kept that invariant.
+ *
+ * **D58 step 4 status update**: that regression is now closed BY
+ * CONSTRUCTION, independent of this guard — see [SessionDisplay]'s class
+ * doc. `applyHandoffVerificationOutcome` and `beginHandoffVerification` now
+ * both go through `MainActivity.refreshSessionDisplay`/`applySessionDisplay`,
+ * which read `lockedMode` FRESH at the instant each actually runs and give
+ * it absolute precedence over whatever handoff-verification outcome is
+ * being rendered. An admitted foreign intent's verification resolving
+ * after the legitimate session has since locked can no longer write
+ * anything but the SAME locked-banner projection every other call site
+ * already renders — this holds EVEN IF this guard were removed, because
+ * the projection layer, not this admission guard, is now what prevents the
+ * display corruption. **This guard is still NOT removed by D58 step 4** —
+ * see that step's own evidence doc for the full re-derived trace and the
+ * coder's recommendation, which is for the owner to decide (removal needs
+ * a device test this step could not run). What this guard's continued
+ * presence still buys, independent of the display question above: it
+ * keeps a foreign handoff from overwriting `pendingHandoff`/`verifiedRequest`
+ * (the mutable fields) at all while a session is locked or reading — a
+ * narrower, still-real concern than the display one, and the reason D58
+ * step 4's own recommendation is conditional rather than unconditional.
  */
 object HandoffAdmission {
     /**

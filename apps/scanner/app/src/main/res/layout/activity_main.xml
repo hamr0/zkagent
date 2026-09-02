@@ -147,7 +147,8 @@
                      TextView is the ONLY place mode is ever displayed — there is
                      no control here to disagree with the executed mode (F5's bug
                      class is eliminated by construction) — see MainActivity
-                     class doc / MainActivity.refreshModeStatus / lockModeAndArm. -->
+                     class doc / MainActivity.refreshSessionDisplay / lockModeAndArm
+                     (D58 step 4 renamed refreshModeStatus). -->
                 <TextView
                     android:id="@+id/mode_status"
                     android:layout_width="match_parent"

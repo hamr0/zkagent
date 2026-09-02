@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
  * control — a UI/session-state mismatch of F5's shape is now impossible
  * for the strongest possible reason: the surface that could disagree with
  * the executed mode does not exist. [modeStatusView] is a plain, non-
- * interactive TextView showing the DERIVED mode (see [refreshModeStatus]);
+ * interactive TextView showing the DERIVED mode (see [refreshSessionDisplay]);
  * it is a display, never an input.
  *
  * ---------------------------------------------------------------------
@@ -144,7 +144,7 @@ import kotlin.math.roundToInt
  * exactly one writer, it is just fed from [verifiedRequest] when a handoff
  * is pending, or defaults to mode A when it is not (2026-09: there is no
  * mode radio to fall back to reading any more — see the item 4 section
- * above). [applyHandoffVerificationOutcome] calls [refreshModeStatus] on a
+ * above). [applyHandoffVerificationOutcome] calls [refreshSessionDisplay] on a
  * successful verify, so the DERIVED mode is visible (D33: the app "sets"
  * the mode) the instant verification succeeds, not only once Lock is
  * pressed — this is a DISPLAY update, not a read of anything: there is no
@@ -165,7 +165,7 @@ import kotlin.math.roundToInt
  * D58 step 3 (findings #2/#3) — the lock-time snapshot:
  * ---------------------------------------------------------------------
  * [pendingHandoff]/[verifiedRequest] above are read ONLY by pre-lock,
- * main-thread UI-derivation code ([refreshModeStatus], [lockModeAndArm]
+ * main-thread UI-derivation code ([refreshSessionDisplay], [lockModeAndArm]
  * itself, [applyHandoffVerificationOutcome]'s staleness check) — the ENTIRE
  * post-lock read/mint pipeline ([lockModeAndArm] onward: [startSession],
  * [ReadTask], [continueAfterRead] and its background `Thread`,
@@ -197,7 +197,7 @@ abstract class MainActivity : AppCompatActivity() {
     // Set ONLY by [applyHandoffVerificationOutcome] on a successful verify;
     // cleared alongside [pendingHandoff] everywhere that is cleared.
     // D58 step 3 (findings #2/#3): read ONLY by pre-lock, main-thread
-    // UI-derivation code from here on ([refreshModeStatus], [lockModeAndArm]
+    // UI-derivation code from here on ([refreshSessionDisplay], [lockModeAndArm]
     // itself, [applyHandoffVerificationOutcome]'s staleness check) — the
     // ENTIRE post-lock read/mint pipeline ([startSession] onward) now reads
     // [authorizedHandoff] instead. See that field's doc and
@@ -263,7 +263,7 @@ abstract class MainActivity : AppCompatActivity() {
     // is DERIVED (see class doc, item 4 section) and this TextView is its
     // ONLY display, doubling as the pre-lock "current derived mode"
     // indicator and the post-lock "Locked: mode X" banner (see
-    // refreshModeStatus / lockModeAndArm).
+    // refreshSessionDisplay / lockModeAndArm).
     private lateinit var modeStatusView: TextView
     private lateinit var lockButton: Button
     private lateinit var tabLayout: TabLayout
@@ -416,31 +416,67 @@ abstract class MainActivity : AppCompatActivity() {
             supportFragmentManager.beginTransaction().add(dialog, null).commit()
         }
 
-        refreshModeStatus()
+        refreshSessionDisplay()
         handleIncomingIntent(intent)
     }
 
-    /** §6.2 item 4 (2026-09 real-device fix, "remove the mode radio
-     * entirely" — see class doc): the ONE place [modeStatusView]'s text is
-     * derived from current state, whenever that state changes in a way
-     * that could change what it should show — a captured-but-unverified
-     * handoff, a verified handoff (mapped tier or "pending" for one this
-     * build can't map), or no handoff at all (mode A by definition, the
-     * owner's own words). NEVER called while [lockedMode] is set — once
-     * locked, [lockModeAndArm] owns the text directly ("Locked: mode X —
-     * tap your document now"), and [wipeSession] hands control back here
-     * only once [lockedMode] is cleared. */
-    private fun refreshModeStatus() {
-        val verified = verifiedRequest
-        modeStatusView.text = when {
-            verified != null -> when (RequestTrust.tierOf(verified.json)) {
-                "A" -> "Mode: A — anonymous"
-                "B" -> "Mode: B — recognisable to this site"
-                else -> "Mode: pending — tap Lock & scan to see the outcome"
-            }
-            pendingHandoff != null -> "Mode: verifying the site's request…"
-            else -> "Mode: A — anonymous (no site request pending)"
+    /** D58 step 4 (findings #9, #14; Q40) — the ONE place [modeStatusView],
+     * [handoffStatus] and [lockButton] are ever written, from a
+     * [SessionDisplay.Projection]. See [SessionDisplay]'s class doc for why
+     * this collapses three previously-independent write paths (four, six,
+     * and two writers respectively) into one: no other function in this
+     * file writes any of these three views directly any more. */
+    private fun applySessionDisplay(projection: SessionDisplay.Projection) {
+        modeStatusView.text = projection.modeStatusText
+        handoffStatus.text = projection.handoffStatusText
+        lockButton.isEnabled = projection.lockButtonEnabled
+        lockButton.text = when (projection.lockButtonLabel) {
+            SessionDisplay.LockButtonLabel.DEFAULT -> getString(R.string.button_lock_and_scan)
+            // Q40 (owner UX, PROVISIONAL — see LOCK_BUTTON_WAITING_LABEL's
+            // own doc): the disabled Lock button no longer reads as "stuck"
+            // while a locked session is waiting for the document tap.
+            SessionDisplay.LockButtonLabel.TAP_AND_SCAN -> LOCK_BUTTON_WAITING_LABEL
         }
+    }
+
+    /** [SessionDisplay]'s `LockedMode` is its own type (that object cannot
+     * see this class's private [PresentationMode] and should not — see its
+     * class doc), so this is the ONE place the two are mapped. */
+    private fun lockedModeForDisplay(): SessionDisplay.LockedMode? = when (lockedMode) {
+        PresentationMode.A -> SessionDisplay.LockedMode.A
+        PresentationMode.B -> SessionDisplay.LockedMode.B
+        null -> null
+    }
+
+    /** Derives the CURRENT handoff-verification phase from [pendingHandoff]/
+     * [verifiedRequest] — used by every call site EXCEPT
+     * [applyHandoffVerificationOutcome]'s refusal branch, which supplies
+     * [SessionDisplay.HandoffState.Refused] directly (see that function's
+     * doc and [SessionDisplay.HandoffState]'s doc for why a refusal cannot
+     * be derived from field state alone). */
+    private fun currentHandoffState(): SessionDisplay.HandoffState {
+        val verified = verifiedRequest
+        return when {
+            verified != null -> SessionDisplay.HandoffState.Verified(verified.origin, RequestTrust.tierOf(verified.json))
+            pendingHandoff != null -> SessionDisplay.HandoffState.Verifying
+            else -> SessionDisplay.HandoffState.None
+        }
+    }
+
+    /** §6.2 item 4 (2026-09 real-device fix, "remove the mode radio
+     * entirely" — see class doc): recomputes all three of
+     * [applySessionDisplay]'s views from CURRENT state, whenever that state
+     * changes in a way that could change what any of them should show — a
+     * captured-but-unverified handoff, a verified handoff (mapped tier or
+     * "pending" for one this build can't map), no handoff at all (mode A by
+     * definition, the owner's own words), or a locked session (which always
+     * wins over whatever [currentHandoffState] would otherwise derive — see
+     * [SessionDisplay]'s class doc for why this is what unblocks D58 step
+     * 3's guard-removal question). Replaces the pre-refactor
+     * `refreshModeStatus`, which touched [modeStatusView] alone — see
+     * [SessionDisplay]'s doc for why that was finding #14's exact defect. */
+    private fun refreshSessionDisplay() {
+        applySessionDisplay(SessionDisplay.render(lockedModeForDisplay(), currentHandoffState()))
     }
 
     /** §6.2 item 13 (D33): the mode a pending, VERIFIED handoff request
@@ -579,8 +615,11 @@ abstract class MainActivity : AppCompatActivity() {
         // itself — the two fields' lifecycles are now identical (see
         // [authorizedHandoff]'s doc).
         authorizedHandoff = snapshot
-        lockButton.isEnabled = false
-        modeStatusView.text = "Locked: mode ${lockedMode} — tap your document now"
+        // D58 step 4: [refreshSessionDisplay] reads [lockedMode] (just set,
+        // above) and renders the SAME "Locked: mode X — tap your document
+        // now" banner, disabled button, and (Q40, PROVISIONAL) "Tap and
+        // scan" label — see [SessionDisplay.render]'s `locked` branch.
+        refreshSessionDisplay()
         armNfcDispatch()
     }
 
@@ -714,10 +753,27 @@ abstract class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Finding #15 (`.claude/remember/findings.md`) FIX — the QR-scan/
+     * manual-paste path (this function's two call sites: the manual-paste
+     * button handler and the post-QR-scan callback) previously called
+     * [beginHandoffVerification] with NO [HandoffAdmission] gate at all —
+     * only the `av://` intent branch of [handleIncomingIntent] was guarded
+     * (finding #10's mitigation). Applies the SAME predicate here, reusing
+     * the SAME refusal shape (`Log.e` + `Snackbar` + return, assigning
+     * nothing, appending nothing to [reportLog] — finding #13's
+     * no-emitReport-on-refusal rule applies equally here, and finding #12's
+     * rule against [showBlockingOutcomeDialog] on any refusal path applies
+     * equally here: this is a Snackbar, not a dialog, so it causes no state
+     * transition). */
     private fun applyPendingHandoffText(text: String) {
         val handoff = HandoffClient.parsePastedText(text)
         if (handoff == null) {
             Snackbar.make(reportView, "Not a recognised av:// link or request_uri", Snackbar.LENGTH_LONG).show()
+            return
+        }
+        if (!HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = lockedMode != null, readInProgress = paneState.readInProgress)) {
+            Log.e(TAG, "M2 stage: pasted/QR handoff REFUSED — session locked or read in progress (D57 mitigation for finding #10, extended to finding #15)")
+            Snackbar.make(reportView, HANDOFF_REFUSED_MID_SESSION_MESSAGE, Snackbar.LENGTH_LONG).show()
             return
         }
         handoffManualInput.text?.clear()
@@ -730,13 +786,15 @@ abstract class MainActivity : AppCompatActivity() {
      * The Lock button is held off until this resolves, so there is no
      * window where the user could lock a session against an
      * unverified/wrong tier (2026-09: there is no mode radio left to hold
-     * off — [refreshModeStatus] shows "verifying…" instead). */
+     * off — [refreshSessionDisplay] shows "verifying…" instead). */
     private fun beginHandoffVerification(handoff: HandoffClient.PendingHandoff) {
         pendingHandoff = handoff
         verifiedRequest = null
-        handoffStatus.text = "Handoff request received — verifying signature and origin…"
-        refreshModeStatus()
-        lockButton.isEnabled = false
+        // D58 step 4: [refreshSessionDisplay] re-derives [currentHandoffState]
+        // from the two fields just written above (now Verifying, since
+        // [pendingHandoff] is non-null and [verifiedRequest] is null) and
+        // renders all three views from that — see [SessionDisplay]'s doc.
+        refreshSessionDisplay()
         Log.i(TAG, "M2 stage: handoff captured, verifying request object before mode/lock become available (D33/D34/D37)")
         Thread {
             val outcome = try {
@@ -797,7 +855,23 @@ abstract class MainActivity : AppCompatActivity() {
 
     /** Applies [outcome] on the UI thread. A superseded in-flight
      * verification (a newer handoff replaced [pendingHandoff] before this
-     * one resolved) is dropped — never allowed to clobber a fresher state. */
+     * one resolved) is dropped — never allowed to clobber a fresher state.
+     *
+     * D58 step 4 (job 1, unblocking D58 step 3's guard-removal question —
+     * see [SessionDisplay]'s class doc and [HandoffAdmission]'s): every
+     * branch below now goes through [refreshSessionDisplay] /
+     * [applySessionDisplay], both of which read [lockedMode] FRESH, at the
+     * instant THIS callback actually runs — not whatever it was when
+     * [beginHandoffVerification] scheduled the verification. If an
+     * ADMITTED foreign handoff's async verification resolves after the
+     * legitimate session has since locked, [SessionDisplay.render]'s
+     * `locked` branch wins unconditionally: this callback can no longer
+     * write anything but the SAME locked-banner projection every other
+     * call site already renders, regardless of whether [outcome] is
+     * [RequestTrust.Outcome.Verified] or [RequestTrust.Outcome.Refused] —
+     * the old unconditional `modeStatusView.text`/`lockButton.isEnabled`
+     * writes this replaced could stomp the "Locked: mode X" banner; these
+     * cannot. */
     private fun applyHandoffVerificationOutcome(handoff: HandoffClient.PendingHandoff, outcome: RequestTrust.Outcome) {
         if (pendingHandoff !== handoff) {
             Log.i(TAG, "M2 stage: dropping a superseded handoff verification result")
@@ -806,17 +880,17 @@ abstract class MainActivity : AppCompatActivity() {
         when (outcome) {
             is RequestTrust.Outcome.Verified -> {
                 verifiedRequest = outcome.request
-                val rawTier = RequestTrust.tierOf(outcome.request.json)
-                handoffStatus.text = "Handoff verified — origin: ${outcome.request.origin}, requested tier: ${rawTier ?: "<absent>"}. Fill in your document details and lock to answer it."
                 // §6.2 item 13 (D33): SHOW the mode the request set the instant
-                // verification succeeds (2026-09: via refreshModeStatus — there
-                // is no control left to write to, only a display). C/absent/
-                // invalid tiers show a neutral "pending" status rather than
-                // guessing; the fail-loud refusal happens when the user tries
-                // to lock. lockModeAndArm() remains the only place that turns
-                // this into lockedMode.
-                refreshModeStatus()
-                lockButton.isEnabled = true
+                // verification succeeds (2026-09: via refreshSessionDisplay —
+                // there is no control left to write to, only a display). C/
+                // absent/invalid tiers show a neutral "pending" status rather
+                // than guessing; the fail-loud refusal happens when the user
+                // tries to lock. lockModeAndArm() remains the only place that
+                // turns this into lockedMode. [refreshSessionDisplay] re-derives
+                // [currentHandoffState] from [verifiedRequest] just written
+                // above — see [SessionDisplay]'s doc for why this ALSO now
+                // yields the exact pre-refactor handoffStatus text.
+                refreshSessionDisplay()
             }
             is RequestTrust.Outcome.Refused -> {
                 Log.e(TAG, "M2 stage: handoff REFUSED — ${outcome.reason}")
@@ -835,7 +909,13 @@ abstract class MainActivity : AppCompatActivity() {
                         shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                     ),
                 )
-                handoffStatus.text = "Handoff refused (${outcome.reason}) — you may still scan manually."
+                // D58 step 4: [SessionDisplay.HandoffState.Refused] is
+                // supplied directly, not derived via [currentHandoffState] —
+                // at this exact instant [pendingHandoff] is still the failed
+                // handoff (non-null) and [verifiedRequest] is still null,
+                // indistinguishable from Verifying by field state alone. See
+                // [SessionDisplay.HandoffState]'s doc.
+                applySessionDisplay(SessionDisplay.render(lockedModeForDisplay(), SessionDisplay.HandoffState.Refused(outcome.reason)))
                 // §6.2 item 15 (D43): the state transition (clearing
                 // pendingHandoff/verifiedRequest, reverting the derived mode
                 // display via wipeSession) happens on dialog dismissal, not
@@ -852,18 +932,24 @@ abstract class MainActivity : AppCompatActivity() {
      * handoff is still pending across a retry, the derived mode display
      * stays as it was for that handoff — a failed read must not silently
      * revert to the bare-scan default out from under a still-pending
-     * handoff (2026-09: [refreshModeStatus] already handles this
+     * handoff (2026-09: [refreshSessionDisplay] already handles this
      * correctly, since it re-derives from [pendingHandoff]/
      * [verifiedRequest], not from a separately-tracked enabled/disabled
-     * flag the way the removed mode radio needed). */
+     * flag the way the removed mode radio needed). D58 step 4: this is
+     * ALSO now finding #14's actual close point for the common case — once
+     * [lockedMode] clears here, [refreshSessionDisplay] derives
+     * [handoffStatus]'s text too (not only [modeStatusView]'s), so a
+     * session that reaches here with [pendingHandoff]/[verifiedRequest]
+     * already null (every terminal outcome except a kept retry) can no
+     * longer leave a stale "verified/waiting" line behind — see
+     * [SessionDisplay]'s class doc. */
     private fun wipeSession(keepMrzAndMode: Boolean) {
         if (!keepMrzAndMode) {
             passportNumberView.text?.clear()
             expirationDateView.text?.clear()
             birthDateView.text?.clear()
             lockedMode = null
-            lockButton.isEnabled = true
-            refreshModeStatus()
+            refreshSessionDisplay()
             // D56: the MRZ itself is cleared above — the next attempt must
             // correctly read as a first attempt, not "unchanged" against a
             // hash of details that no longer exist on screen.
@@ -992,7 +1078,7 @@ abstract class MainActivity : AppCompatActivity() {
     // sibling, `mode: $mode` in continueAfterRead's baseReport) exactly as
     // before — only the plain-block line and DisclosureSummary.mode were
     // removed. The DERIVED mode display on the main screen
-    // (refreshModeStatus / mode_status TextView, CHANGE 2) is UNRELATED and
+    // (refreshSessionDisplay / mode_status TextView, CHANGE 2) is UNRELATED and
     // unaffected — that is a different display for a different purpose.
 
     /** §6.2 item 16 (2026-09 real-device fix, "chip authenticity, three
@@ -1030,7 +1116,7 @@ abstract class MainActivity : AppCompatActivity() {
      * does not own — see its doc) happens first when the session is NOT
      * being kept, so [wipeSession] restores the derived mode display
      * correctly (2026-09: there is no longer a mode RADIO to re-enable —
-     * see [refreshModeStatus]). Not cancelable: only OK dismisses (no
+     * see [refreshSessionDisplay]). Not cancelable: only OK dismisses (no
      * Snackbar, no outside-tap, no back-press dismissal), per D43.
      * @param isTransientChipCommunicationFailure bucket 2 (2026-09) — see
      *   [FailureTransition]'s doc. Defaults false; every call site except
@@ -1843,7 +1929,12 @@ abstract class MainActivity : AppCompatActivity() {
             // D58 step 3: cleared in the SAME lockstep as pendingHandoff/
             // verifiedRequest — see [authorizedHandoff]'s doc.
             authorizedHandoff = null
-            refreshModeStatus()
+            // D58 step 4 (finding #14's own reproduction): [refreshSessionDisplay]
+            // now ALSO resets [handoffStatus]'s text here (previously only
+            // [modeStatusView] was refreshed at this exact call site) — this
+            // IS the mint-consumes-the-session moment the owner's device run
+            // hit finding #14 against. See [SessionDisplay]'s class doc.
+            refreshSessionDisplay()
         }
         report += "\nverdict: PASS (minted)"
 
@@ -2105,6 +2196,17 @@ abstract class MainActivity : AppCompatActivity() {
         // inbound av:// handoff because a session is already locked or a
         // read is in progress. Shortened 2026-09-02 to fit a Snackbar.
         private const val HANDOFF_REFUSED_MID_SESSION_MESSAGE = "Ignored a site request that arrived mid-scan."
+
+        // Q40 (owner UX, PROVISIONAL — not yet owner-approved wording, per
+        // this project's rule that every user-facing string goes back to
+        // the owner): finding #9's owner observation (iii) — a disabled
+        // Lock button reads as "stuck" once a session is locked and
+        // waiting for the document tap. Substituted for
+        // R.string.button_lock_and_scan by [applySessionDisplay] whenever
+        // [SessionDisplay.render] returns [SessionDisplay.LockButtonLabel
+        // .TAP_AND_SCAN] — see that object's class doc. Owner's own exact
+        // wording, from the brief: "Tap and scan."
+        private const val LOCK_BUTTON_WAITING_LABEL = "Tap and scan"
 
         // D56: per-process salt for [lastMrzHash] — a companion-object
         // field (not per-Activity-instance) so an Activity re-creation

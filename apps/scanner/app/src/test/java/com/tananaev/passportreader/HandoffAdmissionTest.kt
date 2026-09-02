@@ -22,8 +22,25 @@ import org.junit.Test
  * decision, not an oversight): tracing what an admitted foreign intent
  * does mid-session found a separate, still-live UI-projection regression
  * (`applyHandoffVerificationOutcome` stomping the locked session's mode
- * display) that only this guard prevents today — see [HandoffAdmission]'s
- * doc for the full trace.
+ * display) that only this guard prevented AT THAT TIME — see
+ * [HandoffAdmission]'s doc for the full trace and its D58 step 4 status
+ * update (that regression is now closed independently, by
+ * [SessionDisplay]'s locked-wins-unconditionally rule, so this guard's
+ * continued presence is no longer load-bearing for THAT specific concern —
+ * see [SessionDisplayTest]'s locked-always-wins cases for the pure-logic
+ * coverage of that closure).
+ *
+ * D58 step 4 (finding #15) reuses this SAME predicate, tested exhaustively
+ * below, at a SECOND call site — `MainActivity.applyPendingHandoffText`
+ * (the QR-scan/manual-paste handoff path), which previously had no
+ * admission gate at all. No new predicate logic was introduced for that
+ * fix (the truth table below already covers every input this second call
+ * site can supply); `MainActivity` itself has no direct unit-test coverage
+ * in this module (it is Android-bound, not instantiable under
+ * `unitTests.isReturnDefaultValues = true`) — the wiring at that call site
+ * is verified by source read (this step's own survey) and is left for a
+ * device run to confirm end-to-end, same as finding #10's own device
+ * verification.
  */
 class HandoffAdmissionTest {
 
