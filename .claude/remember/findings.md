@@ -93,6 +93,12 @@ audit's own section for the full reasoning behind each row.
   (`:306`, `:310`) can write into the persisted report log after the Activity that launched them is
   no longer the foreground Activity.
 - **Status**: OPEN. Named directly by the freeze's "every async writer fenced" exit criterion.
+- Status update 2026-09-02: partially bears on this — `c856f42` (D58 step 1) bounds the landing site
+  (`ReportLog.MAX_ENTRIES = 200`, see #13), so a late `emitReport`/`reportLog.append` from one of
+  these unfenced threads after the Activity has moved on now lands on a bounded structure instead of
+  an unbounded one (harmless to this cluster's worst-case size). The underlying defect — no
+  `onDestroy`/cancellation/status check at any of the five `Thread{}` sites, so each still runs to
+  completion regardless of Activity lifecycle — is untouched by step 1 and remains OPEN.
 
 ### 2026-09-02 — #6: `handleIncomingIntent` tag guard ignores `readInProgress`
 
@@ -115,6 +121,16 @@ audit's own section for the full reasoning behind each row.
   `reportView`" — the comment is contradicted by a second write site three hundred-plus lines away.
 - **Status**: OPEN. Same class as the D45/2026-08-31 stall this project has already hit once
   (`reportView.text = ...` with no `Log.i`) — worth prioritizing given the precedent.
+- Status update 2026-09-02: CLOSED by construction in `c856f42` (D58 step 1) — `ReportLog` now owns
+  `lastReportText`; `MainActivity.emitReport` and its new named sibling `restoreReport` are the only
+  renderers, both routed through `ReportLog.append`/`ReportLog.restore`. Unit tests 145→151 (JUnit
+  XML, 0 failures; `ReportLogTest` adds lastText/bound/eviction/restore-round-trip, failing-first
+  demonstrated as 13 compile errors before the production change). Device-confirmed, Pixel 6a pid
+  15939, 2026-09-02: `M2 stage: restored report/log across Activity recreation (text=true,
+  log_entries=3)` logged twice (10:31:03.189, 10:31:07.286) across a forced config-change recreation
+  (auto-rotate is off on this device; recreation forced via `adb shell settings put system
+  font_scale 1.15`/`1.0` with the app foregrounded), all three prior scan entries intact. See
+  `docs/logs/M2-D58-STEP1-EVIDENCE.md`.
 
 ### 2026-09-02 — #8: chip-auth three-state logic has no unit test; DG14 handling inline
 
@@ -291,6 +307,12 @@ audit's own section for the full reasoning behind each row.
   emitReport (Log.e + Snackbar only; the approved Result-line string was deleted with it). The
   unbounded ReportLog.entries itself remains OPEN for the refactor (cap decision pending, touches
   D45).
+- Status update 2026-09-02: FIXED-PROVISIONAL in `c856f42` (D58 step 1) — `ReportLog.entries` is now
+  bounded at `MAX_ENTRIES = 200` (named constant), oldest-first eviction, `ReportLog.append` the
+  sole writer. The number is PROVISIONAL pending owner approval: sized from rendered-fixture
+  estimates (400-900 bytes/entry, ~100-180 KB at cap vs. the ~1 MB Bundle/binder transaction limit),
+  not measured on device. Unit tests cover eviction and the restore round-trip (145→151, JUnit XML).
+  See `docs/logs/M2-D58-STEP1-EVIDENCE.md`.
 
 ### 2026-09-02 — #14: `handoffStatus.text` — stale "verified/waiting" status survives a consumed or wiped session, misled the owner into two unintended mode-A scans
 
