@@ -568,17 +568,15 @@ abstract class MainActivity : AppCompatActivity() {
                 // non-blocking Snackbar (already this file's mechanism for a
                 // non-terminal notice, e.g. the QR-capture-cancelled/no-QR-
                 // found Snackbars above) causes no state transition at all.
+                //
+                // Deliberately no emitReport/log entry on refusal (owner
+                // ruling, findings.md #13): a refused foreign intent must
+                // not be able to append to user-visible persisted state
+                // (ReportLog.entries is unbounded and persisted whole into
+                // the Bundle) — the Snackbar and the logcat line below are
+                // the only outputs.
                 if (!HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = lockedMode != null, readInProgress = readInProgress)) {
                     Log.e(TAG, "M2 stage: av:// handoff REFUSED — session locked or read in progress (D57 mitigation for finding #10)")
-                    emitReport(
-                        "handoff: REFUSED — an incoming site request arrived while a session was already locked or a document read was in progress (D57 mitigation for finding #10)",
-                        ReportLog.DisclosureSummary(
-                            site = SITE_NO_HANDOFF,
-                            result = "Refused — another site's request arrived mid-session and was ignored",
-                            sent = "nothing left this device",
-                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
-                        ),
-                    )
                     Snackbar.make(reportView, HANDOFF_REFUSED_MID_SESSION_MESSAGE, Snackbar.LENGTH_LONG).show()
                     return
                 }
