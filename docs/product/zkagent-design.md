@@ -1,6 +1,6 @@
 # zkagent — Design & Disclosure Model
 
-**Companion to** `docs/archive/zkagent-prd.md` (PRD v1.4). This document explains *how the thing works and why it is shaped this way*. The PRD decides what gets built and when. **Where the two disagree, the PRD wins** — this document is description, not commitment.
+**Companion to** `docs/product/zkagent-prd.md` (PRD v1.4). This document explains *how the thing works and why it is shaped this way*. The PRD decides what gets built and when. **Where the two disagree, the PRD wins** — this document is description, not commitment.
 
 **Status**: describes an intended design. M0 has not been run. Nothing here is measured. Where a claim depends on evidence that does not exist yet, it says so.
 

@@ -14,7 +14,7 @@ values are printed anywhere below or were logged to any file outside `spikes/m1-
 
 ## 1. Why this run
 
-M1b (PRD milestone table row, `docs/archive/zkagent-prd.md:150`), answering Q15 (`:263`): does the
+M1b (PRD milestone table row, `docs/product/zkagent-prd.md:150`), answering Q15 (`:263`): does the
 attestation/evidence a tier-A (mode-A) presentation carries defeat mode A's own no-identifier
 promise? M1's POC already confirmed the *raw device-attestation chain* is a stable per-device
 identifier (§8 finding, superseded for v1 by D23→D24: the evidence slot ships empty by default,

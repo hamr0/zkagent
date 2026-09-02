@@ -50,7 +50,7 @@ Tests are split per [`AGENT_RULES.md`](../../.claude/remember/AGENT_RULES.md): `
 
 ## Design
 
-- Product requirements: [`docs/archive/zkagent-prd.md`](https://github.com/hamr0/zkagent/blob/main/docs/product/zkagent-prd.md)
+- Product requirements: [`docs/product/zkagent-prd.md`](https://github.com/hamr0/zkagent/blob/main/docs/product/zkagent-prd.md)
 - Design and disclosure model: [`docs/product/zkagent-design.md`](https://github.com/hamr0/zkagent/blob/main/docs/product/zkagent-design.md)
 
 ## License

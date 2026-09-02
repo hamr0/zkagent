@@ -838,7 +838,7 @@ use and Track Z's gates (§3 above) are met for a security claim to rest on it.
 - **Evidence**: `docs/logs/M0-EVIDENCE.md` (chip reads), `docs/logs/M1-POC-EVIDENCE.md`
   (attestation chains), `docs/logs/M1-Q23-EVIDENCE.md` (Play Integrity + ZK composition).
 - **Component facts**: `docs/product/zk-due-diligence.md`.
-- **Decisions**: `docs/archive/zkagent-prd.md` — D19–D24, Q23 (resolved), Q24, Q25.
+- **Decisions**: `docs/product/zkagent-prd.md` — D19–D24, Q23 (resolved), Q24, Q25.
 - **Archived narrative**: `docs/archive/zk-challenges.md` (superseded by this section).
 - **Spikes**: `spikes/m1-attest`, `spikes/m1-integrity`, `spikes/m1-zk` (`phone/` for the proving
   attempt).

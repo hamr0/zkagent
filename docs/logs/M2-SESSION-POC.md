@@ -370,7 +370,7 @@ path itself composes correctly with the NFC session.
       weighed); the owner chose **option 3, algorithm agility — support both, operator chooses
       per device capability**, in the owner's own words: signing is "another thing we mention
       honestly and operator choose and we support both" — exactly how the evidence slot itself
-      already works (D24). This is now recorded in `docs/archive/zkagent-prd.md` v1.18, §6.2
+      already works (D24). This is now recorded in `docs/product/zkagent-prd.md` v1.18, §6.2
       items 1, 9, and 11 (amended 2026-08-31); a `sig-p256/1` evidence plug is now permitted in
       `chiproof` (candidate name only — no `Dn` assigned, "candidate decision, Dn pending").
       1. **`sig-p256/1` chiproof plug** — hardware-backed (StrongBox/TEE), biometric-bindable

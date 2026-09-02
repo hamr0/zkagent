@@ -262,7 +262,7 @@ rely on the raw captures surviving.
 Docs index: `node ~/.claude/commands/docs-builder/docs-builder.cjs
 index-flat`.
 
-PRD: `docs/archive/zkagent-prd.md` v1.16.
+PRD: `docs/product/zkagent-prd.md` v1.16.
 
 Evidence docs: `docs/logs/M2-*.md` (`M2-CAPTURE.md`, `M2-CONFORMANCE.md`,
 `M2-EU-ZKP-SPIKE.md`, `M2-SCAN-EVIDENCE.md`).

@@ -52,7 +52,7 @@ it every time.
 
 Uncommitted:
 
-- `docs/archive/zkagent-prd.md` → v1.10 (draft): D24 recorded, D1 amended,
+- `docs/product/zkagent-prd.md` → v1.10 (draft): D24 recorded, D1 amended,
   D23 marked superseded, FR12 added, FR3/FR6 notes, the M1 row rewritten to
   point at the new spec doc, a Q24 note, Q25 added, version history updated.
 - `docs/product/m1-verifier-core-spec.md` (new, v0.2): eight sections —

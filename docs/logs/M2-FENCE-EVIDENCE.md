@@ -3,7 +3,7 @@
 **Status**: source record for an UNCOMMITTED working-tree change at the time of writing (new
 `LifecycleFence.kt`, new `LifecycleFenceTest.kt`, modified `MainActivity.kt`; the orchestrator
 commits after verifying this evidence doc, per the ownership-refactor process). This file is the
-evidence `.claude/remember/findings.md` #5's status update and `docs/archive/zkagent-prd.md`'s D57
+evidence `.claude/remember/findings.md` #5's status update and `docs/product/zkagent-prd.md`'s D57
 exit-criterion annotation cite; it mirrors `M2-D58-STEP1/2/3/4-EVIDENCE.md`'s structure and
 value-free rule.
 
@@ -157,14 +157,14 @@ question.
 1. **Finding #5 → FIXED, device-proven.** D57 exit criterion (2) ("every async writer is fenced
    against Activity lifecycle") is now MET. **The freeze does NOT lift**: criterion (3) ("no OPEN
    finding at consequence HIGH") is not met — findings #10/#11 remain open-but-mitigated. See
-   `.claude/remember/findings.md` #5's status update and `docs/archive/zkagent-prd.md` D57.
+   `.claude/remember/findings.md` #5's status update and `docs/product/zkagent-prd.md` D57.
 2. **New finding #16 — mint-report loss after Activity destruction.** Anchor `MainActivity.kt:2131`
    (T5 above). See `.claude/remember/findings.md` #16 for the full statement.
 3. **Q38 (log lifetime) — device-confirmed answer.** `ReportLog` survives Activity recreation via
    saved instance state; NOTHING survives process death — there is no disk persistence at all.
    Evidenced by the owner's own observation ("logs don't survive after I close the app") plus three
    process-id changes across this session (23196 → 24123 → 24361 → 24553). See
-   `docs/archive/zkagent-prd.md` §11 Q38's status update.
+   `docs/product/zkagent-prd.md` §11 Q38's status update.
 4. **New open question Q47 — input focus steals back to the document-number field.** While typing
    the date fields, the cursor jumps back to the document-number field, corrupting the entered MRZ.
    A CORRECTNESS defect, not a styling preference — it has a measured cost: it is the suspected
@@ -273,7 +273,7 @@ but is now superseded; criterion (2) **is MET now**, at 13 sites, only from `72e
 freeze does NOT lift** — criterion (3) remains unmet; findings #10/#11 remain open-but-mitigated.
 
 See `.claude/remember/findings.md` #5's matching status-change note for the full record, and
-`docs/archive/zkagent-prd.md` D57 for the PRD-level annotation.
+`docs/product/zkagent-prd.md` D57 for the PRD-level annotation.
 
 ---
 

@@ -34,7 +34,7 @@ edits were made this session — the v1.1 edits from the prior session are still
 
 ## Doc/repo state
 
-- `docs/archive/zkagent-prd.md` — still v1.1 from the prior session. **Still uncommitted.**
+- `docs/product/zkagent-prd.md` — still v1.1 from the prior session. **Still uncommitted.**
   Does **not** yet reflect the Android-first decision (D2, Q5, Q6 all still open/stale).
 - `CHANGELOG.md` — still has the prior session's `[Unreleased]` entry. **Still uncommitted.**
 - `.gitignore` — **created this session** (was absent). Ignores `.claude/settings.local.json`,

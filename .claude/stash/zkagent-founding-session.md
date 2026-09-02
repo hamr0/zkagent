@@ -32,7 +32,7 @@ The session ended with a concrete v1 scope (captcha-grade, no ZK circuits), a si
 - `README` — honest-limits-first framing, marked `[WIP]`.
 - `CHANGELOG` — keep-a-changelog format; `0.0.0` entry serves as name-reservation marker.
 - `LICENSE` — Apache-2.0.
-- `docs/archive/zkagent-prd.md` — PRD v1.0. Contains a NO-GO list (#1-10), including NO-GO #10, the scope gate: "no feature enters a milestone unless it is in the PRD first." Defines milestones M0-M5, each with its own evidence checkpoint.
+- `docs/product/zkagent-prd.md` — PRD v1.0. Contains a NO-GO list (#1-10), including NO-GO #10, the scope gate: "no feature enters a milestone unless it is in the PRD first." Defines milestones M0-M5, each with its own evidence checkpoint.
 - `docs/logs/future-digital.md` — "the collector" doc: findings F1-F9, parked ideas P1-P6, gaps G1-G4. Merged via PR #1; source branch deleted after merge.
 
 **Commits:** `35586b2` (initial), `58e7480` (context doc), `d3152bf` (merge).

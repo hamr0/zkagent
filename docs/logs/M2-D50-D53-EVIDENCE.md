@@ -2,7 +2,7 @@
 
 **Status**: source record only, written after the fact from two logs already on disk — the
 verifier's value-free transaction log and a device logcat capture. This file is the evidence
-`docs/archive/zkagent-prd.md` §10 D50, D51, D52, and D53 cite; those rows already narrate the
+`docs/product/zkagent-prd.md` §10 D50, D51, D52, and D53 cite; those rows already narrate the
 defects and the owner's decisions in full — this file exists so the underlying run data survives
 independently of the scratchpad it was produced in, and so a reader can check the PRD's claims
 against the source rather than trusting the prose alone.
