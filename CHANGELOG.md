@@ -5,6 +5,88 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **`apps/scanner` — D57 exit criterion (2) met: every async writer fenced
+  against the Activity lifecycle (commits `b8e0e05`, then `72e0b2c`), with
+  a completeness correction found by `/branch-review` recorded plainly, not
+  buried.** Before this pass the module had NO `onDestroy` override and no
+  lifecycle guard of any kind — `runOnUiThread` changes which thread code
+  runs on, not whether the Activity it touches is still alive. New pure
+  `LifecycleFence` (`alive`/`retire()`/`passes()`), held as a
+  per-Activity-INSTANCE field, retired in a new `onDestroy` — deliberately
+  not a singleton, since a shared fence retired by a dying instance would
+  permanently block the next one. Owner-decided semantics: a fence drops a
+  main-thread LANDING; it never cancels or aborts in-flight work — aborting
+  a `direct_post` already in flight would be worse than letting it complete
+  unobserved. Every drop and the retirement itself are logged (static,
+  zero-interpolation messages), because an unlogged drop is
+  indistinguishable from a crash — the same defect class as this project's
+  earlier un-logged `reportView.text` write. No new Gradle dependencies.
+  Unit tests 180 → 184.
+  **The completeness correction**: `b8e0e05` enumerated its fence targets
+  by grepping `runOnUiThread` (10 hits) plus `ReadTask.onPostExecute` and
+  claimed 11 fenced sites — WRONG IN SCOPE, because that enumeration was
+  syntactic, not by the actual hazard predicate. `/branch-review` found
+  `BiometricPrompt.AuthenticationCallback`, dispatched on the main executor,
+  unfenced: `onAuthenticationError` called `emitReport` then
+  `showBlockingOutcomeDialog`, which does `AlertDialog.Builder(this).show()`
+  against a possibly-destroyed Activity. Fixed in `72e0b2c` — **13 sites,
+  not 11**; the same guard added to `onAuthenticationError` and, for
+  defence-in-depth, `onAuthenticationFailed` (placed after its existing
+  diagnostic log line so it never suppresses it). `onAuthenticationSucceeded`
+  is unchanged — it only starts a `Thread{}` whose landings were already
+  fenced. **Criterion (2) was NOT actually met between `b8e0e05` and
+  `72e0b2c`**; it IS met now, at 13 sites.
+  **Why the gap was reachable, bytecode-verified in `androidx.biometric`
+  1.1.0** (worth recording — it is counter-intuitive): a destroyed host is
+  *normally* never called back, because
+  `BiometricPrompt$ResetCallbackObserver.resetCallback()` is annotated
+  `@OnLifecycleEvent(ON_DESTROY)` and nulls
+  `BiometricViewModel.mClientCallback`, after which `getClientCallback()`
+  substitutes a no-op default. BUT `addObservers()` is invoked ONLY from the
+  library's two `Fragment` constructors; both `FragmentActivity`
+  constructors call neither `addObservers` nor `getLifecycle`. `MainActivity`
+  is an `AppCompatActivity` using the `FragmentActivity` overload, so that
+  protection is not active here — the safe behaviour exists and is one
+  constructor overload away from being true.
+  **Device evidence** (Pixel 6a, real NL ID card, `spikes/m2-handoff`
+  verifier): six tests. Three verifier-cross-checked happy-path mints; a
+  singleton-trap test proving `LifecycleFence` is constructed fresh per
+  Activity instance — a property no unit test can give — via two in-process
+  Activity recreations followed by a clean mint on the third instance with
+  zero drops; a mid-verification drop; a mid-read drop with no mint and no
+  stranded UI; and a mid-mint drop. **Limitations stated, not softened**:
+  the mid-verification and mid-mint drop windows were reachable only via an
+  artificial test-harness delay proxy (app and verifier both unmodified;
+  natural windows ~12-28ms on localhost), and the `72e0b2c` biometric fix
+  has NO device evidence at all — code/bytecode-verified only. Full record:
+  `docs/logs/M2-FENCE-EVIDENCE.md`.
+  **New finding #16, open by owner decision, not an oversight**: a
+  completed delivery whose Activity died before `direct_post` resolved
+  still posts — the verifier records a full tier-B verdict — while the
+  report and confirmation dialog are dropped, so nothing is written to
+  `ReportLog` and nothing is shown to the user. Render-only fencing did NOT
+  create this loss: unfenced, the report would have landed in the dead
+  instance's `ReportLog`, which is never restored to a later instance
+  anyway — the fence turned a silent, accidental loss into an explicit,
+  logged one. A disclosure question for the owner, not a bug left undone.
+  **Q38 answered by device evidence, not decided**: `ReportLog` survives
+  Activity recreation via saved instance state; nothing survives process
+  death. **Q47/Q48 opened**: input focus steals back to the document-number
+  field while typing date fields, corrupting entered MRZ (suspected — not
+  confirmed — cause of one run's `SW 0x6985` access-establishment failure);
+  and the three installed reader apps are indistinguishable on the
+  launcher (only `com.zkagent.scanner` declares the `av://` VIEW filter,
+  so intent routing is deterministic on this device — a
+  human-identification problem, not a security one; does not bear on
+  findings #10/#11).
+  **D60 — branch close-out.** The D57 freeze is CARRIED FORWARD, not lifted
+  and not abandoned: clearing it is the FIRST work item of the next module,
+  ahead of that module's own work. Exit criteria (1) and (2) are met;
+  criterion (3) is not — findings #10 and #11 remain OPEN at consequence
+  HIGH, mitigated (commit `730ef09`) not closed, and are the entire reason
+  the freeze does not lift. This is a deferral, not a lift: no new §6.2
+  item, enhancement, or UX change lands while D57 stands, and every UI item
+  already deferred under D57 (Q43-Q48) stays deferred.
 - **`spikes/m2-handoff` — real-device scope-domain bug found and fixed
   (D37), plus the test-suite blind spot that let it pass — 23/23 spike
   tests, 191/191 chiproof tests.** A live Pixel 6a mode-B run returned
