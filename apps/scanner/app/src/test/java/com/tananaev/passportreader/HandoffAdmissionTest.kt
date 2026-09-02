@@ -63,4 +63,38 @@ class HandoffAdmissionTest {
     fun `refuses when both locked and reading`() {
         assertFalse(HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = true, readInProgress = true))
     }
+
+    /**
+     * Finding #6 (`.claude/remember/findings.md`) FIX — the NFC tag-intent
+     * branch of `MainActivity.handleIncomingIntent` checked `lockedMode != null`
+     * and non-empty MRZ fields but never `paneState.readInProgress`, so a tag
+     * intent arriving while a read was already in flight was not excluded.
+     * [HandoffAdmission.mayStartTagRead] is that branch's admission decision,
+     * extracted to a pure predicate — same pattern as
+     * [mayAdmitInboundHandoff] above. Its polarity is the OPPOSITE of
+     * [mayAdmitInboundHandoff]'s `sessionLocked` term: a tag read REQUIRES a
+     * locked session (that is what supplies `mode`/`snapshot`), so
+     * [mayAdmitInboundHandoff]'s predicate is the wrong one to reuse here —
+     * see that function's own doc, which flags this branch as a separate,
+     * then-open item.
+     */
+    @Test
+    fun `admits a tag read when the session is locked and no read is in flight`() {
+        assertTrue(HandoffAdmission.mayStartTagRead(sessionLocked = true, readInProgress = false))
+    }
+
+    @Test
+    fun `refuses a tag read when the session is not locked`() {
+        assertFalse(HandoffAdmission.mayStartTagRead(sessionLocked = false, readInProgress = false))
+    }
+
+    @Test
+    fun `refuses a tag read while a read is already in progress, even if locked`() {
+        assertFalse(HandoffAdmission.mayStartTagRead(sessionLocked = true, readInProgress = true))
+    }
+
+    @Test
+    fun `refuses a tag read when neither locked nor in progress`() {
+        assertFalse(HandoffAdmission.mayStartTagRead(sessionLocked = false, readInProgress = true))
+    }
 }

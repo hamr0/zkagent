@@ -71,4 +71,32 @@ object HandoffAdmission {
      */
     fun mayAdmitInboundHandoff(sessionLocked: Boolean, readInProgress: Boolean): Boolean =
         !sessionLocked && !readInProgress
+
+    /**
+     * Finding #6 (`.claude/remember/findings.md`) FIX — the NFC tag-intent
+     * branch of `MainActivity.handleIncomingIntent` checked `lockedMode !=
+     * null` and non-empty MRZ fields, but never `paneState.readInProgress`,
+     * so a tag intent arriving while a read was already in flight was not
+     * excluded. This is that branch's admission decision, extracted to a
+     * pure predicate — same pattern as [mayAdmitInboundHandoff].
+     *
+     * Deliberately kept in this object rather than a new one: both
+     * predicates gate the same two source fields (`lockedMode != null`,
+     * `paneState.readInProgress`) for the two intent branches of the same
+     * function, so grouping them keeps that shared vocabulary in one place.
+     * Its polarity is the OPPOSITE of [mayAdmitInboundHandoff]'s
+     * `sessionLocked` term, though: a tag read REQUIRES a locked session —
+     * `mode`/`snapshot` come from it — so [mayAdmitInboundHandoff]'s
+     * predicate is the wrong one to reuse here (that function's own doc
+     * flagged this branch as a separate, then-open item).
+     *
+     * @param sessionLocked `MainActivity.lockedMode != null`.
+     * @param readInProgress `MainActivity.paneState.readInProgress` — a chip
+     *   read is literally in flight (inside `ReadTask`'s background thread).
+     * @return `true` (admit — start the read) only when the session is
+     *   locked AND no read is already in progress; `false` (refuse)
+     *   otherwise.
+     */
+    fun mayStartTagRead(sessionLocked: Boolean, readInProgress: Boolean): Boolean =
+        sessionLocked && !readInProgress
 }
