@@ -197,14 +197,26 @@ this is flagged in the report back to the caller.
   DEFERRED, open shape only, no wording decided. (zkagent-prd.md:2154-2160)
 - **Q46 (opened 2026-09-02, deferred under D57 — label CORRECTNESS defect, not a
   styling preference)** — The MRZ input field is labelled "Passport number," which
-  is factually wrong since the app also reads ID cards. Status: DEFERRED to the
-  same UI pass as Q43-Q45/Q47/Q48 despite being a correctness defect, per D57's
-  freeze on the shared scan-form surface. (zkagent-prd.md:2162-2168)
+  is factually wrong since the app also reads ID cards. Status: **FIXED in
+  `d4653b9`** — `strings.xml` `input_passport_number` now reads "Document number"
+  (resource id and `passportNumberView` field name unchanged on purpose); worked as
+  a fix rather than left deferred, per owner direction 2026-09-02 that Q46/Q47 be
+  worked now despite the earlier D57 UI-pass deferral. No device evidence — no
+  device attached this session. (zkagent-prd.md:2162-2168)
 - **Q47 (opened 2026-09-02, deferred under D57 — input-focus CORRECTNESS defect,
   not a styling preference)** — Typing in the date fields steals focus back to the
-  document-number field, corrupting entered MRZ data. Status: DEFERRED — suspected
-  (not confirmed) cause of one destroyed T5 fence-test run; no root-cause isolation
-  performed. Evidence: `docs/logs/M2-FENCE-EVIDENCE.md`. (zkagent-prd.md:2170-2179)
+  document-number field, corrupting entered MRZ data. Status: **INVESTIGATED
+  2026-09-02, NOT FIXED** — root cause not isolable from source; every app-code
+  focus mechanism was traced and ruled out (see
+  `.claude/remember/findings.md` #17 for the full trace). Standing hypothesis
+  (unconfirmed): Android's own post-`DatePickerDialog` default focus restoration
+  landing on `input_passport_number`, the form's only touch-focusable field — a
+  framework mechanism, not app code, and needs a device repro to confirm. The
+  repro wording itself needs the owner's sharpening: `docs/logs/M2-FENCE-EVIDENCE.md`
+  ~:168 describes the symptom as occurring "while typing the date fields," but the
+  date fields have no typing path (tap-to-picker only). Evidence:
+  `docs/logs/M2-FENCE-EVIDENCE.md`; full record: `.claude/remember/findings.md` #17.
+  (zkagent-prd.md:2170-2179)
 - **Q48 (opened 2026-09-02, deferred under D57 — UI/UX ENHANCEMENT, human-ID only,
   not a security question)** — Three installed reader apps are indistinguishable on
   the launcher. Status: DEFERRED — verified NOT a security gap (`av://` routing

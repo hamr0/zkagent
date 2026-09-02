@@ -5,6 +5,41 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **`apps/scanner` — finding #6 residual (a) retired: mid-read tag-refusal
+  Snackbar removed by owner decision.** `57f5ddd` removes the mid-read
+  Snackbar and its `TAG_REFUSED_MID_READ_MESSAGE` constant from the NFC
+  branch of `handleIncomingIntent` — a refused mid-read tag is normally the
+  same physical card the user is already holding, so no user-facing message
+  is needed. The static `Log.w` line and the `HandoffAdmission.mayStartTagRead`
+  gate itself are unchanged and still fire. Tests 208, 0 failures. No device
+  evidence for the guard firing — none was attached this session.
+- **`apps/scanner` — finding #8 fully closed: `M0Probe.tryActiveAuth`'s
+  three-state decision extracted and unit-tested.** `840779c` extracts
+  `M0Probe.tryActiveAuth`'s DG15-absent/verified/failed three-state decision
+  to a pure `ChipAuthClassification.fromActiveAuth(...)`, closing the
+  narrower gap left open inside finding #8 after `651ecd5`. JMRTD I/O stays
+  inline; detail strings byte-identical. 5 new hand-written tests, added
+  TDD-style (compile-error red confirmed, then green). Tests 208 → 213, 0
+  failures.
+- **`apps/scanner` — Q46 fixed: MRZ input label corrected to "Document
+  number."** `d4653b9` changes `strings.xml` `input_passport_number` from
+  "Passport number" to "Document number" (owner's stated preference,
+  Q46) — resource id and `passportNumberView` field name unchanged on
+  purpose. Worked as a fix now, per owner direction 2026-09-02, rather than
+  left deferred to the shared UI pass. No device evidence.
+- **`apps/scanner` — Q47 investigated, not fixed: input-focus steal on the
+  document-number field.** Traced every app-code focus mechanism
+  (`requestFocus`, `TextWatcher`/`OnFocusChangeListener`/`clearFocus`, the
+  date fields' `DatePickerDialog` callbacks, `showPane`/`SessionDisplay`/
+  `PaneVisibility`) and ruled all of them out as the cause. Standing,
+  unconfirmed hypothesis: Android's own default post-dialog focus
+  restoration landing on `input_passport_number`, the form's only
+  touch-focusable field — a framework mechanism, not app code, requiring a
+  device repro to confirm or refute; none was performed this session. Also
+  flagged a wording discrepancy in the existing repro evidence
+  (`docs/logs/M2-FENCE-EVIDENCE.md`) for the owner to sharpen. See
+  `.claude/remember/findings.md` #17 for the full record.
+
 - **`apps/scanner` — finding #5 (fence): fix-ledger doc-drift bullet cleared.**
   `e13dab0` rewrites `LifecycleFence.kt`'s KDoc so its thread-safety proof no
   longer enumerates two syntactic forms (`runOnUiThread`, `onPostExecute`) as

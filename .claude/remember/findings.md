@@ -36,6 +36,11 @@ Note, 2026-09-02: the status-change notes added this session (under #4, #5, #6, 
 anchored at `c60354e` on `chore/memory-consolidation`, not at the `2cd1e00`/uncommitted-D55/D56
 state the sentence above describes — a DOCS reconciliation pass, no code touched.
 
+Note, 2026-09-02 (later): this session's further status-change notes (under #6, #8) and new entry
+#17 are anchored at `d4653b9` on `chore/memory-consolidation` — a DOCS tag session with no device
+attached; facts about `57f5ddd`/`840779c`/`d4653b9` were verified by the orchestrator from diffs and
+JUnit XML, not from a device run.
+
 ---
 
 ### 2026-09-02 — #1: TabLayout selection vs. `showPane()` race on rotation
@@ -297,6 +302,15 @@ state the sentence above describes — a DOCS reconciliation pass, no code touch
   session; a device test would lock a session, tap to start a read, then re-tap or fire a synthetic
   `ACTION_TECH_DISCOVERED` intent mid-read and confirm the new log line plus Snackbar with no second
   `startSession`.
+- Status update 2026-09-02 (`57f5ddd`, DOCS session, no device attached): the mid-read Snackbar and
+  its `TAG_REFUSED_MID_READ_MESSAGE` constant were **removed** from the NFC branch of
+  `handleIncomingIntent`, by owner decision — a refused mid-read tag is normally the same physical
+  card the user is already holding, so no user-facing message is needed. The static
+  `Log.w("M2 stage: ignoring tag intent — a read is already in progress")` and the
+  `HandoffAdmission.mayStartTagRead` gate itself are UNCHANGED and still fire. Tests 208, 0 failures
+  (message-only removal, no new test surface). This retires residual (a) above (Snackbar wording is
+  moot now that there is no Snackbar). Residual (b) — no device evidence for the guard firing — still
+  stands; still no device attached this session either.
 
 ### 2026-09-02 — #7: `reportView.text` written outside `emitReport`, contradicting its own KDoc
 
@@ -344,6 +358,13 @@ state the sentence above describes — a DOCS reconciliation pass, no code touch
   own. This is the second half of the same underlying defect (`M0Probe`'s AA-only three-state logic
   never got the same extraction `ReadTask`'s DG14/CA+AA logic just did) and belongs to whatever spawn
   next touches `M0Probe.kt`.
+- Status update 2026-09-02 (FIX, `840779c`, DOCS-session-adjacent code fix, no device attached):
+  **remaining gap CLOSED, finding fully FIXED-IN-651ecd5+840779c.** `M0Probe.tryActiveAuth`'s
+  three-state decision (DG15 absent → NOT_SUPPORTED; present and doAA verified → VERIFIED; present
+  and failed/threw → FAILED) extracted to a new pure `ChipAuthClassification.fromActiveAuth(...)`;
+  JMRTD I/O stays inline in `M0Probe`; detail strings byte-identical to before. 5 new hand-written
+  tests added TDD-style (compile-error red confirmed first, then green). Tests 208 → 213, 0 failures.
+  No device evidence for this change; none was available this session.
 
 ### 2026-09-02 — #9: `lockButton.isEnabled` — four writers, nothing reads it; joins the session and handoff clusters
 
@@ -727,3 +748,37 @@ state the sentence above describes — a DOCS reconciliation pass, no code touch
   the owner, adjacent to and overlapping Q38 (log lifetime). Device-proven both sides in
   `docs/logs/M2-FENCE-EVIDENCE.md` T5 (drop) and T1 (the same path succeeding normally when no
   recreation intervenes).
+
+### 2026-09-02 — #17: Q47 focus-steal — investigated, not fixed; root cause not isolable from source, needs device repro
+
+- **Source**: agent (owner-directed investigation of PRD Q46/Q47, worked as fixes per owner
+  direction 2026-09-02 that these two, previously deferred under D57 as correctness defects, be
+  worked now)
+- **Anchor**: `apps/scanner/app/src/main/res/layout/activity_main.xml` lines ~122 and ~139 (both
+  date-field `EditText`s, `android:focusableInTouchMode="false"`); `MainActivity.kt` ~:404-424 (date
+  field `OnClickListener`s opening a `DatePickerDialog`, whose callback only calls `setText`);
+  `strings.xml:5` (`input_passport_number`, the sole touch-focusable `EditText` on the form as of
+  `d4653b9`) @ `d4653b9`
+- **Finding**: this is a device-evidence question, not a code finding — no defect was located in
+  source. The coder traced the reported symptom (typing/interacting with the date fields steals
+  input focus back to the document-number field, corrupting entered MRZ data, per Q47) and, verified
+  by the orchestrator against the diff and the cited line ranges, **ruled out** every code-level
+  mechanism that could cause it: zero `requestFocus()` calls anywhere in the module; no
+  `TextWatcher`/`OnFocusChangeListener`/`clearFocus` calls anywhere; the two date fields are not
+  actually typeable (`focusableInTouchMode="false"`) — their only interaction is a tap that opens a
+  `DatePickerDialog`, whose dismiss callback does nothing but `setText` on the field itself, with no
+  focus call in that path; and `showPane`/`SessionDisplay.render`/`PaneVisibility`, the module's
+  other rendering/state-projection paths, are reachable only from lifecycle/tab/handoff/lock call
+  sites — never from date-field interaction, so none of those can be the mechanism either.
+  **Standing hypothesis, UNCONFIRMED**: `input_passport_number` is the only touch-focusable
+  `EditText` on the form, so after the `DatePickerDialog` dismisses, Android's own default focus
+  restoration (a framework mechanism, not app code) lands back on it — this would look exactly like
+  "focus steals back to document number" without any app-code cause, but nothing in this session
+  confirms it; it needs a real device repro to test. **Discrepancy for the owner**, flagged rather
+  than silently resolved one way: `docs/logs/M2-FENCE-EVIDENCE.md` ~:168 describes the symptom as the
+  cursor jumping "while typing the date fields," but the date fields have no typing path at all
+  (tap-to-picker only per the anchor above) — the repro wording needs sharpening (was the user typing
+  in the document-number field and got interrupted, or did focus move right after a picker closed?)
+  before the next spawn touches this file again.
+- **Status**: OPEN — needs device repro; not fixable from source alone. No device was attached this
+  session; nothing here should be read as device evidence.
