@@ -289,3 +289,32 @@ audit's own section for the full reasoning behind each row.
   emitReport (Log.e + Snackbar only; the approved Result-line string was deleted with it). The
   unbounded ReportLog.entries itself remains OPEN for the refactor (cap decision pending, touches
   D45).
+
+### 2026-09-02 — #14: `handoffStatus.text` — stale "verified/waiting" status survives a consumed or wiped session, misled the owner into two unintended mode-A scans
+
+- **Source**: owner device run 2026-09-02 09:05-09:07 (pid 13802), diagnosed by the orchestrator
+  from logcat + source; SHA `f602e12`
+- **Anchor**: `handoffStatus.text` written at `MainActivity.kt:643` (received), `:716` (verified —
+  "Handoff verified — origin: … Fill in your document details and lock to answer it."), `:744`
+  (refused) and NOWHERE ELSE. A successful mint consumes the session (`mintAndMaybeHandoff` nulls
+  `pendingHandoff`/`verifiedRequest`, ~:1681-1682) and the success dialog's OK calls
+  `wipeSession(false)`, but the status line is never rewritten, so after a mint the screen still
+  says the handoff is verified and waiting while no handoff exists.
+- **Finding**: **Classification: projection defect; belongs to D58 step 4 (Session projections
+  derived from state), NOT a standalone fix** — adding a fourth writer to `handoffStatus.text`
+  would be the pattern the refactor removes. **Observed:** 09:05:42 handoff verified
+  (127.0.0.1:8787) → 09:06:15 NL card minted (consumes it) → 09:07:02 and 09:07:14 the owner
+  scanned the US passport twice (one deliberate wrong-details BAC AccessDenied SW=0x6982, then a
+  correct read) WITHOUT re-opening a link, believing the handoff was still live because the status
+  line said so → both scans ran as mode A bare scans (D33: no verified handoff = mode A by
+  definition), correctly titled with the no-site label in the Log tab and `mint_gate: NOT MET —
+  evidence: [] (D27)`. Owner's report: "US wrong scan and right scan appear as local site header."
+  The header was right; the status line above it was stale. **Audit cross-ref:** (a) row for
+  `handoffStatus.text` (3 writers, LOW) — consequence should be re-rated MEDIUM: a stale projection
+  changed what the user did next. **Structure-proposal/critique note:** `handoffStatus.text`,
+  `lockButton.isEnabled`, `modeStatusView.text` are write-only projections that must be DERIVED
+  from session state and rendered, not written from three call sites — this is that finding
+  manifesting on device. **Related:** Q40 (Lock button reads as stuck after a failure) is the same
+  class — a projection nobody rewrites when the state it describes changes.
+- **Status**: OPEN, consequence MEDIUM (user misled about which site a scan answers; no wrong data
+  sent — the log entries were honest).
