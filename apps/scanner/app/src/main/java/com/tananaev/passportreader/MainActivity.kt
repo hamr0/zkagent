@@ -1798,6 +1798,25 @@ abstract class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    // FIX pass (findings.md #5, gap found by /branch-review): this
+                    // callback is dispatched via ContextCompat.getMainExecutor(this)
+                    // by BiometricFragment's error runnable, which does NOT go
+                    // through androidx.biometric's own ON_DESTROY protection —
+                    // that protection (BiometricViewModel.mClientCallback nulled
+                    // by an @OnLifecycleEvent observer) is only wired up by
+                    // addObservers(), which the library calls only from its
+                    // Fragment constructors, never from FragmentActivity's. A
+                    // destroyed MainActivity's callback therefore stays reachable
+                    // and this landing must be fenced like every other one — see
+                    // [LifecycleFence]'s class doc. Log.i, not Log.w: unlike
+                    // :2131, nothing has minted and no evidence has left the
+                    // device on this path, so a dropped landing here is routine,
+                    // not the "silent loss of already-sent evidence" case that
+                    // earns a warning.
+                    if (!fence.passes()) {
+                        Log.i(TAG, "M2 lifecycle: fence closed — dropped biometric prompt error outcome")
+                        return
+                    }
                     emitReport(
                         baseReport + "\nmint: REFUSED — biometric/device-credential error $errorCode: $errString\nverdict: PASS (read only, no mint)",
                         ReportLog.DisclosureSummary(
@@ -1813,7 +1832,23 @@ abstract class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onAuthenticationFailed() {
+                    // Existing diagnostic kept unconditional and first: it only
+                    // writes to logcat, touches no Activity-owned UI/state, and
+                    // stays true (and harmless to log) regardless of whether the
+                    // hosting Activity is still alive.
                     Log.i(TAG, "M2 stage: biometric match failed once, prompt remains open")
+                    // FIX pass (findings.md #5, gap found by /branch-review): this
+                    // override does no Activity-touching work today (see
+                    // onAuthenticationError above for why this callback is a real
+                    // main-thread landing on a destroyed Activity). The guard is
+                    // added here for symmetry/defence-in-depth only, placed AFTER
+                    // the log line so it never suppresses it, and so any future
+                    // edit that appends UI work below inherits the fence rather
+                    // than reintroducing this defect.
+                    if (!fence.passes()) {
+                        Log.i(TAG, "M2 lifecycle: fence closed — dropped biometric prompt failed-match continuation")
+                        return
+                    }
                 }
             },
         )
