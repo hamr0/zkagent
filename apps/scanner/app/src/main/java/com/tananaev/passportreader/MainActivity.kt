@@ -18,6 +18,7 @@
 package com.tananaev.passportreader
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -28,6 +29,7 @@ import android.os.AsyncTask
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -402,10 +404,23 @@ abstract class MainActivity : AppCompatActivity() {
         }
 
         expirationDateView.setOnClickListener {
+            // FIX (Q47 / findings.md #17): input_passport_number is the only
+            // touch-focusable EditText on this form, so once this date field
+            // (focusableInTouchMode="false") is tapped and the dialog below
+            // dismisses, Android's own default focus-restoration lands back
+            // on passportNumberView — there's no app-code requestFocus call
+            // anywhere, it's the framework picking the sole focusable
+            // candidate. Clearing focus/keyboard here (pre-dialog) and again
+            // in the positive-callback below (post-dialog) brackets both
+            // the moment the keyboard would otherwise linger under the
+            // dialog and the moment the framework would otherwise restore
+            // focus onto the passport-number field after dismiss.
+            clearPassportNumberFocusAndKeyboard()
             val c = loadDate(expirationDateView)
             val dialog = DatePickerDialog.newInstance(
                 { _, year, monthOfYear, dayOfMonth ->
                     expirationDateView.setText(String.format(Locale.US, "%d-%02d-%02d", year, monthOfYear + 1, dayOfMonth))
+                    clearPassportNumberFocusAndKeyboard()
                 },
                 c[Calendar.YEAR], c[Calendar.MONTH], c[Calendar.DAY_OF_MONTH],
             )
@@ -413,10 +428,14 @@ abstract class MainActivity : AppCompatActivity() {
             supportFragmentManager.beginTransaction().add(dialog, null).commit()
         }
         birthDateView.setOnClickListener {
+            // FIX (Q47 / findings.md #17): see identical note on
+            // expirationDateView's OnClickListener above.
+            clearPassportNumberFocusAndKeyboard()
             val c = loadDate(birthDateView)
             val dialog = DatePickerDialog.newInstance(
                 { _, year, monthOfYear, dayOfMonth ->
                     birthDateView.setText(String.format(Locale.US, "%d-%02d-%02d", year, monthOfYear + 1, dayOfMonth))
+                    clearPassportNumberFocusAndKeyboard()
                 },
                 c[Calendar.YEAR], c[Calendar.MONTH], c[Calendar.DAY_OF_MONTH],
             )
@@ -2329,6 +2348,19 @@ abstract class MainActivity : AppCompatActivity() {
         } catch (e: ParseException) {
             null
         }
+    }
+
+    /** FIX (Q47 / findings.md #17). Not extracted as a pure decision
+     * function/class — there is no branching/decision logic here to
+     * unit-test (it's an unconditional clearFocus + hideSoftInputFromWindow
+     * pair), and under this module's JVM-stub unit tests, View and
+     * InputMethodManager calls are non-functional no-ops
+     * (isReturnDefaultValues=true) — a test invoking this would exercise the
+     * stub, not real behavior, and would prove nothing. */
+    private fun clearPassportNumberFocusAndKeyboard() {
+        passportNumberView.clearFocus()
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.hideSoftInputFromWindow(passportNumberView.windowToken, 0)
     }
 
     private fun loadDate(editText: EditText): Calendar {

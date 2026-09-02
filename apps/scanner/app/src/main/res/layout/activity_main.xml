@@ -71,10 +71,24 @@
 
         </LinearLayout>
 
+        <!-- FIX (Q47 / findings.md #17): focusableInTouchMode is required
+             here, not optional. View.clearFocus() defaults refocus=true,
+             which calls the root view's requestFocus() to find a new
+             candidate; a ViewGroup's default descendant-focusability order
+             (FOCUS_BEFORE_DESCENDANTS) tries the container itself before
+             descending into children. Without this attribute, main_layout
+             is not a valid candidate, so that search descends straight to
+             input_passport_number — the only focusableInTouchMode="true"
+             EditText on the form — and re-focuses it immediately, silently
+             undoing MainActivity's clearFocus() call. Setting this here
+             gives the search a legitimate, harmless landing spot before it
+             ever reaches the EditText (focusableInTouchMode="true" also
+             implies android:focusable="true" per View's own XML parsing). -->
         <ScrollView
             android:id="@+id/main_layout"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:focusableInTouchMode="true">
 
             <LinearLayout
                 android:layout_width="match_parent"
