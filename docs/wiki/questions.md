@@ -159,11 +159,14 @@ this is flagged in the report back to the caller.
   way tier does, so nothing needs it earlier. Closes D48's threshold-from-request
   MUST. `over_threshold` remains unconditionally `true` (Q36, unchanged, out of
   scope). (zkagent-prd.md:1985-2017)
-- **Q36 (open, owner-flagged, descendant of Q33 part b)** — Compute a real
-  DOB-vs-threshold answer instead of asserting `true` unconditionally. Status:
-  OPEN — genuine open design work (where in the pipeline, UI treatment of a
-  `false` result, interaction with D28's date coarsening); nothing chosen.
-  (zkagent-prd.md:2019-2032)
+- **Q36 (descendant of Q33 part b)** — Compute a real DOB-vs-threshold answer
+  instead of asserting `true` unconditionally. Status: RESOLVED by D66 — build
+  in flight. The scanner computes the real over/under answer in-app, in a pure
+  class, at mint time, from the DG1 date of birth against the D28-coarsened
+  `current_date` with the Q35-sourced threshold; an under-threshold holder still
+  gets an honest `over_threshold:false` mint and handoff, and a blocking dialog
+  states the threshold was not met. Date of birth never enters the report, log,
+  or any screen. (zkagent-prd.md:2019-2032; decisions.md D66, owner 2026-09-03)
 - **Q37 (closed, resolved by implementation)** — Whether "consumed" vs. "expired"
   handoff sessions can be distinguished device-side without a verifier round-trip.
   Status: CLOSED 2026-09-01 — challenge expiry is reachable from the verified
@@ -177,16 +180,16 @@ this is flagged in the report back to the caller.
   is deferred to the next module's list, not designed here. Owner: "option A."
   Evidence: `docs/logs/M2-FENCE-EVIDENCE.md`, `.claude/remember/findings.md` #16.
   (owner, 2026-09-02)
-- **Q39 (opened 2026-09-02, deferred under D57)** — Whether an incoming handoff
-  intent should switch the visible tab. Status: DEFERRED under D57 — distinct from
-  the already-rejected D55 (auto-switch on read completion); blocked on the same
-  tab-state ownership seam as `.claude/remember/findings.md` #1.
+- **Q39 (opened 2026-09-02)** — Whether an incoming handoff intent should switch
+  the visible tab. Status: APPROVED into §6.2 item 17 (D67) — distinct from the
+  already-rejected D55 (auto-switch on read completion); the tab-state ownership
+  seam (`.claude/remember/findings.md` #1) that previously blocked this is closed.
   (zkagent-prd.md:2099-2111)
-- **Q40 (opened 2026-09-02, deferred under D57)** — The disabled Lock button after
-  an access-establishment failure reads as "stuck"; owner wants copy closer to
-  "Tap and scan." Status: PROVISIONAL — the ownership precondition
-  (`.claude/remember/findings.md` #9) is closed and the "Tap and scan" label
-  shipped, but pending explicit owner sign-off on the wording itself.
+- **Q40 (opened 2026-09-02)** — The disabled Lock button after an
+  access-establishment failure reads as "stuck"; owner wants copy closer to
+  "Tap and scan." Status: CLOSED (owner sign-off 2026-09-03) — the ownership
+  precondition (`.claude/remember/findings.md` #9) was already closed and the
+  "Tap and scan" label already shipped; the wording itself is now signed off.
   (zkagent-prd.md:2113-2132)
 - **Q41 (opened 2026-09-02, EXPLOITABLE, consequence HIGH, deferred under D57)** —
   The unguarded `av://` intent-handling path lets any on-device app hijack a
@@ -198,15 +201,16 @@ this is flagged in the report back to the caller.
   tell whose request they authorized. Status: MITIGATED, not closed — the prompt
   now renders the site (commit `730ef09`); remains OPEN for the full ownership
   fix. See `.claude/remember/findings.md` #11. (zkagent-prd.md:2136-2136)
-- **Q43 (opened 2026-09-02, deferred under D57 — UI/UX ENHANCEMENT, not a fix)** —
-  Collapse each ~20-line log entry by default, behind a toggle. Status: DEFERRED —
-  MUST NOT be built under the freeze; no design proposed. (zkagent-prd.md:2138-2144)
-- **Q44 (opened 2026-09-02, deferred under D57 — UI/UX ENHANCEMENT, not a fix)** —
-  Dim a completed run with ticked checkboxes to show it is done. Status: DEFERRED —
-  MUST NOT be built under the freeze. (zkagent-prd.md:2146-2152)
-- **Q45 (opened 2026-09-02, deferred under D57 — UI/UX ENHANCEMENT, not a fix)** —
-  A single control distinguishing a "verify" scan from a "scan local" one. Status:
-  DEFERRED, open shape only, no wording decided. (zkagent-prd.md:2154-2160)
+- **Q43 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — Collapse each
+  ~20-line log entry by default, behind a toggle. Status: APPROVED into §6.2
+  item 18 (D67). (zkagent-prd.md:2138-2144)
+- **Q44 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — Dim a completed
+  run with ticked checkboxes to show it is done. Status: APPROVED into §6.2
+  item 19 (D67). (zkagent-prd.md:2146-2152)
+- **Q45 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — A single control
+  distinguishing a "verify" scan from a "scan local" one. Status: APPROVED into
+  §6.2 item 20 (D67), open shape only — the coder proposes at build time, owner
+  approves. (zkagent-prd.md:2154-2160)
 - **Q46 (opened 2026-09-02, deferred under D57 — label CORRECTNESS defect, not a
   styling preference)** — The MRZ input field is labelled "Passport number," which
   is factually wrong since the app also reads ID cards. Status: **FIXED in
@@ -230,8 +234,9 @@ this is flagged in the report back to the caller.
   `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 1; prior investigation:
   `docs/logs/M2-FENCE-EVIDENCE.md`; full record: `.claude/remember/findings.md` #17.
   (zkagent-prd.md:2170-2179; owner, 2026-09-02/2026-09-03)
-- **Q48 (opened 2026-09-02, deferred under D57 — UI/UX ENHANCEMENT, human-ID only,
-  not a security question)** — Three installed reader apps are indistinguishable on
-  the launcher. Status: DEFERRED — verified NOT a security gap (`av://` routing
-  resolves deterministically to the scanner app); does not bear on Q41/Q42's
-  findings. (zkagent-prd.md:2181-2194)
+- **Q48 (opened 2026-09-02 — UI/UX ENHANCEMENT, human-ID only, not a security
+  question)** — Three installed reader apps are indistinguishable on the
+  launcher. Status: APPROVED into §6.2 item 21 (D67), open shape only — the
+  coder proposes an app label and icon at build time, owner approves. Verified
+  NOT a security gap (`av://` routing resolves deterministically to the scanner
+  app); does not bear on Q41/Q42's findings. (zkagent-prd.md:2181-2194)

@@ -5,6 +5,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs (D66/D67): Q36 resolved (real in-app age answer); Q39/Q40/Q43/Q44/Q45/Q48
+  ruled; exit-criteria row 1 corrected.** D66 resolves Q36 — the scanner will
+  compute a real over/under answer in-app, in a pure class, at mint time, from
+  the DG1 date of birth against the D28-coarsened `current_date` with the
+  Q35-sourced threshold; an under-threshold holder still gets an honest
+  `over_threshold:false` mint and handoff, and a blocking dialog states the
+  threshold was not met — build in flight, not yet implemented or
+  device-confirmed. D67 closes Q40 (owner sign-off on "Tap and scan") and
+  approves Q39/Q43/Q44/Q45/Q48 into `docs/wiki/milestones.md` §6.2 as five new
+  MUST-language, ENHANCEMENT-tagged items (17-21); Q45/Q48 leave wording/design
+  undecided by design ("coder proposes, owner approves" at build time). Also
+  corrected: the M2 exit-criteria table's row 1 previously implied the three
+  `M2-SCAN-EVIDENCE.md` checkpoints had been re-run on the real build — they
+  have not; the row now states spike evidence only (2026-08-31), device
+  session pending. Docs only, no code touched this session.
 - **Fix (Q35): scanner signs the verified request's threshold, never a
   hardcoded `18`.** `apps/scanner`'s `mintAndMaybeHandoff` previously signed
   `threshold = 18` unconditionally, ignoring whatever the verifier's request
