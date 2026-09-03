@@ -224,7 +224,14 @@ this is flagged in the report back to the caller.
   fix. See `.claude/remember/findings.md` #11. (zkagent-prd.md:2136-2136)
 - **Q43 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — Collapse each
   ~20-line log entry by default, behind a toggle. Status: APPROVED into §6.2
-  item 18 (D67). (zkagent-prd.md:2138-2144)
+  item 18 (D67). **BUILT-IN-`2837b9a`, device verification pending.**
+  `ReportLog` owns the collapsed/expanded state (a parallel `expandedFlags`
+  list, same index space as `entries`); `rendered()` shows the title line
+  only when collapsed, the unmodified full block when expanded — the
+  stored content (`entriesSnapshot()`) is never altered. A tap on an
+  entry's title line (`ClickableSpan`, `logView.movementMethod =
+  LinkMovementMethod`) toggles via `MainActivity.onLogEntryTapped`. 11 new
+  `ReportLogTest` cases. (zkagent-prd.md:2138-2144)
 - **Q44 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — Dim a completed
   run with ticked checkboxes to show it is done. Status: APPROVED into §6.2
   item 19 (D67). (zkagent-prd.md:2146-2152)

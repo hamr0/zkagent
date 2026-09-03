@@ -25,6 +25,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   test-verified only; device confirmation still pending. Implements Option A
   of the coder's Q48 proposal (owner-approved 2026-09-03). See Q48;
   decisions.md D67; milestones.md §6.2 item 21.
+- **Feature (§6.2 item 18, D67/Q43): log entries collapsed by default,
+  per-entry toggle.** `ReportLog` owns a new parallel `expandedFlags` list
+  (same index space as `entries`), collapsed (`false`) by default for every
+  newly-added entry and kept in lockstep through append/replace/evict/
+  clear/restore; `rendered()` shows a collapsed entry's title line only
+  and an expanded one's unmodified full block — `entriesSnapshot()`, the
+  stored/persisted content, is never touched, matching item 18's "content
+  unchanged" MUST. `MainActivity` wires a `ClickableSpan` over each
+  title line (`logView.movementMethod = LinkMovementMethod.getInstance()`)
+  through a new `onLogEntryTapped`/`refreshLogView` pair; expand state
+  persists across Activity recreation via a new `STATE_LOG_EXPANDED`
+  Bundle key. A replaced (pending -> terminal) entry keeps its prior
+  expand state — design choice, flagged for owner review. 11 new
+  `ReportLogTest` cases. Built, device verification pending. Commit
+  `2837b9a`.
 - **Feature (§6.2 item 17, D67/Q39): incoming handoff intent switches to the
   Scan pane.** `PaneState.onIncomingHandoffIntent(admitted: Boolean)` is a
   new writer on the same single owner of the tab index (finding #1, D58 step
