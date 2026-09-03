@@ -195,9 +195,22 @@ this is flagged in the report back to the caller.
   deferred to the next module's list at close; **promoted into §6.2 item 23
   (D70(b), 2026-09-03)** — the value-free log now MUST persist under the D59 cap
   with a "Clear log" control, but this does not change the accept-and-disclose
-  answer for the in-flight-mint-loss case itself. Owner: "option A," then (D70)
-  the persistence promotion from the device session. Evidence:
-  `docs/logs/M2-FENCE-EVIDENCE.md`, `.claude/remember/findings.md` #16. (owner,
+  answer for the in-flight-mint-loss case itself. Status: BUILT, device
+  verification pending. `ReportLogStore` (new, pure, Android-free) serializes
+  `ReportLog`'s entries/expanded/terminal/outcome state to a single JSON file
+  in `filesDir`, written atomically (temp file + rename) on every entry
+  append/replace/toggle; D59's cap is re-enforced on load. Loaded in
+  `onCreate` before first render — the existing `onSaveInstanceState` Bundle
+  path is kept as the fast/authoritative path for an in-process recreation
+  (it always wins when present), disk is the durable path for a cold start.
+  No MRZ/zktag/nonce/key material is threaded through it (item 6 unchanged).
+  A new "Clear log" button empties memory + disk and logs
+  `M2 stage: log cleared by user (entries=<n>)`. 10 new `ReportLogStoreTest`
+  cases. This does NOT change the in-flight-mint-loss case (finding #16):
+  the loss happens before any outcome is known to write a log entry at all.
+  Owner: "option A," then (D70) the persistence promotion from the device
+  session. Evidence: `docs/logs/M2-FENCE-EVIDENCE.md`,
+  `.claude/remember/findings.md` #16. (owner,
   2026-09-02; 2026-09-03)
 - **Q39 (opened 2026-09-02)** — Whether an incoming handoff intent should switch
   the visible tab. Status: APPROVED into §6.2 item 17 (D67) — distinct from the

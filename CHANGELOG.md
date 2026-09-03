@@ -60,21 +60,49 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   `versionName='0.2.0'`, and the built commit's short SHA is present,
   verbatim, in the APK's `classes3.dex`. Unit tests 570 → 576 (285×2 →
   288×2), 0 failures.
+- **Feature (§6.2 item 22, D70(a)): outcome glyph on collapsed log entries,
+  built.** Each `ReportLog` entry now carries a new `Outcome` enum
+  ({PENDING, PASS, FAIL}), set at the same single write site
+  ([ReportLog.append]) that already sets `terminalFlags`, classified by
+  `MainActivity` from types it already has (`DeliveryResult`,
+  `M0Probe.Verdict.ok`, each diagnostic probe's own `failed` boolean) —
+  never parsed from the report string. Rendered as a fixed Unicode prefix
+  ("✓ "/"✗ "/"… ") on the entry's title line, baked into the stored text so
+  both the collapsed and expanded views show it identically. The PASS/FAIL
+  rule (e.g. an honest under-threshold refusal is FAIL, not PASS) is
+  documented in `ReportLog.Outcome`'s own KDoc as owner-overturnable. 11 new
+  `ReportLogTest` cases. See milestones.md item 22; questions.md Q43/Q44.
+- **Feature (§6.2 item 23, D70(b)): value-free log persisted in app-private
+  storage; "Clear log" control, built.** `ReportLogStore` (new, pure,
+  Android-free) serializes/deserializes `ReportLog`'s entries/expanded/
+  terminal/outcome state to a single JSON file in `filesDir`, written
+  atomically (temp file + rename) on every entry append/replace/toggle;
+  D59's 20-entry cap is enforced again on load. Loaded in `onCreate` before
+  first render, with the existing `onSaveInstanceState` Bundle path kept as
+  the fast/authoritative path for an in-process Activity recreation (it
+  always wins when present) — disk is the durable path for a cold start
+  after process death. No MRZ/zktag/nonce/key material is ever threaded
+  through the new persistence code (item 6 unchanged: `wipeSession` never
+  calls it). A new "Clear log" button empties both memory and disk and logs
+  `M2 stage: log cleared by user (entries=<n>)`. 10 new `ReportLogStoreTest`
+  cases (round-trip, corrupt-file recovery, cap-on-load). See milestones.md
+  item 23; questions.md Q38.
 - **Docs (D70): three new §6.2 ENHANCEMENT items recorded from the 2026-09-03
   device session, before build (scope gate, NO-GO #10).** Item 22: a
   pass/fail/pending glyph on each collapsed log entry's title line, derived
   from item 19's existing terminal-outcome state (no new state, no document
-  data). Item 23: the value-free per-scan log (item 16) must persist across
-  process death/app restart in app-private storage, subject to the D59
-  20-entry cap, with a "Clear log" control — promoting D64's deferred Option
-  B; the in-flight-mint-loss case (finding #16/Q38) stays "accept and
-  disclose," unchanged by persistence. Item 24: the scan pane and each log
-  entry's `▸ technical:` line must show `versionName` plus the short git SHA
-  the build came from, after the device's three reader apps (M0 spike, M2
+  data) — **now built, see above.** Item 23: the value-free per-scan log
+  (item 16) must persist across process death/app restart in app-private
+  storage, subject to the D59 20-entry cap, with a "Clear log" control —
+  promoting D64's deferred Option B; the in-flight-mint-loss case (finding
+  #16/Q38) stays "accept and disclose," unchanged by persistence — **now
+  built, see above.** Item 24: the scan pane and each log entry's
+  `▸ technical:` line must show `versionName` plus the short git SHA the
+  build came from, after the device's three reader apps (M0 spike, M2
   session POC, scanner) proved indistinguishable by version; only the
-  scanner resolves `av://`, so link routing was never at risk. None of the
-  three is built yet. See decisions.md D70; milestones.md §6.2 items 22–24;
-  questions.md Q38/Q43/Q44.
+  scanner resolves `av://`, so link routing was never at risk. Not yet
+  built. See decisions.md D70; milestones.md §6.2 items 22–24; questions.md
+  Q38/Q43/Q44.
 - **Docs: new finding #19 — two live `RegularActivity` instances across two
   tasks, unlocked `TECH_DISCOVERED` starts blocked by Android's
   background-activity-launch hardening.** One instance from Chrome's task,

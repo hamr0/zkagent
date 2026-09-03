@@ -57,6 +57,7 @@ import org.jmrtd.lds.SecurityInfo
 import org.jmrtd.lds.icao.DG1File
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.net.URI
 import java.security.SecureRandom
 import java.security.Signature
@@ -282,6 +283,8 @@ abstract class MainActivity : AppCompatActivity() {
     private lateinit var loadingLayout: View
     private lateinit var reportView: TextView
     private lateinit var logView: TextView
+    // §6.2 item 23 (D70(b)) — see [clearLog]'s doc.
+    private lateinit var clearLogButton: Button
     private lateinit var handoffStatus: TextView
     private lateinit var handoffManualInput: EditText
 
@@ -317,6 +320,9 @@ abstract class MainActivity : AppCompatActivity() {
         // all toggle/collapse STATE lives in [reportLog] (see
         // [onLogEntryTapped]/[refreshLogView]).
         logView.movementMethod = LinkMovementMethod.getInstance()
+        // §6.2 item 23 (D70(b)) — see [clearLog]'s doc.
+        clearLogButton = findViewById(R.id.button_clear_log)
+        clearLogButton.setOnClickListener { clearLog() }
         handoffStatus = findViewById(R.id.handoff_status)
         handoffManualInput = findViewById(R.id.handoff_manual_input)
         // §6.2 item 24 (D70(c)) — one-line, write-once stamp; not part of
@@ -339,6 +345,14 @@ abstract class MainActivity : AppCompatActivity() {
 
         // No SharedPreferences/DataStore read or write anywhere in this
         // activity — MRZ fields start empty every launch (NO-GO #9).
+
+        // §6.2 item 23 (D70(b)): the DURABLE path — a cold start after
+        // process death, where no Bundle exists at all. MUST run BEFORE
+        // [restoreReport] below: [restoreReport]'s Bundle fast path (an
+        // Activity recreation within the same process) unconditionally
+        // overwrites whatever this loads whenever it has data, which is
+        // exactly the documented precedence — see [loadPersistedLog]'s doc.
+        loadPersistedLog()
 
         // D58 step 1 (finding #7): restores the report/log cluster across
         // an Activity re-creation (config change / background memory
@@ -1166,6 +1180,10 @@ abstract class MainActivity : AppCompatActivity() {
         reportLog.append(text, summary, attemptId = attemptId, pending = pending, outcome = outcome)
         reportView.text = reportLog.lastText
         refreshLogView()
+        // §6.2 item 23 (D70(b)): durable on EVERY append/replace — see
+        // [persistLog]'s doc for why this is a synchronous, best-effort
+        // write rather than a background task.
+        persistLog()
         Log.i(TAG, "\n===== M2 REPORT (value-free) =====\n$text\n===== END =====")
     }
 
@@ -1191,6 +1209,9 @@ abstract class MainActivity : AppCompatActivity() {
     private fun onLogEntryTapped(displayIndex: Int) {
         reportLog.toggleExpandedAtDisplayIndex(displayIndex)
         refreshLogView()
+        // §6.2 item 23 (D70(b)): the expand/collapse toggle is one of the
+        // three mutation events (append/replace/toggle) that must persist.
+        persistLog()
     }
 
     /** §6.2 item 19 (D67, Q44) — the ARGB color [ReportLog.rendered] dims a
@@ -1238,6 +1259,93 @@ abstract class MainActivity : AppCompatActivity() {
         if (text != null) reportView.text = reportLog.lastText
         if (entries != null) refreshLogView()
         Log.i(TAG, "M2 stage: restored report/log across Activity recreation (text=${text != null}, log_entries=${entries?.size ?: 0})")
+    }
+
+    /** §6.2 item 23 (D70(b)) — the durable sibling of [restoreReport]'s
+     * in-memory Bundle path. **Precedence:** [restoreReport] (the Bundle
+     * fast path, an Activity recreation within the same app process — see
+     * its own doc) always wins when it has data, because it is called
+     * AFTER this function in `onCreate` and unconditionally overwrites
+     * whatever this function just loaded. This function's OWN job is the
+     * case [restoreReport] cannot help with — a COLD START after process
+     * death, where no Bundle exists at all. Read failures (missing file,
+     * corrupt JSON) never crash startup — [ReportLogStore.fromJson] already
+     * returns an empty snapshot and logs its own `Log.w`; this function
+     * just renders whatever it gets back, empty or not. */
+    private fun loadPersistedLog() {
+        val file = logStoreFile()
+        if (!file.exists()) return
+        val json = try {
+            file.readText()
+        } catch (e: Exception) {
+            Log.w(TAG, "M2 stage: could not read persisted log file — starting with an empty log (${e.javaClass.simpleName}: ${e.message})")
+            return
+        }
+        val snapshot = ReportLogStore.fromJson(json)
+        if (snapshot.entries.isEmpty() && snapshot.lastText == null) return
+        reportLog.restore(snapshot.entries, lastText = snapshot.lastText, expanded = snapshot.expanded, terminal = snapshot.terminal, outcomes = snapshot.outcomes)
+        reportView.text = reportLog.lastText
+        refreshLogView()
+        Log.i(TAG, "M2 stage: loaded persisted log from disk (entries=${snapshot.entries.size})")
+    }
+
+    /** §6.2 item 23 (D70(b)) — the durable path: called on every entry
+     * append/replace/toggle (see [emitReport]/[onLogEntryTapped]) and on
+     * [clearLog]. Synchronous, on the caller's own thread (main thread for
+     * every real call site above): the persisted payload is small (D59
+     * caps it at 20 entries, ~400-900 bytes each per [ReportLog.MAX_ENTRIES]'s
+     * own doc — on the order of 8-18KB), so a synchronous write here is the
+     * same order of cost as the `Log.i` call already made at every one of
+     * these sites, not a new source of jank. Atomic temp-file-then-rename:
+     * a write interrupted mid-flight (process killed, storage full) leaves
+     * either the OLD file intact or the NEW one complete — never a
+     * half-written file for [loadPersistedLog] to trip over. Best-effort:
+     * any I/O failure is logged and swallowed — a failed persist must never
+     * crash a scan that has already completed and already rendered.
+     *
+     * Value-free by construction (item 5/D46, item 6 unchanged): the
+     * [ReportLogStore.Snapshot] this builds is exactly
+     * [reportLog]'s own [ReportLog.entriesSnapshot]/[ReportLog.expandedSnapshot]/
+     * [ReportLog.terminalSnapshot]/[ReportLog.outcomesSnapshot]/[ReportLog.lastText]
+     * — the SAME four lists/value [onSaveInstanceState] already puts in the
+     * Bundle, nothing more. No MRZ, zktag, nonce, or key material is ever
+     * threaded through this function; item 6 (session state wiped in
+     * `onStop`) is untouched — `wipeSession` never calls this. */
+    private fun persistLog() {
+        val snapshot = ReportLogStore.Snapshot(
+            entries = reportLog.entriesSnapshot(),
+            expanded = reportLog.expandedSnapshot(),
+            terminal = reportLog.terminalSnapshot(),
+            outcomes = reportLog.outcomesSnapshot(),
+            lastText = reportLog.lastText,
+        )
+        try {
+            val json = ReportLogStore.toJson(snapshot)
+            val target = logStoreFile()
+            val tmp = File(target.parentFile, "${target.name}.tmp")
+            tmp.writeText(json)
+            if (!tmp.renameTo(target)) {
+                Log.w(TAG, "M2 stage: atomic rename of persisted log file failed — disk state may be stale until the next successful persist")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "M2 stage: could not persist log to disk (${e.javaClass.simpleName}: ${e.message})")
+        }
+    }
+
+    private fun logStoreFile(): File = File(filesDir, LOG_STORE_FILENAME)
+
+    /** §6.2 item 23 (D70(b)) — the "Clear log" control's handler: empties
+     * BOTH memory ([ReportLog.clear]) and disk ([persistLog], which writes
+     * the now-empty snapshot), then logs the exact line the item requires,
+     * with the entry count from BEFORE clearing so the log line still says
+     * something about what was cleared. */
+    private fun clearLog() {
+        val entryCount = reportLog.entriesSnapshot().size
+        reportLog.clear()
+        reportView.text = reportLog.lastText
+        refreshLogView()
+        persistLog()
+        Log.i(TAG, "M2 stage: log cleared by user (entries=$entryCount)")
     }
 
     /** §6.2 item 16 (2026-09-01, second real-device fix — "one point bigger,
@@ -2716,6 +2824,10 @@ abstract class MainActivity : AppCompatActivity() {
         // as enum NAMEs (StringArrayList; Bundle has no native enum-array
         // type), see [ReportLog.outcomesSnapshot]'s doc.
         private const val STATE_LOG_OUTCOMES = "m2_log_outcomes"
+        // §6.2 item 23 (D70(b)): app-private storage filename for the
+        // durable log — see [persistLog]'s doc. Not a shared-prefs key: a
+        // single JSON file, per that function's own storage-choice note.
+        private const val LOG_STORE_FILENAME = "m2_report_log.json"
         // §6.2 item 19 (D67, Q44): fraction of [logView]'s own configured
         // text alpha a terminal entry is dimmed to — see
         // [dimmedLogEntryColor]'s doc for why this is a fraction of the

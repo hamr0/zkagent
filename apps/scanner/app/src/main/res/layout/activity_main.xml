@@ -282,18 +282,37 @@
             android:layout_height="wrap_content"
             android:visibility="gone">
 
-            <TextView
-                android:id="@+id/log_view"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingLeft="@dimen/activity_horizontal_margin"
-                android:paddingRight="@dimen/activity_horizontal_margin"
-                android:paddingTop="@dimen/activity_vertical_margin"
-                android:paddingBottom="@dimen/activity_vertical_margin"
-                android:fontFamily="monospace"
-                android:textIsSelectable="true"
-                android:textSize="12sp"
-                android:text="" />
+                android:orientation="vertical">
+
+                <!-- §6.2 item 23 (D70(b)) — empties the persisted, value-free
+                     log (memory + disk); see MainActivity.clearLog(). -->
+                <Button
+                    android:id="@+id/button_clear_log"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:paddingLeft="@dimen/activity_horizontal_margin"
+                    android:paddingRight="@dimen/activity_horizontal_margin"
+                    android:text="@string/button_clear_log" />
+
+                <TextView
+                    android:id="@+id/log_view"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingLeft="@dimen/activity_horizontal_margin"
+                    android:paddingRight="@dimen/activity_horizontal_margin"
+                    android:paddingTop="@dimen/activity_vertical_margin"
+                    android:paddingBottom="@dimen/activity_vertical_margin"
+                    android:fontFamily="monospace"
+                    android:textIsSelectable="true"
+                    android:textSize="12sp"
+                    android:text="" />
+
+            </LinearLayout>
 
         </ScrollView>
 

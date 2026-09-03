@@ -24,6 +24,9 @@
     <string name="button_lock_and_scan">Scan</string>
     <string name="button_masterlist_probe">Run masterlist checks (no tap needed)</string>
     <string name="button_devicekey_probe">Run device key self-test (no tap needed)</string>
+    <!-- §6.2 item 23 (D70(b)) — empties the persisted, value-free log
+         (memory + disk); see MainActivity.clearLog(). -->
+    <string name="button_clear_log">Clear log</string>
 
     <!-- Finding #11 (.claude/remember/findings.md) FIX, provisional pending owner approval:
          names the verified requesting site in the prompt's most visible line — see
