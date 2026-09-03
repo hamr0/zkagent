@@ -7,7 +7,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 - Freeze lifted (D65).
 - **Device session 2026-09-03 clears the D57/D60 freeze's remaining verification-debt
-  items; lift ruling still pending owner.** Verified on the Pixel 6a: Q47's
+  items; the lift was ruled the same day, see D65 above.** Verified on the Pixel 6a: Q47's
   input-focus fix (`0b71957`) confirmed by owner eye ("cursor fixed"); D63's
   portrait lock (`d406f4b`) confirmed under both auto-rotate settings; the
   `BiometricPrompt` fence (finding #5/#16, D64 Option A) reproduced live —
