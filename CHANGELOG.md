@@ -29,6 +29,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   violation — two instances hold independent handoff/session state.
   Proposed fix `android:launchMode="singleTask"`, owner ruling pending. See
   `.claude/remember/findings.md` #19.
+- **Fix (`.claude/remember/findings.md` #20): `apps/scanner`'s `lockModeAndArm` early-exit
+  guards are now logged; incomplete fields raise a blocking dialog.** Device-found 2026-09-03:
+  tapping "Verify" with an incomplete document number/date of birth/expiry (or while a pending
+  handoff's request was still verifying) showed a Snackbar with no matching `Log` call, making a
+  real, completed guard indistinguishable from a hang. A new pure predicate,
+  `LockPrecondition.evaluate` (`LockPrecondition.kt`, 8 unit tests), classifies the two conditions;
+  the incomplete-fields case now shows `showBlockingOutcomeDialog` with a plain-language message and
+  `Log.w` (field-presence booleans only, never values), using `isAccessEstablishmentFailure = true`
+  so dismissal does not clear a legitimate pending handoff or wipe the MRZ fields already typed
+  (finding #12's rule against a dismissal destroying in-flight state as a side effect). The
+  still-verifying case stays a Snackbar with a new `Log.i`. A full audit of every other
+  `Snackbar`/`showBlockingOutcomeDialog` call site in `MainActivity.kt` found each already paired
+  with a log line. Tests 285 → 293 (×2 build variants = 570 → 586), 0 failures. No device
+  confirmation yet — source- and unit-test-verified only.
 - **Fix (D69): `apps/scanner`'s in-app Google Code Scanner is removed
   entirely — the QR route is a camera-app + `av://` app link, with no
   scanner dependency of any kind.** Same-day reversal of the previous

@@ -926,3 +926,37 @@ JUnit XML, not from a device run.
   (12:54, against the 8787 spike, US passport); reinstall, negatives, and mode-A steps are still
   pending.
 - **Status**: OPEN, consequence MEDIUM, owner ruling pending.
+### 2026-09-03 — #20: `lockModeAndArm`'s two early-exit guards (incomplete MRZ fields; handoff still verifying) had no matching `Log` call — a real "Verify" tap looked like nothing happened
+
+- **Source**: device session, owner report 2026-09-03 12:56 (returned from the camera app — fields
+  wiped on `onStop` per §6.2 item 6 — tapped "Verify", nothing visible or logged happened)
+- **Anchor**: `MainActivity.kt` `lockModeAndArm()` (~:559, pre-fix ~:564/:581): (a) empty
+  passport/expiry/birth field → `Snackbar.make(passportNumberView, R.string.error_input, …)` +
+  return, no `Log` call; (b) `pendingHandoff != null && verifiedRequest == null` → Snackbar "Still
+  verifying…" + return, no `Log` call
+- **Finding**: same class of defect as finding #7 (`reportView.text` write with no log) and #18
+  (three unlogged Snackbars on the QR path) — a UI-only status write with no matching `Log` call
+  makes a real, completed outcome indistinguishable from a hang or a dropped tap in logcat. Here it
+  cost the owner a card lift with zero diagnostic trace of which of the two guards (or neither) had
+  actually fired.
+- **Status**: FIXED-IN-6263687. (a) is now a pure
+  predicate, `LockPrecondition.evaluate` (new file `LockPrecondition.kt`, 8 truth-table unit tests
+  in `LockPreconditionTest.kt`), routed to `showBlockingOutcomeDialog(LOCK_FIELDS_INCOMPLETE_MESSAGE,
+  isAccessEstablishmentFailure = true)` plus `Log.w(TAG, "M2 stage: lock refused — document fields
+  incomplete (doc_present=<bool> dob_present=<bool> exp_present=<bool>)")` — booleans only, never
+  field values, per this project's logging discipline. `isAccessEstablishmentFailure = true` was
+  chosen deliberately (not the `false` every other refusal in this function uses) so
+  `FailureTransition.keepsMrzAndMode` returns `true`: the dialog's OK handler does NOT clear
+  `pendingHandoff`/`verifiedRequest`/`lockedMode` and does NOT wipe the MRZ fields the user already
+  typed — this is a user-fixable input-validation error, not a terminal outcome, and per finding
+  #12's rule a dismissal must never destroy a legitimate in-flight session (a pending handoff can
+  genuinely still be underneath this tap) as a side effect of an unrelated field-entry mistake. No
+  `ReportLog`/log-pane entry is appended for this branch — no scan attempt happened, so an entry
+  would imply an event that never occurred (same reasoning as finding #13). (b) stays a Snackbar
+  (transient, no state change) with a new paired `Log.i(TAG, "M2 stage: lock deferred — handoff
+  request still verifying")`. A full-file audit of every remaining `Snackbar.make(`/
+  `showBlockingOutcomeDialog(` call site in `MainActivity.kt` (21 other sites) found each already
+  has a matching `Log` call in the same branch — no further fixes needed. Tests 285 → 293 (×2
+  variants = 570 → 586), 0 failures. **Residual**: no device evidence yet that the fixed guard
+  produces the intended dialog/log on a real incomplete-field tap — this fix is source- and
+  unit-test-verified only.
