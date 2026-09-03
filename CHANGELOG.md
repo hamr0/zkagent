@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Fix (`apps/scanner`, finding #19, D70(d)): `RegularActivity` launch mode
+  is `singleTask`.** Every `av://` and NFC (`TECH_DISCOVERED`) intent now
+  lands in the one live instance via `onNewIntent` instead of risking a
+  second instance in a separate task, which the 2026-09-03 device session
+  found going invisible and having its manifest-level intent-filter start
+  blocked by Android's background-activity-launch hardening. Owner-approved
+  2026-09-03 ~13:05; built in `039fee7`. Device re-check (a Chrome-launched
+  and a camera-app-launched link both landing in and reusing the same
+  instance) is still pending. See `.claude/remember/findings.md` #19;
+  decisions.md D70(d); milestones.md exit-criteria table.
 - **Test (`apps/scanner`, M2 exit-criteria row 1): masterlist two-bucket
   rule bucket (ii) unit-proven on the real build.** `M0Probe.passiveAuth`'s
   inline `CertPathValidator` call is extracted into a new pure
@@ -87,6 +97,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   `M2 stage: log cleared by user (entries=<n>)`. 10 new `ReportLogStoreTest`
   cases (round-trip, corrupt-file recovery, cap-on-load). See milestones.md
   item 23; questions.md Q38.
+- **Correction: two commit bodies on this branch cite wrong unit-test
+  arithmetic.** `1c5fef4` (item 22) claims "306 unit tests pass (was 285)" —
+  the true per-variant count after that commit's 11 new `ReportLogTest`
+  cases is 296 (285 + 11), not 306. `d78a4dc` (item 23) claims "622 unit
+  tests pass (was 306, plus the 10 new x2 build variants)" — the true
+  per-variant count after that commit's 10 new `ReportLogStoreTest` cases
+  is 306 (296 + 10), not 622 (which is neither the per-variant nor the
+  combined figure). Not rewriting either commit's history; recorded here
+  instead. Reconciled on this branch — which also carries findings #19/#20
+  (§6.2 item 24's version stamp, `singleTask`, and the lock-guard logging
+  fix, none of which either isolated worktree-branch commit had) plus the
+  masterlist bucket-(ii) test — the actual final count after both
+  cherry-picks, measured from `app/build/test-results/**/*.xml`, is 321
+  unit tests per build variant (642 combined across
+  `testRegularDebugUnitTest`/`testRegularReleaseUnitTest`), 0 failures.
 - **Docs (D70): three new §6.2 ENHANCEMENT items recorded from the 2026-09-03
   device session, before build (scope gate, NO-GO #10).** Item 22: a
   pass/fail/pending glyph on each collapsed log entry's title line, derived

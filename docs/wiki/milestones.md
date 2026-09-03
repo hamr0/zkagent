@@ -105,6 +105,8 @@ gate, NO-GO #10).
 | Outcome glyph on collapsed log entries (item 22, D70(a)) | Three log entries in the pass/fail/pending states each render a distinct glyph while collapsed, derived from item 19's existing terminal-outcome state; no new state, no document data | Recorded 2026-09-03, not yet built — Built, device verification pending — BUILT-IN-`1c5fef4`, device verification pending |
 | Log survives app close (item 23, D70(b)) | Force-stopping the app after a scan and relaunching still shows the entry; "Clear log" empties it; MRZ/session state (item 6) still does not persist | Recorded 2026-09-03, not yet built — Built, device verification pending |
 | Visible version stamp (item 24, D70(c)) | The scan-pane stamp and the log entry's technical-line stamp both match `git rev-parse --short` of the commit the running build was compiled from | Built, device-pending — Recorded 2026-09-03, not yet built |
+| Single `RegularActivity` instance across launch sources (finding #19, D70(d)) | A Chrome-launched and a camera-app-launched `av://` link both land in and reuse the same single `RegularActivity` instance, with no invisible second instance left blocked by BAL hardening | FIXED-IN-039fee7, device re-check pending |
+| Logged lock early-exits (finding #20) | Both `lockModeAndArm` early-exit guards (incomplete MRZ fields; handoff still verifying) produce a matching `Log` call, so a real "Verify" tap is never indistinguishable from a hang | FIXED-IN-8c063ec, unit-verified; no device evidence yet of the fixed guard's dialog/log on a real incomplete-field tap |
 
 (zkagent-prd.md:1637-1646)
 

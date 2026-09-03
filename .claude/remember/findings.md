@@ -900,7 +900,7 @@ JUnit XML, not from a device run.
   `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 7. See milestones.md §6.2 item 8/11
   amendment and decisions.md D69.
 
-### 2026-09-03 — #19: two live `RegularActivity` instances across two tasks; unlocked `TECH_DISCOVERED` starts blocked by BAL hardening, not by app logic (OPEN, consequence MEDIUM, owner ruling pending)
+### 2026-09-03 — #19: two live `RegularActivity` instances across two tasks; unlocked `TECH_DISCOVERED` starts blocked by BAL hardening, not by app logic (FIXED-IN-039fee7, device re-check pending)
 
 - **Source**: owner, device session (`docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md`)
 - **Anchor**: `AndroidManifest.xml` (`RegularActivity` launch-mode entry, default `standard`), at `55ee40b`
@@ -920,12 +920,16 @@ JUnit XML, not from a device run.
   already handles. Needs an owner ruling before it ships, and a device re-check that both a
   Chrome-launched and a camera-app-launched link land in and reuse the same single instance after
   the change.
+- **Status update (2026-09-03 ~13:05)**: owner approved `android:launchMode="singleTask"` on
+  `RegularActivity`; built in `039fee7` (one instance for every `av://` and NFC intent). See
+  decisions.md D70(d). Device re-check (Chrome-launched and camera-app-launched links both landing
+  in and reusing the same instance) is still pending.
 - **Also note**: the M2 exit-criteria table's row 1 status is unaffected by this finding and remains
   "NOT YET RE-RUN on the real build" for a different reason — the real-build re-run of the three
   `M2-SCAN-EVIDENCE.md` checkpoints is in progress: one mode-B mint completed on the real build
   (12:54, against the 8787 spike, US passport); reinstall, negatives, and mode-A steps are still
   pending.
-- **Status**: OPEN, consequence MEDIUM, owner ruling pending.
+
 ### 2026-09-03 — #20: `lockModeAndArm`'s two early-exit guards (incomplete MRZ fields; handoff still verifying) had no matching `Log` call — a real "Verify" tap looked like nothing happened
 
 - **Source**: device session, owner report 2026-09-03 12:56 (returned from the camera app — fields
@@ -939,7 +943,7 @@ JUnit XML, not from a device run.
   makes a real, completed outcome indistinguishable from a hang or a dropped tap in logcat. Here it
   cost the owner a card lift with zero diagnostic trace of which of the two guards (or neither) had
   actually fired.
-- **Status**: FIXED-IN-6263687. (a) is now a pure
+- **Status**: FIXED-IN-8c063ec. (a) is now a pure
   predicate, `LockPrecondition.evaluate` (new file `LockPrecondition.kt`, 8 truth-table unit tests
   in `LockPreconditionTest.kt`), routed to `showBlockingOutcomeDialog(LOCK_FIELDS_INCOMPLETE_MESSAGE,
   isAccessEstablishmentFailure = true)` plus `Log.w(TAG, "M2 stage: lock refused — document fields
