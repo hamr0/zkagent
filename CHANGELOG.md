@@ -47,6 +47,43 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   on-device spike evidence (2026-08-31) still stands and is not re-run here — a
   planted-negative device run of the real build remains a separate,
   outstanding exit-criteria item (see `docs/wiki/milestones.md`).
+- **Fix (`apps/scanner`, finding #21, §6.2 item 9): mode A never delivered a
+  presentation — the "ships bare (`evidence: []`)" MUST was unmet, and item
+  15's blocking modal was missing for that outcome.** `MintGate.mayMint`
+  folded EVERY mode A read outcome (successful or not) into the same "not
+  met" branch mode B uses for a real read failure, so a mode A holder whose
+  read passed the SAME `verdict.ok && verdict.allowed == true` integrity
+  check mode B mints on never actually `direct_post`ed anything — device log
+  evidence (2026-09-03 13:27, NL card): `mint_gate: NOT MET`, "Read OK —
+  nothing sent", no `direct_post`, no dialog, the spike transaction left
+  pending forever. `MintGate.actionFor(modeIsB, verdict)` replaces the
+  single boolean with a 3-way `Action` (`MintB` / `PresentBareA` / `None`,
+  6 new truth-table unit tests); `mayMint` is kept, unchanged in meaning,
+  for the exact "may mode B mint" question every existing caller/test
+  already asked. New `MainActivity.presentBareA`/`presentBareAOnBackground`
+  build and send a bare tier-A presentation
+  (`HandoffClient.buildPresentation("A", claim, challenge, zktag = null,
+  evidence = emptyList())`) for a mode-A holder with a verified pending
+  handoff — the same Q35/Q36 refuse-loudly threshold/DOB branches and
+  `MintOutcome` honest-under-threshold classification as mode B's
+  `mintAndMaybeHandoff`, minus every identity-touching step: no zktag, no
+  `DeviceKey`, no biometric prompt. A mode-A local scan with no pending
+  handoff keeps its existing "Read OK — nothing sent" report, now also
+  paired with item 15's blocking dialog — previously the one silent
+  `return` left in the file. Mode B's own not-met branch (masterlist
+  real-no / integrity failure) is unchanged by design; no dialog was ever
+  shown there and none was added, out of scope for #21. Verified two ways:
+  a new `HandoffClientTest` pins the exact bare-tier-A JSON shape (no
+  `zktag` key, `evidence: []`, claim carries only
+  `over_threshold`/`threshold`, same `challenge` object untouched);
+  `spikes/m2-handoff/verify-mode-a-bare.mjs` drove a LIVE spike instance
+  with a hand-built presentation following the same rules — `over_threshold:
+  true` polled back `{ok:true, allowed:true, tier:"A", evidence:[]}`,
+  `over_threshold: false` polled back `{ok:true, allowed:false,
+  reason:"under_threshold"}`, both against the real chiproof verifier
+  inside the spike (not a mock). Unit tests 592 → 610 (296×2 → 305×2), 0
+  failures. Device-pending: no real Pixel 6a run of the fixed mode-A path
+  yet. See `.claude/remember/findings.md` #21.
 - **Feature (`apps/scanner`, §6.2 item 24, D70(c)): version stamp — `versionName`
   + short git SHA on the scan pane and in each log entry's technical
   line.** `app/build.gradle.kts` computes the short SHA once at configure

@@ -964,3 +964,38 @@ JUnit XML, not from a device run.
   variants = 570 → 586), 0 failures. **Residual**: no device evidence yet that the fixed guard
   produces the intended dialog/log on a real incomplete-field tap — this fix is source- and
   unit-test-verified only.
+### 2026-09-03 — #21: mode A never delivers a presentation — item 9's "ships bare" MUST unmet, item 15's modal missing for that outcome (consequence HIGH)
+
+- **Source**: device log 13:27 (NL card, mode A link from the 8788 spike), owner-tagged FIX
+- **Anchor**: `MainActivity.kt` `continueAfterRead` (~:1680, pre-fix), `MintGate.kt` `mayMint`
+- **Finding**: `MintGate.mayMint(modeIsB, verdict)` answered one question — "may mode B mint?" —
+  and folded EVERY mode A outcome, successful read or not, into the same `false`. A mode A read
+  that passed the identical `verdict.ok && verdict.allowed == true` integrity check mode B already
+  mints on landed in the "NOT MET" branch anyway: `mint_gate: NOT MET — evidence: []`, `verdict:
+  PASS (read)`, report result "Read OK — nothing sent", no `direct_post`, no dialog, the spike
+  transaction left permanently pending. Item 9's "Mode A MUST ship bare (`evidence: []`)" MUST was
+  therefore never actually reached — mode A never sent anything to a waiting site, ever — and item
+  15's blocking-dialog requirement had a real, reachable gap: this branch was the one silent
+  `return` left in `continueAfterRead`.
+- **Status**: FIXED-IN-40737a2. `MintGate.actionFor(modeIsB, verdict)` replaces the single boolean
+  with a 3-way `Action` (`MintB` / `PresentBareA` / `None`), truth-table unit-tested (6 new cases,
+  `MintGateTest`); `mayMint` is kept, unchanged in meaning, for every existing caller/test.
+  `MainActivity.presentBareA`/`presentBareAOnBackground` (new) build and `direct_post` a bare
+  tier-A presentation (`HandoffClient.buildPresentation("A", claim, challenge, zktag = null,
+  evidence = emptyList())`) for a mode-A holder with a verified pending handoff — same Q35/Q36
+  refuse-loudly threshold/DOB branches and `MintOutcome` honest-under-threshold classification as
+  mode B's `mintAndMaybeHandoff`, minus every identity-touching step (no zktag, no `DeviceKey`, no
+  biometric prompt). A mode-A local scan with no pending handoff keeps "Read OK — nothing sent",
+  now also paired with item 15's blocking dialog. Mode B's own not-met branch (masterlist real-no /
+  integrity failure) is unchanged by design — no dialog was ever shown there and none was added,
+  out of scope for #21. Verified two ways: `HandoffClientTest` pins the exact bare-tier-A JSON
+  shape (no `zktag` key, `evidence: []`, claim carries only `over_threshold`/`threshold`, same
+  `challenge` object untouched); `spikes/m2-handoff/verify-mode-a-bare.mjs` drove a LIVE spike
+  instance with a hand-built presentation following the same rules — `over_threshold: true` polled
+  back `{ok:true, allowed:true, tier:"A", evidence:[]}`, `over_threshold: false` polled back
+  `{ok:true, allowed:false, reason:"under_threshold"}`, both against the real chiproof verifier
+  inside the spike. Tests 592 → 610 (×2 variants), 0 failures. **Residual**: device-pending — no
+  real Pixel 6a run of the fixed mode-A-with-handoff path yet; the JVM-side proof above did not
+  drive the actual compiled Kotlin bytecode (no JVM↔Android bridge available in this worktree), it
+  hand-mirrored `HandoffClient.buildPresentation`'s rules in a parallel Node script — read that
+  script's own doc comment before trusting it matches the Kotlin unconditionally.
