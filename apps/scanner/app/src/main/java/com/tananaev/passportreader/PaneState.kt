@@ -77,6 +77,27 @@ class PaneState {
         selectedTab = normalizeTab(index)
     }
 
+    /** §6.2 item 17 (D67, Q39) — [MainActivity.handleIncomingIntent]'s write
+     * for an incoming `av://` handoff intent: MUST switch to [TAB_SCAN]
+     * regardless of the tab currently selected, distinct from
+     * [userSelectedTab] (a real user tap) — this is a NEW writer of
+     * [selectedTab] the same way [readStarted]/[readFinished] are, not a
+     * second path into [userSelectedTab]'s "user tap" semantics. Distinct
+     * also from the already-REJECTED D55 proposal to auto-switch on read
+     * COMPLETION — see this class's own trigger, an incoming intent, never
+     * a read finishing.
+     *
+     * [admitted] is the caller's own [HandoffAdmission.mayAdmitInboundHandoff]
+     * verdict, passed in rather than trusted-by-omission: the MUST text is
+     * explicit that a REFUSED intent must leave the tab alone, and folding
+     * the admission check in here (rather than relying on every call site
+     * to only call this after its own guard) makes "a refused intent never
+     * switches the tab" directly testable against this class alone, not
+     * only inferable from reading [MainActivity]'s call site. */
+    fun onIncomingHandoffIntent(admitted: Boolean) {
+        if (admitted) selectedTab = TAB_SCAN
+    }
+
     /** [MainActivity.startSession]'s write — a chip read has begun. */
     fun readStarted() {
         readInProgress = true

@@ -751,6 +751,20 @@ abstract class MainActivity : AppCompatActivity() {
                     return
                 }
                 Log.i(TAG, "M2 stage: pendingHandoff captured from av:// intent")
+                // §6.2 item 17 (D67, Q39): switch to the Scan pane BEFORE
+                // the read begins — the admission check just above already
+                // returned for a refused intent, so reaching here means
+                // admitted=true always; passed explicitly (not hardcoded)
+                // so PaneState's own "refused leaves the tab alone" rule
+                // stays enforced by PaneState itself, not by this call
+                // site's control flow alone. Not fenced via [fence] — this
+                // write happens synchronously inside [onNewIntent], a
+                // direct main-thread Activity lifecycle callback the
+                // framework only ever delivers to a live instance, never
+                // the late-async-landing shape [LifecycleFence] guards
+                // against (see its class doc's own hazard predicate).
+                paneState.onIncomingHandoffIntent(admitted = true)
+                showPane()
                 beginHandoffVerification(handoff)
                 return
             }

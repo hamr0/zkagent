@@ -107,6 +107,41 @@ class PaneStateTest {
         assertFalse(recreated.readInProgress)
     }
 
+    // §6.2 item 17 (D67, Q39) — an incoming, ADMITTED av:// handoff intent
+    // switches to the Scan tab regardless of which tab was current.
+    @Test
+    fun `onIncomingHandoffIntent admitted switches to the Scan tab from the Log tab`() {
+        val state = PaneState()
+        state.userSelectedTab(PaneState.TAB_LOG)
+        state.onIncomingHandoffIntent(admitted = true)
+        assertEquals(PaneState.TAB_SCAN, state.selectedTab)
+    }
+
+    @Test
+    fun `onIncomingHandoffIntent admitted is a no-op when already on the Scan tab`() {
+        val state = PaneState()
+        state.onIncomingHandoffIntent(admitted = true)
+        assertEquals(PaneState.TAB_SCAN, state.selectedTab)
+    }
+
+    // The MUST NOT half: a REFUSED intent (HandoffAdmission refusal) must
+    // leave the tab exactly where it was.
+    @Test
+    fun `onIncomingHandoffIntent NOT admitted leaves the Log tab alone`() {
+        val state = PaneState()
+        state.userSelectedTab(PaneState.TAB_LOG)
+        state.onIncomingHandoffIntent(admitted = false)
+        assertEquals("a refused intent must not switch the tab", PaneState.TAB_LOG, state.selectedTab)
+    }
+
+    @Test
+    fun `onIncomingHandoffIntent does not change readInProgress either way`() {
+        val state = PaneState()
+        state.readStarted()
+        state.onIncomingHandoffIntent(admitted = true)
+        assertTrue(state.readInProgress)
+    }
+
     @Test
     fun `choosePane over PaneState's own state matches PaneVisibility's existing truth table`() {
         val state = PaneState()
