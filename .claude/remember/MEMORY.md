@@ -26,7 +26,8 @@
 - An npm 404 on `PUT` under OIDC has two causes — workflow filename mismatch, or no trusted-publisher binding for that package at all; diagnose which, don't assume.
 - Real device/API captures parse differently from synthetic fixtures (wrapper layers, log prefixes) — validate parsers against a real capture, not synthetic data alone.
 - No ZK circuit built in this project is "ours" — third-party ZK is a validation-grade evidence plug only; never market v1 as zero-knowledge.
-- Use worktree isolation for any agent whose task changes the working checkout, so it doesn't leave the main checkout stranded on a side branch.
+- Worktree isolation branches from main, not the caller's current branch — state the exact rebase/fast-forward target SHA when spawning.
+- Run a coder in a worktree while a review holds the main checkout, then fast-forward the coder's commits in after.
 - `.claude/remember`/`.claude/stash` stay tracked (§7 exemption), except `last-review.md`/`fix-ledger.md` — gitignored since tracking them made `/branch-review` invalidate itself.
 - Verify a hardware/vendor claim (protocol limits, compatibility) against the actual use case, not against a loosely related signal like "works for a similar product."
 - Design-only sessions accumulate unresolved surface faster than they resolve it — writing a design's data/read path out concretely surfaces risks that argument alone misses.
@@ -68,13 +69,13 @@
 - Two independently-viable solutions to one problem don't resolve a scope decision — that needs an explicit owner call, evidence only narrows options.
 - Verify a third-party platform's sharing/ToS/quota constraints before basing an architecture decision on it.
 
-## Episodes
-### 2026-08-30 (late) — M1b probe + chiproof 0.2.0 release
-- goal: Run M1b (the mode-A unlinkability probe) on real documents, then land a publish-template backport already in flight.
-- tried: Ran 7 `zk-passport/1` presentations plus a bare-mode baseline on real NL/US documents through two independent leak detectors; separately merged a 9-commit adopter-gate/prepack backport that exposed real type bugs in the published `chiproof@0.1.0`.
-- outcome: Found one real cross-site-stable, document-dependent leak — the DSC/`id_data` `vk_sha256` circuit-class selector; owner ruled D26 to disclose it rather than hide it. The type-bug fix forced an unplanned `chiproof@0.2.0` release (126 tests); two upstream issues filed against zkPassport's public repos.
-- lesson: An adopter-facing type-correctness gate can surface real published-package bugs that unit tests never would — TypeScript consumers hit `TS2339`/silent-wrong-type errors invisible to the JS test suite.
+- When a review record's SHA sits on a branch that's since been deleted/squash-merged, review the current branch's own merge-base range instead — the old SHA isn't an ancestor.
+- A tool-printed count can mean files or occurrences — reconcile units before treating a mismatch as a real gap.
+- A coder subagent that refuses to guess-fix an ambiguous bug is right to refuse — one confirming sentence from the owner/device can validate the hypothesis instead.
+- A background subagent can finish all its tool calls and stall with no final message — check its written artefacts/commits before assuming it's stuck.
+- An adopter-facing type-correctness gate catches real published-package type bugs (e.g. TS2339) that a JS-only unit-test suite would never surface.
 
+## Episodes
 ### 2026-08-30 (late) — D27/D28 decisions, zkagent npm dropped
 - goal: Close two open PRD questions and resolve the placeholder `zkagent` npm package's fate.
 - tried: Owner closed Q25 (D27: M2 ships bare) and Q27 (D28: coarsen `current_date`, floor `max_scan_age`); attempted a `zkagent@0.0.1` placeholder publish, which hit a GitHub Actions dispatch bug then three straight npm E404s.
@@ -128,6 +129,12 @@
 - tried: Built a pure `LifecycleFence` class, initially fencing 11 sites found by grepping `runOnUiThread`; `/branch-review` found a High-severity gap — `BiometricPrompt` callbacks are also late-delivered main-thread landings but don't match that grep and weren't fenced.
 - outcome: Fix applied (`72e0b2c`), re-review returned READY; branch merged to main (PR #4, admin bypass) and `chiproof@0.4.0` published; freeze carried forward as D60 (not lifted) since findings #10/#11 remain open.
 - lesson: Enumerating hazard sites by a syntactic grep pattern reproduces exactly the blind spot of whoever wrote that grep — enumerate by the underlying hazard predicate instead.
+
+### 2026-09-02 — M2 reconciliation: PRD split, fix round, D61–D64, unfreeze prep
+- goal: Close the 5-fences reconciliation, dedupe the PRD via `/docs-builder`, and run a `/refactor` fix round to clear the remaining findings before lifting the M2 freeze.
+- tried: Split the 2,276-line PRD into core spec + wiki pages (milestones/decisions/questions/history) with the original byte-frozen in `docs/archive/`; ran two `/branch-review` passes (one had to review the branch's own merge-base range since the prior record's SHA was on a deleted, squash-merged branch); fixed findings #6 (Snackbar removed) and #8 (pure `ChipAuthClassification` extracted) via a Sonnet coder running in an isolated worktree while a review held the main checkout; fixed Q46's wrong label and investigated Q47 (a `DatePickerDialog` focus-restoration bug), which the coder correctly declined to guess-fix until the owner's one-sentence device account confirmed the hypothesis.
+- outcome: PRD split and re-pointed cleanly (1,551/1,551 lines validated, 0 citation violations); a peer session's own bug report on the split's link-rewrite ordering was cross-checked and found a units mismatch (33 files vs 38 occurrences) in its own tooling; findings #6/#8/#10/#11 closed, #17 opened (Q47), D61–D64 recorded; Q47 fix, orientation lock, and the device verification pass were still in flight at stash time, leaving the freeze not yet lifted.
+- lesson: A review record's SHA can land on a branch that no longer exists after a squash-merge — reviewing the branch's own merge-base range instead of trusting the recorded SHA is what catches this.
 
 ## Antigens
 ### High Confidence (loaded — applies every session)
