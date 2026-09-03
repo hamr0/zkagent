@@ -12,9 +12,9 @@ plugins {
 // unavailable (e.g. a source tarball with no .git directory) rather than
 // failing the build over a cosmetic stamp — this must never be load-bearing
 // for anything, only diagnostic.
-fun runGitCommand(vararg args: String): String? = try {
+fun runGitCommand(vararg args: String, workingDir: java.io.File = projectDir): String? = try {
     val process = ProcessBuilder("git", *args)
-        .directory(projectDir)
+        .directory(workingDir)
         .redirectErrorStream(false)
         .start()
     val output = process.inputStream.bufferedReader().readText().trim()
@@ -29,7 +29,16 @@ val gitShortSha: String = run {
     if (sha.isNullOrBlank()) {
         "nogit"
     } else {
-        val porcelain = runGitCommand("status", "--porcelain")
+        // Scoped to apps/scanner (the module root, one level up from this
+        // app/ subproject), not the whole monorepo — otherwise an unrelated
+        // dirty file under e.g. docs/ would false-stamp a clean scanner
+        // build as "-dirty". apps/scanner is the right scope because the
+        // module's build inputs live there too (root build.gradle.kts,
+        // settings.gradle.kts, gradle.properties), not just under app/.
+        val porcelain = runGitCommand(
+            "status", "--porcelain", "--", ".",
+            workingDir = projectDir.parentFile,
+        )
         if (!porcelain.isNullOrEmpty()) "$sha-dirty" else sha
     }
 }
