@@ -5,6 +5,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Fix (Q35): scanner signs the verified request's threshold, never a
+  hardcoded `18`.** `apps/scanner`'s `mintAndMaybeHandoff` previously signed
+  `threshold = 18` unconditionally, ignoring whatever the verifier's request
+  object actually asked for. `RequestTrust.thresholdOf` (pure extractor,
+  mirroring `tierOf`/`expiresAtOf`) now reads the already-signed, nonce-bound
+  `zkagent.challenge.threshold` field; absent, non-integer, or non-positive
+  values fail loudly — the mint is refused (log + `ReportLog` entry +
+  blocking dialog, no default) before any claim is built, mirroring item
+  13's tier-refusal discipline. Closes D48's threshold-from-request MUST;
+  `over_threshold` remains unconditionally `true` (Q36, unchanged, still
+  open). 10 new unit tests in `RequestTrustTest` (213 -> 223 passing).
 - Freeze lifted (D65).
 - **Device session 2026-09-03 clears the D57/D60 freeze's remaining verification-debt
   items; the lift was ruled the same day, see D65 above.** Verified on the Pixel 6a: Q47's

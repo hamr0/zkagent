@@ -343,6 +343,37 @@ object RequestTrust {
      * versa. */
     fun isExpired(expiresAtMillis: Long, nowMillis: Long): Boolean = nowMillis > expiresAtMillis
 
+    // ------------------------------------------------- threshold (Q35 fix)
+
+    /** Extracts the already-signed, nonce-bound `zkagent.challenge.threshold`
+     * field (chiproof `issueChallenge`'s integer field, D20/D48 — the same
+     * challenge object `MainActivity` already parses for `nonce`/
+     * `expires_at`) from a VERIFIED request payload, or null if absent,
+     * not an integer, or not positive. Pure parsing only, exercisable by a
+     * plain JVM test without an Activity — same discipline as
+     * [tierOf]/[expiresAtOf]. Matches chiproof's own `Number.isInteger`
+     * gate (`packages/chiproof/src/index.js` ~line 77-78) with an added
+     * positivity check: the caller (mint time,
+     * [MainActivity.mintAndMaybeHandoff]) has no legitimate fallback
+     * value, so anything short of a clean positive integer must refuse
+     * rather than silently default — replacing the Q35 bug (a hardcoded
+     * `18` signed regardless of what the verifier actually requested). A
+     * quoted numeric string (`"18"`) is deliberately rejected, not
+     * coerced: `org.json`'s own `optInt`/`optLong` would silently parse
+     * it, but chiproof's `Number.isInteger` treats a string as invalid,
+     * and this parse must never accept something the verifier itself
+     * would refuse. */
+    fun thresholdOf(json: JSONObject): Int? {
+        val challenge = json.optJSONObject("zkagent")?.optJSONObject("challenge") ?: return null
+        if (!challenge.has("threshold")) return null
+        val value: Int = when (val raw = challenge.opt("threshold")) {
+            is Int -> raw
+            is Long -> if (raw in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) raw.toInt() else return null
+            else -> return null // String, Double, Boolean, null, JSONObject, JSONArray — never coerced
+        }
+        return if (value > 0) value else null
+    }
+
     // ------------------------------------------------- evidence_required (D31)
 
     /** Log-only, value-free parse of the request object's

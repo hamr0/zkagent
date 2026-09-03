@@ -1943,14 +1943,49 @@ abstract class MainActivity : AppCompatActivity() {
      *   mint is against — its [AuthorizedHandoff.request] is what gets
      *   signed and reported below. */
     private fun mintAndMaybeHandoff(keyState: DeviceKey.KeyState, signature: Signature, baseReport: String, zktag: String, scopeDomain: String, site: String, attemptId: String, mode: PresentationMode, chipAuthStatus: M0Probe.ChipAuthStatus, authorized: AuthorizedHandoff) {
-        val threshold = 18
-        val claim = mapOf("over_threshold" to true, "threshold" to threshold)
         // §6.2 items 13/14: reuse the request object already fetched and
         // ES256-verified at capture time ([beginHandoffVerification]) —
         // never re-fetch here. Same nonce, same verified fields, one fetch
         // per handoff.
         val requestObject: JSONObject = authorized.request.json
         Log.i(TAG, "M2 stage: using pre-verified handoff request object — origin=${authorized.request.origin} signature_verified=true (no re-fetch)")
+        // Q35 fix: the age threshold this device signs the
+        // over_threshold/threshold claim against MUST come from the
+        // already-signed, nonce-bound zkagent.challenge.threshold field —
+        // never a hardcoded default. [RequestTrust.thresholdOf] mirrors
+        // item 13's tierOutcomeFor discipline (absent/invalid -> refuse, no
+        // default): the mint refuses here, before any claim is built or
+        // signed, if the verified request does not carry a clean positive
+        // integer threshold. This decision point is deliberately at MINT
+        // time (not lock time, unlike tier): threshold plays no part in
+        // deriving [mode]/[PresentationMode] the way tier does, so nothing
+        // needs it before this point, and — like `nonce` just below — it is
+        // read from the same already-verified `zkagent.challenge` object,
+        // parsed here for the first time, not duplicated at lock time.
+        val threshold = RequestTrust.thresholdOf(requestObject)
+        if (threshold == null) {
+            Log.e(TAG, "M2 stage: verified request has absent/invalid zkagent.challenge.threshold — refusing to mint, no default (Q35)")
+            runOnUiThread {
+                if (!fence.passes()) {
+                    Log.i(TAG, "M2 lifecycle: fence closed — dropped mint-failure report (absent/invalid threshold)")
+                    return@runOnUiThread
+                }
+                emitReport(
+                    baseReport + "\nmint: FAILED — the site's request did not carry a valid age threshold (absent, non-integer, or non-positive zkagent.challenge.threshold; no default is used, Q35)",
+                    ReportLog.DisclosureSummary(
+                        site = site,
+                        result = "Failed — the site's request did not specify a valid age threshold to check",
+                        chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                        sent = "nothing left this device",
+                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                    ),
+                    attemptId = attemptId,
+                )
+                showBlockingOutcomeDialog("The site's request did not specify a valid age threshold to check.", isAccessEstablishmentFailure = false)
+            }
+            return
+        }
+        val claim = mapOf("over_threshold" to true, "threshold" to threshold)
         // OpenID4VP request-object JSON, TOP LEVEL — response_uri/state/
         // client_id/response_mode live here (server.mjs ~line 230-270), NOT
         // inside zkagent.challenge (which carries only nonce/tier/expiry).
@@ -2138,17 +2173,21 @@ abstract class MainActivity : AppCompatActivity() {
         // §6.2 item 16 (D48): the Shared line is a QUESTION -> ANSWER record
         // of the SIGNED claim, read from the SAME [claim] map that gets
         // canonicalized and signed above (`claim["threshold"]`,
-        // `claim["over_threshold"]`) — never a separate constant, never the
-        // literal 18 duplicated here. This is the correct SOURCE even though
-        // D48 ultimately wants the threshold read from the verified request
-        // object: nothing in the request object or the app carries a real
-        // threshold or a computed over/under answer today (escalated and
-        // owner-acknowledged; tracked as an open PRD question, not this
-        // round's job to close) — the signed claim map is the single source
-        // of truth for what was ACTUALLY SENT, so this rendering is a
-        // faithful, by-construction record of the disclosure today, and
-        // becomes correct automatically the moment a real threshold/answer
-        // exist, with no change to this rendering code.
+        // `claim["over_threshold"]`) — never a separate constant, never a
+        // literal duplicated here. Q35 fix: [claim]'s `threshold` is now
+        // itself sourced from the verified request object
+        // ([RequestTrust.thresholdOf], above), so this rendering — already
+        // correct-by-construction before this fix, per the signed-claim-map
+        // discipline below — now also reflects a REAL, verifier-requested
+        // threshold rather than a hardcoded one; D48's threshold-from-
+        // request MUST is met. `over_threshold` remains unconditionally
+        // `true` (Q36, a real DOB comparison, is separate, still-open
+        // design work, deliberately out of scope for this fix) — the signed
+        // claim map is the single source of truth for what was ACTUALLY
+        // SENT, so this rendering is a faithful, by-construction record of
+        // the disclosure, and will reflect a real over/under answer
+        // automatically the moment Q36 computes one, with no change to
+        // this rendering code.
         val disclosedThreshold = claim["threshold"]
         val disclosedAnswer = claim["over_threshold"]
         // §6.2 item 16 (D48): the predicate label is "age > <N>" — the

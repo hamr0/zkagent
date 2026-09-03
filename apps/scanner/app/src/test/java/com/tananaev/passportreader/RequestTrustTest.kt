@@ -323,4 +323,64 @@ class RequestTrustTest {
     fun `isExpired - before expiresAt is not expired`() {
         assertFalse(RequestTrust.isExpired(expiresAtMillis = 1_000L, nowMillis = 999L))
     }
+
+    // ------------------------------------------------- thresholdOf (Q35 fix)
+
+    private fun requestWithThreshold(threshold: Any?): JSONObject {
+        val challenge = JSONObject()
+        if (threshold != null) challenge.put("threshold", threshold)
+        val zkagent = JSONObject().put("challenge", challenge)
+        return JSONObject().put("zkagent", zkagent)
+    }
+
+    @Test
+    fun `thresholdOf - reads a positive integer threshold`() {
+        assertEquals(21, RequestTrust.thresholdOf(requestWithThreshold(21)))
+    }
+
+    @Test
+    fun `thresholdOf - reads a different positive integer threshold`() {
+        assertEquals(16, RequestTrust.thresholdOf(requestWithThreshold(16)))
+    }
+
+    @Test
+    fun `thresholdOf - absent threshold field returns null`() {
+        assertNull(RequestTrust.thresholdOf(requestWithThreshold(null)))
+    }
+
+    @Test
+    fun `thresholdOf - absent challenge object returns null`() {
+        val requestObject = JSONObject().put("zkagent", JSONObject())
+        assertNull(RequestTrust.thresholdOf(requestObject))
+    }
+
+    @Test
+    fun `thresholdOf - absent zkagent object entirely returns null`() {
+        assertNull(RequestTrust.thresholdOf(JSONObject()))
+    }
+
+    @Test
+    fun `thresholdOf - a quoted numeric string is rejected, never coerced`() {
+        assertNull(RequestTrust.thresholdOf(requestWithThreshold("18")))
+    }
+
+    @Test
+    fun `thresholdOf - a non-integer number is rejected`() {
+        assertNull(RequestTrust.thresholdOf(requestWithThreshold(18.5)))
+    }
+
+    @Test
+    fun `thresholdOf - zero is rejected, never treated as a valid threshold`() {
+        assertNull(RequestTrust.thresholdOf(requestWithThreshold(0)))
+    }
+
+    @Test
+    fun `thresholdOf - a negative threshold is rejected`() {
+        assertNull(RequestTrust.thresholdOf(requestWithThreshold(-5)))
+    }
+
+    @Test
+    fun `thresholdOf - a large in-range Long value round-trips correctly`() {
+        assertEquals(1000, RequestTrust.thresholdOf(requestWithThreshold(1000L)))
+    }
 }

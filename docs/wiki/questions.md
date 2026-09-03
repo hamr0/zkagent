@@ -145,11 +145,20 @@ this is flagged in the report back to the caller.
   only the rendering SHAPE (a list of predicate→boolean pairs); which claims exist,
   their per-tier limits, and cumulative-disclosure cost remain undecided and need
   their own design pass and riskiest-assumption POC. (zkagent-prd.md:2034-2060)
-- **Q35 (open, owner-flagged, descendant of Q33 part a)** — The scanner must read
-  the already-signed, nonce-bound `zkagent.challenge.threshold` field instead of
-  its hardcoded `18`. Status: OPEN, CORRECTNESS — a one-line scanner fix plus a
-  test; closes D48's currently-unmet threshold-from-request MUST; tracked as
-  "question now, item when built." (zkagent-prd.md:1985-2017)
+- **Q35 (descendant of Q33 part a)** — The scanner must read the already-signed,
+  nonce-bound `zkagent.challenge.threshold` field instead of its hardcoded `18`.
+  Status: FIXED-IN-this commit — `RequestTrust.thresholdOf` (pure extractor,
+  mirrors `tierOf`/`expiresAtOf`) reads the verified request's
+  `zkagent.challenge.threshold`; absent, non-integer, or non-positive values fail
+  loudly (refuse the mint via the existing `ReportLog`/blocking-dialog failure
+  path, mirroring item 13's tier discipline) with no default of `18` anywhere.
+  Decision made without prior owner sign-off, flagged for review: the refusal is
+  checked at MINT time (`MainActivity.mintAndMaybeHandoff`, where `nonce` is
+  already parsed from the same `zkagent.challenge` object), not at lock time
+  alongside tier — threshold plays no part in deriving the presentation mode the
+  way tier does, so nothing needs it earlier. Closes D48's threshold-from-request
+  MUST. `over_threshold` remains unconditionally `true` (Q36, unchanged, out of
+  scope). (zkagent-prd.md:1985-2017)
 - **Q36 (open, owner-flagged, descendant of Q33 part b)** — Compute a real
   DOB-vs-threshold answer instead of asserting `true` unconditionally. Status:
   OPEN — genuine open design work (where in the pipeline, UI treatment of a
