@@ -67,8 +67,53 @@ import java.util.Locale
  * parameters let a mint attempt's terminal outcome REPLACE its own
  * "In progress" entry instead of appending a second one, so one scan
  * attempt never leaves more than one entry — see [append]'s doc.
+ *
+ * **§6.2 item 22 (D70(a), 2026-09-03):** each entry now also carries an
+ * [Outcome] — see that enum's doc for the PASS/FAIL/PENDING rule and why it
+ * is NOT derivable from [terminalFlags] alone (a boolean cannot distinguish
+ * three states). [MainActivity] is the ONLY place [Outcome] is ever
+ * computed, from types that already exist there (`DeliveryResult`,
+ * `M0Probe.Verdict.ok`, the diagnostic probes' own `failed` boolean) —
+ * [ReportLog] never parses a report/summary string to guess it.
+ *
+ * **§6.2 item 23 (D70(b), 2026-09-03):** this class remains in-memory-only
+ * and Android-free, unchanged — [MainActivity] is the sole owner of making
+ * [entriesSnapshot]/[expandedSnapshot]/[terminalSnapshot]/[outcomesSnapshot]
+ * durable (via `ReportLogStore`, app-private disk storage), the same
+ * "read-only owner, write-only caller" split [restore] already established
+ * for `onSaveInstanceState`.
  */
 class ReportLog {
+
+    /** §6.2 item 22 (D70(a)) — the three states a collapsed log entry's
+     * quick-review glyph distinguishes. Set ONCE per entry, at the exact
+     * call site that already decides [terminalFlags] ([append]'s `pending`
+     * branch) — never re-derived, never guessed from [DisclosureSummary]'s
+     * plain-language text.
+     *
+     * **The PASS/FAIL rule (owner-overturnable):** PASS means the run
+     * reached a positive, delivered/verified terminal outcome for the
+     * site's own request; every other terminal outcome — refused, failed,
+     * expired, rejected, or an "honest" under-threshold answer the site
+     * itself then declined — is FAIL. Concretely, in `MainActivity`'s own
+     * vocabulary: `DeliveryResult.Accepted` is the ONLY mode-B PASS;
+     * `DeliveryResult.RefusedHonestUnderThreshold` (the device told the
+     * truth and the site's own verdict was "no") is FAIL, not PASS — the
+     * user's claim was truthfully disclosed, but the run's OUTCOME for the
+     * site's gate was a refusal, and item 22's glyph is a quick-review
+     * signal for "did this scan get you in", not a disclosure-honesty
+     * signal (D46/D48 already cover honesty, in the entry body). A mode-A
+     * bare read (D27: never mints, by design) or a masterlist real-no is
+     * classified by the SAME `verdict.ok` boolean the existing report text
+     * already renders as "PASS (read)"/"FAIL (could not check)" — an
+     * integrity failure is FAIL, a clean read that simply had nothing to
+     * mint (mode A, or a real masterlist no) is PASS, since the run itself
+     * completed and told the truth with no error. This reading is the
+     * owner's call to make differently; the KDoc here is the one place to
+     * change it (see [MainActivity]'s per-call-site `outcome` arguments,
+     * which all cite this doc rather than re-deriving the rule locally).
+     */
+    enum class Outcome { PENDING, PASS, FAIL }
 
     /**
      * The plain-language, value-free disclosure summary for one log entry
@@ -192,6 +237,12 @@ class ReportLog {
     // unchanged.
     private val terminalFlags = mutableListOf<Boolean>()
 
+    // §6.2 item 22 (D70(a)) — PARALLEL to [entries]/[expandedFlags]/
+    // [terminalFlags], same index space, kept in lockstep by every mutation
+    // site below (append/replace/evict/clear/restore). See [Outcome]'s own
+    // doc for what each value means and the exact PASS/FAIL rule.
+    private val outcomes = mutableListOf<Outcome>()
+
     /** D58 step 1 (Report/Log cluster, finding #7): the exact text of the
      * most recently emitted or restored report — this class is now the
      * SINGLE owner of this value, absorbing what used to be
@@ -238,15 +289,30 @@ class ReportLog {
      *   correctly leaves its "In progress" entry showing — nothing here
      *   ever removes an entry, only replaces one already known to be
      *   superseded.
+     * @param outcome (item 22, D70(a)) the entry's PASS/FAIL classification,
+     *   computed by the CALLER from types that already exist there — see
+     *   [Outcome]'s doc for the exact rule and why [ReportLog] never derives
+     *   it itself. Meaningless (and ignored) when [pending] is true: a
+     *   pending entry is ALWAYS [Outcome.PENDING] regardless of what is
+     *   passed here — the default, [Outcome.FAIL], is the conservative
+     *   placeholder every real "In progress" call site relies on rather
+     *   than specifying, and doubles as the safe fallback for any FUTURE
+     *   non-pending call site that forgets to classify its own outcome
+     *   explicitly (never a guessed PASS — the same "unclassified falls to
+     *   the safe bucket" discipline [FailureTransition] already uses).
      * @param nowMillis defaults to the real clock; a test may pass a fixed
      *   value so the timestamp is deterministic without sleeping. */
-    fun append(text: String, summary: DisclosureSummary, attemptId: String? = null, pending: Boolean = false, nowMillis: Long = System.currentTimeMillis()) {
+    fun append(text: String, summary: DisclosureSummary, attemptId: String? = null, pending: Boolean = false, outcome: Outcome = Outcome.FAIL, nowMillis: Long = System.currentTimeMillis()) {
         lastText = text
         val timestamp = TIMESTAMP_FORMAT.format(Date(nowMillis))
-        val rendered = renderEntry(timestamp, summary, text)
+        // item 22: PENDING always wins while [pending] is true — see the
+        // @param doc above.
+        val effectiveOutcome = if (pending) Outcome.PENDING else outcome
+        val rendered = renderEntry(timestamp, summary, text, effectiveOutcome)
         val existingIndex = attemptId?.let { pendingIndexByAttempt[it] }
         if (existingIndex != null) {
             entries[existingIndex] = rendered
+            outcomes[existingIndex] = effectiveOutcome
             pendingIndexByAttempt.remove(attemptId)
             // item 18: a replaced entry keeps its OWN prior [expandedFlags]
             // state (a user who opened an "In progress" entry to watch it
@@ -257,6 +323,7 @@ class ReportLog {
             entries.add(rendered)
             expandedFlags.add(false) // item 18: collapsed by default
             terminalFlags.add(false) // placeholder — the one true value is set below, in one place
+            outcomes.add(effectiveOutcome)
             // D58 step 1 (finding #13): a genuinely NEW entry (never a
             // pending-replace, which never grows the list) can push
             // [entries] past [MAX_ENTRIES] — evict the single oldest entry
@@ -274,6 +341,7 @@ class ReportLog {
                 entries.removeAt(0)
                 expandedFlags.removeAt(0)
                 terminalFlags.removeAt(0)
+                outcomes.removeAt(0)
                 val iterator = pendingIndexByAttempt.entries.iterator()
                 while (iterator.hasNext()) {
                     val pendingEntry = iterator.next()
@@ -302,6 +370,7 @@ class ReportLog {
         pendingIndexByAttempt.clear()
         expandedFlags.clear()
         terminalFlags.clear()
+        outcomes.clear()
     }
 
     /** Immutable snapshot, OLDEST first — [MainActivity]'s
@@ -320,6 +389,13 @@ class ReportLog {
      * RESTORED entry is terminal (see [restore]'s doc: no in-progress
      * attempt-id state survives recreation either). */
     fun terminalSnapshot(): List<Boolean> = terminalFlags.toList()
+
+    /** §6.2 item 22 (D70(a)): OLDEST-first, same index space as
+     * [entriesSnapshot] — the sibling persistence for the per-entry
+     * PASS/FAIL/PENDING glyph, saved/restored the same way
+     * [expandedSnapshot]/[terminalSnapshot] already are (Bundle AND, since
+     * item 23, app-private disk via `ReportLogStore`). */
+    fun outcomesSnapshot(): List<Outcome> = outcomes.toList()
 
     /** §6.2 item 18 (D67, Q43) — the per-entry tap-to-expand toggle.
      * [displayIndex] is in DISPLAY order (0 = newest, matching what
@@ -364,8 +440,15 @@ class ReportLog {
      *   [pendingIndexByAttempt] being dropped): a restored entry can never
      *   correctly be "still in progress" from a NEW instance's point of
      *   view, even if it was mid-flight in the dying one. Same mismatched-
-     *   size fallback as [expanded]. */
-    fun restore(saved: List<String>, lastText: String? = null, expanded: List<Boolean>? = null, terminal: List<Boolean>? = null) {
+     *   size fallback as [expanded].
+     * @param outcomes (item 22, D70(a)) per-entry PASS/FAIL/PENDING state,
+     *   SAME order as [saved]. Defaults to null, meaning "every entry
+     *   FAIL" — `List(saved.size) { Outcome.FAIL }` — the same conservative
+     *   "unclassified never guesses PASS" fallback [append]'s own default
+     *   uses, for a caller (or an old persisted file predating this field)
+     *   that restores entries with no outcome data at all. Same mismatched-
+     *   size fallback as [expanded]/[terminal]. */
+    fun restore(saved: List<String>, lastText: String? = null, expanded: List<Boolean>? = null, terminal: List<Boolean>? = null, outcomes: List<Outcome>? = null) {
         entries.clear()
         entries.addAll(saved)
         pendingIndexByAttempt.clear()
@@ -374,6 +457,8 @@ class ReportLog {
         expandedFlags.addAll(expanded?.takeIf { it.size == saved.size } ?: List(saved.size) { false })
         terminalFlags.clear()
         terminalFlags.addAll(terminal?.takeIf { it.size == saved.size } ?: List(saved.size) { true })
+        this.outcomes.clear()
+        this.outcomes.addAll(outcomes?.takeIf { it.size == saved.size } ?: List(saved.size) { Outcome.FAIL })
     }
 
     /** The log view's full text, NEWEST entry first (2026-09-01 real-device
@@ -535,9 +620,21 @@ class ReportLog {
         // title/label columns already align.
         private const val CONTINUATION_INDENT = "          "
 
-        private fun renderEntry(timestamp: String, summary: DisclosureSummary, text: String): String {
+        /** §6.2 item 22 (D70(a)): the fixed Unicode glyph prefix for each
+         * [Outcome] — plain text, no drawables, so it renders identically
+         * whether the entry is collapsed (title line only) or expanded
+         * (title line still first) and needs no extra span/styling work in
+         * [rendered]. Not private — exposed so `ReportLogTest` can pin the
+         * mapping directly. */
+        fun glyphFor(outcome: Outcome): String = when (outcome) {
+            Outcome.PASS -> "✓ " // ✓
+            Outcome.FAIL -> "✗ " // ✗
+            Outcome.PENDING -> "… " // …
+        }
+
+        private fun renderEntry(timestamp: String, summary: DisclosureSummary, text: String, outcome: Outcome): String {
             val lines = mutableListOf<String>()
-            lines += "$timestamp · ${summary.site}"
+            lines += "${glyphFor(outcome)}$timestamp · ${summary.site}"
             lines += ""
             lines += "Result    ${summary.result}"
             // 2026-09 real-device fix: Chip auth is a property of THIS

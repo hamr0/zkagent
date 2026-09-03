@@ -31,11 +31,13 @@ class ReportLogTest {
     @Test
     fun `append renders a title line with timestamp and site, then the summary, then the technical block`() {
         val log = ReportLog()
-        log.append("mode: B\nmint: OK\nverdict: PASS (minted)", summary(), nowMillis = 0L) // epoch — TZ-dependent, only structure asserted
+        // outcome = PASS, explicit — see the item 22 section below for the
+        // glyph-prefix assertion; this test only pins the structure after it.
+        log.append("mode: B\nmint: OK\nverdict: PASS (minted)", summary(), outcome = ReportLog.Outcome.PASS, nowMillis = 0L) // epoch — TZ-dependent, only structure asserted
         val entries = log.entriesSnapshot()
         assertEquals(1, entries.size)
         val entry = entries[0]
-        assertTrue("title line has a timestamp and the site", entry.lines()[0].matches(Regex("""^\d{2}:\d{2}:\d{2} · 127\.0\.0\.1:8787$""")))
+        assertTrue("title line has a glyph prefix, a timestamp, and the site", entry.lines()[0].matches(Regex("""^✓ \d{2}:\d{2}:\d{2} · 127\.0\.0\.1:8787$""")))
         assertTrue(entry.contains("Result    Verified — the site accepted you"))
         assertTrue(entry.contains("Sent      a site-only pseudonym + a signed claim (age > 18: true)"))
         assertTrue(entry.contains("Shared    age > 18: true"))
@@ -833,5 +835,138 @@ class ReportLogTest {
         // the survivor's pending entry was evicted — every remaining filler
         // entry is an ordinary (non-pending) append, so all are terminal.
         assertTrue(log.terminalSnapshot().all { it })
+    }
+
+    // ------------------------------------------------------------- item 22
+    // §6.2 item 22 (D70(a)) — the quick-review glyph. Three entries in the
+    // three states show three distinct prefixes; the replacing writer flips
+    // PENDING -> PASS/FAIL. Every expectation here is an independent
+    // literal, never derived from the same constant [ReportLog] itself uses
+    // (see ReportLog.glyphFor's own literals) — a bug that changed the
+    // glyph mapping would have nothing to agree with it.
+
+    @Test
+    fun `three entries in the three outcome states render three distinct glyph prefixes`() {
+        val log = ReportLog()
+        log.append("pass entry", summary(site = "site-pass.test"), outcome = ReportLog.Outcome.PASS, nowMillis = 0L)
+        log.append("fail entry", summary(site = "site-fail.test"), outcome = ReportLog.Outcome.FAIL, nowMillis = 1000L)
+        log.append(
+            "pending entry",
+            summary(site = "site-pending.test", result = "In progress", sent = "nothing yet", shared = notDisclosedNothing),
+            attemptId = "a1",
+            pending = true,
+            nowMillis = 2000L,
+        )
+        val entries = log.entriesSnapshot()
+        assertEquals(3, entries.size)
+        assertTrue("PASS entry is prefixed with a checkmark", entries[0].lines()[0].startsWith("✓ "))
+        assertTrue("FAIL entry is prefixed with an X", entries[1].lines()[0].startsWith("✗ "))
+        assertTrue("PENDING entry is prefixed with an ellipsis", entries[2].lines()[0].startsWith("… "))
+        val prefixes = entries.map { it.lines()[0].substring(0, 2) }
+        assertEquals("all three prefixes are distinct", 3, prefixes.toSet().size)
+    }
+
+    @Test
+    fun `the collapsed title line still carries the glyph prefix`() {
+        val log = ReportLog()
+        log.append("x", summary(), outcome = ReportLog.Outcome.FAIL, nowMillis = 0L)
+        val rendered = log.rendered().toString()
+        assertTrue("collapsed entry's title line keeps the glyph", rendered.startsWith("✗ "))
+    }
+
+    @Test
+    fun `a pending entry replaced by its terminal outcome flips the glyph from pending to pass`() {
+        val log = ReportLog()
+        log.append(
+            "in progress",
+            summary(result = "In progress", sent = "nothing yet", shared = notDisclosedNothing),
+            attemptId = "a1",
+            pending = true,
+            nowMillis = 0L,
+        )
+        assertTrue(log.entriesSnapshot()[0].lines()[0].startsWith("… "))
+        log.append("terminal", summary(), attemptId = "a1", outcome = ReportLog.Outcome.PASS, nowMillis = 5000L)
+        val entries = log.entriesSnapshot()
+        assertEquals(1, entries.size)
+        assertTrue("the SAME entry now shows the PASS glyph, not a second entry", entries[0].lines()[0].startsWith("✓ "))
+    }
+
+    @Test
+    fun `a pending entry replaced by its terminal outcome flips the glyph from pending to fail`() {
+        val log = ReportLog()
+        log.append(
+            "in progress",
+            summary(result = "In progress", sent = "nothing yet", shared = notDisclosedNothing),
+            attemptId = "a1",
+            pending = true,
+            nowMillis = 0L,
+        )
+        log.append("terminal", summary(), attemptId = "a1", outcome = ReportLog.Outcome.FAIL, nowMillis = 5000L)
+        val entries = log.entriesSnapshot()
+        assertEquals(1, entries.size)
+        assertTrue(entries[0].lines()[0].startsWith("✗ "))
+    }
+
+    @Test
+    fun `outcome defaults to FAIL — the conservative, never-guess-PASS fallback`() {
+        val log = ReportLog()
+        log.append("x", summary(), nowMillis = 0L) // no outcome argument
+        assertTrue(log.entriesSnapshot()[0].lines()[0].startsWith("✗ "))
+    }
+
+    @Test
+    fun `outcomesSnapshot is oldest-first and parallel to entriesSnapshot`() {
+        val log = ReportLog()
+        log.append("first", summary(site = "site-a.test"), outcome = ReportLog.Outcome.PASS, nowMillis = 0L)
+        log.append("second", summary(site = "site-b.test"), outcome = ReportLog.Outcome.FAIL, nowMillis = 1000L)
+        assertEquals(listOf(ReportLog.Outcome.PASS, ReportLog.Outcome.FAIL), log.outcomesSnapshot())
+    }
+
+    @Test
+    fun `clear empties outcomesSnapshot alongside entries`() {
+        val log = ReportLog()
+        log.append("x", summary(), outcome = ReportLog.Outcome.PASS, nowMillis = 0L)
+        log.clear()
+        assertTrue(log.outcomesSnapshot().isEmpty())
+    }
+
+    @Test
+    fun `restore round-trips outcome state via outcomesSnapshot`() {
+        val log = ReportLog()
+        log.append("first", summary(site = "site-a.test"), outcome = ReportLog.Outcome.PASS, nowMillis = 0L)
+        log.append("second", summary(site = "site-b.test"), outcome = ReportLog.Outcome.FAIL, nowMillis = 1000L)
+        val savedEntries = log.entriesSnapshot()
+        val savedOutcomes = log.outcomesSnapshot()
+
+        val restored = ReportLog()
+        restored.restore(savedEntries, outcomes = savedOutcomes)
+        assertEquals(savedOutcomes, restored.outcomesSnapshot())
+    }
+
+    @Test
+    fun `restore defaults every entry to FAIL when no outcome state is supplied`() {
+        val log = ReportLog()
+        log.restore(listOf("09:00:00 · site-a.test\n\nResult    restored"))
+        assertEquals(listOf(ReportLog.Outcome.FAIL), log.outcomesSnapshot())
+    }
+
+    @Test
+    fun `eviction shifts outcomes in lockstep with entries`() {
+        val log = ReportLog()
+        log.append("first", summary(site = "site-0.test"), outcome = ReportLog.Outcome.PASS, nowMillis = 0L)
+        repeat(ReportLog.MAX_ENTRIES) { i ->
+            log.append("filler $i", summary(site = "filler-$i.test"), outcome = ReportLog.Outcome.FAIL, nowMillis = (i + 1).toLong())
+        }
+        assertEquals(ReportLog.MAX_ENTRIES, log.outcomesSnapshot().size)
+        // the survivor (oldest remaining, "filler 0") is FAIL, not the
+        // evicted PASS entry's value.
+        assertEquals(ReportLog.Outcome.FAIL, log.outcomesSnapshot()[0])
+    }
+
+    @Test
+    fun `glyphFor maps each Outcome to its own fixed, distinct literal`() {
+        assertEquals("✓ ", ReportLog.glyphFor(ReportLog.Outcome.PASS))
+        assertEquals("✗ ", ReportLog.glyphFor(ReportLog.Outcome.FAIL))
+        assertEquals("… ", ReportLog.glyphFor(ReportLog.Outcome.PENDING))
     }
 }

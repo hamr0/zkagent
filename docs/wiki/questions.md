@@ -240,7 +240,17 @@ this is flagged in the report back to the caller.
   the collapsed title line alone gave no at-a-glance outcome — **APPROVED into
   §6.2 item 22 (D70(a), 2026-09-03)**, a pass/fail/pending glyph on the
   collapsed title line, derived from item 19's existing terminal-outcome
-  state; recorded, not yet built. (zkagent-prd.md:2138-2144)
+  state. Status: BUILT, device verification pending. A new `ReportLog.Outcome`
+  enum ({PENDING, PASS, FAIL}) is set at the SAME single write site
+  ([ReportLog.append]) that already sets `terminalFlags`, classified by
+  `MainActivity` from types it already has (`DeliveryResult`,
+  `M0Probe.Verdict.ok`, each diagnostic probe's own `failed` boolean) —
+  never parsed from the report string; the PASS/FAIL rule is documented in
+  `ReportLog.Outcome`'s own KDoc as owner-overturnable (see that doc for
+  the `RefusedHonestUnderThreshold` -> FAIL call). Glyphs are the fixed
+  Unicode prefixes "✓ "/"✗ "/"… " baked into the entry's stored title line,
+  so both collapsed and expanded views show it identically with no extra
+  span/styling work. 11 new `ReportLogTest` cases. (zkagent-prd.md:2138-2144)
 - **Q44 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — Dim a completed
   run with ticked checkboxes to show it is done. Status: APPROVED into §6.2
   item 19 (D67). **BUILT-IN-`1bc345b`, device verification pending.** Item

@@ -642,6 +642,8 @@ abstract class MainActivity : AppCompatActivity() {
                         sent = "nothing left this device",
                         shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                     ),
+                    // item 22: a refusal — see ReportLog.Outcome's doc.
+                    outcome = ReportLog.Outcome.FAIL,
                 )
                 showBlockingOutcomeDialog(SESSION_EXPIRED_MESSAGE, isAccessEstablishmentFailure = false)
                 return
@@ -669,6 +671,8 @@ abstract class MainActivity : AppCompatActivity() {
                             sent = "nothing left this device",
                             shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                         ),
+                        // item 22: a refusal — see ReportLog.Outcome's doc.
+                        outcome = ReportLog.Outcome.FAIL,
                     )
                     showBlockingOutcomeDialog(reason, isAccessEstablishmentFailure = false)
                     return
@@ -684,6 +688,8 @@ abstract class MainActivity : AppCompatActivity() {
                             sent = "nothing left this device",
                             shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                         ),
+                        // item 22: a refusal — see ReportLog.Outcome's doc.
+                        outcome = ReportLog.Outcome.FAIL,
                     )
                     showBlockingOutcomeDialog(reason, isAccessEstablishmentFailure = false)
                     return
@@ -748,6 +754,9 @@ abstract class MainActivity : AppCompatActivity() {
         // [ReportLog.expandedSnapshot]/[terminalSnapshot]'s doc.
         outState.putBooleanArray(STATE_LOG_EXPANDED, reportLog.expandedSnapshot().toBooleanArray())
         outState.putBooleanArray(STATE_LOG_TERMINAL, reportLog.terminalSnapshot().toBooleanArray())
+        // §6.2 item 22 (D70(a)): the sibling per-entry glyph state — see
+        // [ReportLog.outcomesSnapshot]'s doc.
+        outState.putStringArrayList(STATE_LOG_OUTCOMES, ArrayList(reportLog.outcomesSnapshot().map { it.name }))
         // D58 step 2 (finding #1): reads FROM the owner (paneState), the
         // app's own tab index — see [PaneState]'s class doc.
         outState.putInt(STATE_TAB_INDEX, paneState.tabIndexToSave())
@@ -1055,6 +1064,8 @@ abstract class MainActivity : AppCompatActivity() {
                         sent = "nothing left this device",
                         shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                     ),
+                    // item 22: a refusal — see ReportLog.Outcome's doc.
+                    outcome = ReportLog.Outcome.FAIL,
                 )
                 // D58 step 4: [SessionDisplay.HandoffState.Refused] is
                 // supplied directly, not derived via [currentHandoffState] —
@@ -1137,8 +1148,13 @@ abstract class MainActivity : AppCompatActivity() {
      *   [ReportLog.append]'s doc (2026-09-01 real-device fix). Null for
      *   every call that is not part of a pending/terminal pair.
      * @param pending true ONLY for the one "In progress" report a mint
-     *   attempt emits while awaiting biometric authorization. */
-    private fun emitReport(text: String, summary: ReportLog.DisclosureSummary, attemptId: String? = null, pending: Boolean = false) {
+     *   attempt emits while awaiting biometric authorization.
+     * @param outcome (§6.2 item 22, D70(a)) this entry's PASS/FAIL
+     *   classification — see [ReportLog.Outcome]'s doc for the exact rule.
+     *   Ignored when [pending] is true (always renders PENDING regardless).
+     *   Every call site below states this explicitly from types it already
+     *   has (never re-derived here) — see each call site's own comment. */
+    private fun emitReport(text: String, summary: ReportLog.DisclosureSummary, attemptId: String? = null, pending: Boolean = false, outcome: ReportLog.Outcome = ReportLog.Outcome.FAIL) {
         // §6.2 item 16 (D46): the log tab is an ADDITIONAL CONSUMER of this
         // one write site — never a second write site. [text] is exactly
         // what reportView shows, unmodified; [summary] is the value-free,
@@ -1147,7 +1163,7 @@ abstract class MainActivity : AppCompatActivity() {
         // (rather than adding a second one) is the mechanism D46 itself
         // requires — [attemptId]/[pending] are the same discipline applied
         // to the 2026-09-01 stale-in-progress-entry fix.
-        reportLog.append(text, summary, attemptId = attemptId, pending = pending)
+        reportLog.append(text, summary, attemptId = attemptId, pending = pending, outcome = outcome)
         reportView.text = reportLog.lastText
         refreshLogView()
         Log.i(TAG, "\n===== M2 REPORT (value-free) =====\n$text\n===== END =====")
@@ -1214,7 +1230,11 @@ abstract class MainActivity : AppCompatActivity() {
         // fallback (all-collapsed, all-terminal) this passes through to.
         val expanded = savedInstanceState.getBooleanArray(STATE_LOG_EXPANDED)?.toList()
         val terminal = savedInstanceState.getBooleanArray(STATE_LOG_TERMINAL)?.toList()
-        reportLog.restore(entries ?: emptyList(), lastText = text, expanded = expanded, terminal = terminal)
+        // §6.2 item 22 (D70(a)): the sibling per-entry glyph state — same
+        // Bundle fast path as expanded/terminal.
+        val outcomes = savedInstanceState.getStringArrayList(STATE_LOG_OUTCOMES)
+            ?.map { runCatching { ReportLog.Outcome.valueOf(it) }.getOrDefault(ReportLog.Outcome.FAIL) }
+        reportLog.restore(entries ?: emptyList(), lastText = text, expanded = expanded, terminal = terminal, outcomes = outcomes)
         if (text != null) reportView.text = reportLog.lastText
         if (entries != null) refreshLogView()
         Log.i(TAG, "M2 stage: restored report/log across Activity recreation (text=${text != null}, log_entries=${entries?.size ?: 0})")
@@ -1612,6 +1632,9 @@ abstract class MainActivity : AppCompatActivity() {
                         sent = "nothing left this device",
                         shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                     ),
+                    // item 22: a read exception is always a FAIL — see
+                    // ReportLog.Outcome's doc.
+                    outcome = ReportLog.Outcome.FAIL,
                 )
                 showBlockingOutcomeDialog(
                     reason,
@@ -1692,6 +1715,13 @@ abstract class MainActivity : AppCompatActivity() {
                     sent = "nothing left this device",
                     shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                 ),
+                // item 22: no mint was attempted here (mode A by design, or
+                // a masterlist real-no) — the run is PASS iff the read
+                // itself completed cleanly ([verdict.ok], the SAME boolean
+                // this report's own "PASS (read)"/"FAIL (could not check)"
+                // text above already renders); an integrity failure is
+                // FAIL. See ReportLog.Outcome's doc — owner-overturnable.
+                outcome = if (verdict.ok) ReportLog.Outcome.PASS else ReportLog.Outcome.FAIL,
             )
             return
         }
@@ -1715,6 +1745,8 @@ abstract class MainActivity : AppCompatActivity() {
                     sent = "nothing left this device",
                     shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                 ),
+                // item 22: a refusal — see ReportLog.Outcome's doc.
+                outcome = ReportLog.Outcome.FAIL,
             )
             showBlockingOutcomeDialog(
                 "Mode B requires a verified handoff request to scope the device key to — no handoff is pending.",
@@ -1747,6 +1779,8 @@ abstract class MainActivity : AppCompatActivity() {
                         sent = "nothing left this device",
                         shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                     ),
+                    // item 22: a refusal — see ReportLog.Outcome's doc.
+                    outcome = ReportLog.Outcome.FAIL,
                 )
                 showBlockingOutcomeDialog(SESSION_EXPIRED_MESSAGE, isAccessEstablishmentFailure = false)
                 return
@@ -1831,6 +1865,8 @@ abstract class MainActivity : AppCompatActivity() {
                             shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                         ),
                         attemptId = attemptId,
+                        // item 22: a failure — see ReportLog.Outcome's doc.
+                        outcome = ReportLog.Outcome.FAIL,
                     )
                     showBlockingOutcomeDialog("The verified handoff request's origin has no parseable host.", isAccessEstablishmentFailure = false)
                 }
@@ -1863,6 +1899,8 @@ abstract class MainActivity : AppCompatActivity() {
                             shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                         ),
                         attemptId = attemptId,
+                        // item 22: a failure — see ReportLog.Outcome's doc.
+                        outcome = ReportLog.Outcome.FAIL,
                     )
                     showBlockingOutcomeDialog("This document has no document-number field to derive a zktag from.", isAccessEstablishmentFailure = false)
                 }
@@ -1890,6 +1928,8 @@ abstract class MainActivity : AppCompatActivity() {
                             shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                         ),
                         attemptId = attemptId,
+                        // item 22: a failure — see ReportLog.Outcome's doc.
+                        outcome = ReportLog.Outcome.FAIL,
                     )
                     showBlockingOutcomeDialog("Device key generation failed: ${e.javaClass.simpleName}: ${e.message}", isAccessEstablishmentFailure = false)
                 }
@@ -1923,6 +1963,8 @@ abstract class MainActivity : AppCompatActivity() {
                     shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                 ),
                 attemptId = attemptId,
+                // item 22: a failure — see ReportLog.Outcome's doc.
+                outcome = ReportLog.Outcome.FAIL,
             )
             showBlockingOutcomeDialog("No usable device key or signature is available on this device.", isAccessEstablishmentFailure = false)
             return
@@ -1993,6 +2035,14 @@ abstract class MainActivity : AppCompatActivity() {
                             shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                         ),
                         attemptId = attemptId,
+                        // item 22: a cancelled/incomplete authorization never
+                        // reaches a delivered outcome — FAIL, even though
+                        // the embedded technical `verdict:` line above says
+                        // "PASS (read only, no mint)" (that line is about
+                        // the READ step, not this glyph's "did this scan
+                        // get you in" question). See ReportLog.Outcome's
+                        // doc — owner-overturnable.
+                        outcome = ReportLog.Outcome.FAIL,
                     )
                     showBlockingOutcomeDialog("Biometric/device-credential authorization error $errorCode: $errString", isAccessEstablishmentFailure = false)
                 }
@@ -2096,6 +2146,8 @@ abstract class MainActivity : AppCompatActivity() {
                         shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                     ),
                     attemptId = attemptId,
+                    // item 22: a failure — see ReportLog.Outcome's doc.
+                    outcome = ReportLog.Outcome.FAIL,
                 )
                 showBlockingOutcomeDialog("The site's request did not specify a valid age threshold to check.", isAccessEstablishmentFailure = false)
             }
@@ -2128,6 +2180,8 @@ abstract class MainActivity : AppCompatActivity() {
                         shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                     ),
                     attemptId = attemptId,
+                    // item 22: a failure — see ReportLog.Outcome's doc.
+                    outcome = ReportLog.Outcome.FAIL,
                 )
                 showBlockingOutcomeDialog("This document's date of birth could not be read.", isAccessEstablishmentFailure = false)
             }
@@ -2172,6 +2226,8 @@ abstract class MainActivity : AppCompatActivity() {
                         shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                     ),
                     attemptId = attemptId,
+                    // item 22: a failure — see ReportLog.Outcome's doc.
+                    outcome = ReportLog.Outcome.FAIL,
                 )
                 showBlockingOutcomeDialog("Could not read the device key's public key bytes.", isAccessEstablishmentFailure = false)
             }
@@ -2452,7 +2508,14 @@ abstract class MainActivity : AppCompatActivity() {
                 Log.w(TAG, "M2 lifecycle: fence closed — dropped mint report/confirmation (a COMPLETED result: evidence already left the device, nothing recorded or shown)")
                 return@runOnUiThread
             }
-            emitReport(report, summary, attemptId = attemptId)
+            // item 22 (D70(a)): PASS iff the site actually accepted the
+            // delivered presentation — the ONLY DeliveryResult that is —
+            // every other outcome (RefusedHonestUnderThreshold included:
+            // the claim was disclosed truthfully, but the site's own gate
+            // still said no) is FAIL. See ReportLog.Outcome's doc for the
+            // full rule and why RefusedHonestUnderThreshold is FAIL here.
+            val logOutcome = if (deliveryResult is DeliveryResult.Accepted) ReportLog.Outcome.PASS else ReportLog.Outcome.FAIL
+            emitReport(report, summary, attemptId = attemptId, outcome = logOutcome)
             // 2026-09 real-device fix ("confirm success too" — the owner's
             // three follow-up scans were all genuine successes with nothing
             // telling him to go back to the browser): ONLY a genuinely
@@ -2547,7 +2610,11 @@ abstract class MainActivity : AppCompatActivity() {
                 Log.i(TAG, "M2 lifecycle: fence closed — dropped masterlist probe report")
                 return@runOnUiThread
             }
-            emitReport(text, diagnosticSummary(failed = text.contains("PROBE FAILED") || text.contains("INVALID RUN"), label = "masterlist checks"))
+            // item 22: reuse the SAME `failed` judgment diagnosticSummary's
+            // own Result line is built from — never a second, independent
+            // read of [text].
+            val probeFailed = text.contains("PROBE FAILED") || text.contains("INVALID RUN")
+            emitReport(text, diagnosticSummary(failed = probeFailed, label = "masterlist checks"), outcome = if (probeFailed) ReportLog.Outcome.FAIL else ReportLog.Outcome.PASS)
         }
     }
 
@@ -2591,7 +2658,11 @@ abstract class MainActivity : AppCompatActivity() {
                 Log.i(TAG, "M2 lifecycle: fence closed — dropped device key probe report")
                 return@runOnUiThread
             }
-            emitReport(text, diagnosticSummary(failed = text.contains("PROBE FAILED") || text.contains("MISMATCH") || text.contains("UNEXPECTED"), label = "device key self-test"))
+            // item 22: reuse the SAME `failed` judgment diagnosticSummary's
+            // own Result line is built from — never a second, independent
+            // read of [text].
+            val probeFailed = text.contains("PROBE FAILED") || text.contains("MISMATCH") || text.contains("UNEXPECTED")
+            emitReport(text, diagnosticSummary(failed = probeFailed, label = "device key self-test"), outcome = if (probeFailed) ReportLog.Outcome.FAIL else ReportLog.Outcome.PASS)
         }
     }
 
@@ -2641,6 +2712,10 @@ abstract class MainActivity : AppCompatActivity() {
         // §6.2 item 19 (D67, Q44): the sibling per-entry terminal state —
         // see [ReportLog.terminalSnapshot]'s doc.
         private const val STATE_LOG_TERMINAL = "m2_log_terminal"
+        // §6.2 item 22 (D70(a)): the sibling per-entry glyph state — stored
+        // as enum NAMEs (StringArrayList; Bundle has no native enum-array
+        // type), see [ReportLog.outcomesSnapshot]'s doc.
+        private const val STATE_LOG_OUTCOMES = "m2_log_outcomes"
         // §6.2 item 19 (D67, Q44): fraction of [logView]'s own configured
         // text alpha a terminal entry is dimmed to — see
         // [dimmedLogEntryColor]'s doc for why this is a fraction of the
