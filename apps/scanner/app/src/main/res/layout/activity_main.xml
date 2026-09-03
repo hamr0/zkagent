@@ -201,12 +201,12 @@
                      (handled by RegularActivity's VIEW intent-filter, no UI of
                      its own needed — see MainActivity.pendingHandoff). This
                      block is ONLY the cross-device fallback: a verifier
-                     website shows a QR on another screen; "Scan QR" launches
-                     a live camera barcode scan (Google Code Scanner API,
-                     finding #18 fix / D68 part b — see MainActivity.kt's
-                     qrScanner/launchQrScan and README.md), and feeds the
-                     decoded text into the SAME pendingHandoff capture path as
-                     the av:// deep link. A manual-paste field is the
+                     website shows a QR on another screen; the person scans
+                     it with any camera app on their phone and taps the
+                     resulting link, which lands on the same VIEW intent
+                     filter as a same-device av:// link (D69, 2026-09-03 —
+                     no in-app scanner: see decisions.md D69 and
+                     README.md). A manual-paste field is the
                      fallback-of-the-fallback. -->
                 <LinearLayout
                     android:id="@+id/handoff_container"
@@ -221,12 +221,12 @@
                         android:textAppearance="@style/TextAppearance.AppCompat.Subhead"
                         android:text="@string/handoff_heading" />
 
-                    <Button
-                        android:id="@+id/button_scan_qr"
+                    <TextView
+                        android:id="@+id/handoff_camera_hint"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="@string/button_scan_qr" />
+                        android:text="@string/handoff_camera_hint" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/handoff_manual_layout"

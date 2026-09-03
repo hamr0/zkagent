@@ -32,7 +32,7 @@
     <string name="biometric_prompt_subtitle">Required only to emit a result — the document has already been read</string>
 
     <string name="handoff_heading">Hand off to the verifier</string>
-    <string name="button_scan_qr">Scan QR (cross-device fallback)</string>
+    <string name="handoff_camera_hint">On another device? Scan the site\'s QR with your camera app, then tap the link.</string>
     <string name="handoff_manual_hint">…or paste an av:// link / request_uri</string>
     <string name="handoff_qr_description">Photo of a QR code shown by the verifier, decoded locally on-device</string>
 

@@ -99,18 +99,16 @@ dependencies {
     implementation(libs.bcpkix.jdk15on) // do not update — also supplies CMS (org.bouncycastle.cms.*) for §6.2 item 7
     implementation(libs.commons.io)
     implementation(libs.androidx.biometric) // §6.2 item 2 — BiometricPrompt (biometric-or-device-credential gate)
-    // §6.2 item 8 QR fallback, live camera scan (finding #18 fix, D68 part
-    // b, 2026-09-03) — Google's Code Scanner API. Evaluated against
-    // com.google.mlkit:barcode-scanning (bundled model) and chosen instead
-    // because its scan UI runs inside a Play-services-owned delegate
-    // activity in a separate process: it requests android.permission.CAMERA
-    // itself, at that process's own manifest, so THIS app's manifest gains
-    // no new <uses-permission> (confirmed by inspecting the aar's own
-    // AndroidManifest.xml — it declares zero permissions) and no new
-    // network dependency of this app's own, meeting item 10's constraint.
-    // ML Kit's bundled model would instead require this app to declare
-    // CAMERA and build its own CameraX preview.
-    implementation(libs.play.services.code.scanner)
+    // §6.2 item 8 QR fallback (D69, 2026-09-03): NO in-app scanner
+    // dependency. The Google Code Scanner API tried under finding #18 /
+    // D68(b) was removed the same day it was added — a device test showed
+    // it still runs in a Play services process, pulls Google's
+    // data-transport telemetry components into the merged manifest, and
+    // downloads its module from Google on first use, which the app cannot
+    // have zero doubt about. The proven route instead: the verifier renders
+    // the QR, the user scans it with any camera app, and that app's own
+    // av:// VIEW intent lands directly in RegularActivity — no scanner
+    // library, no CAMERA permission, no extra process, ever, in this app.
 
     testImplementation(libs.junit)
     testImplementation(libs.json) // see libs.versions.toml — real org.json for unit tests only
