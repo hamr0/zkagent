@@ -211,8 +211,8 @@ Mode B: tier B, either <code>sig-ed25519/1</code> or <code>sig-p256/1</code> acc
   <h2>Cross-device</h2>
   <img id="qrimg" width="240" height="240" alt="QR code encoding the av:// handoff link">
   <pre id="qrtext"></pre>
-  <p class="muted">Scan the QR image above with the scanner app's "Scan QR" button
-  (D68 part b), or use the raw link below.</p>
+  <p class="muted">Scan the QR with the phone's camera app and tap the link it offers
+  (D68 part b); on the same phone, tap the link text instead.</p>
   <h2>Status</h2>
   <p id="status">waiting for the app…</p>
   <p id="verdict"></p>

@@ -104,10 +104,19 @@ that have not happened" rule).
   itself. Device-proven twice (12:19:28, 12:19:38) —
   `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 7. Both halves
   of finding #18 are CLOSED — see `.claude/remember/findings.md` #18.
-- **Incoming request-object (JAR/JWS) signatures are NOT verified** —
-  there is no owner-approved `trustedChallengeIssuers` pinning surface in
-  this build (D20 names the shape; §6.2 doesn't specify where an app build
-  gets one). See `HandoffClient.kt`'s class doc.
+- **Incoming request-object (JAR/JWS) signatures ARE verified** (§6.2 item
+  14, D34/D37, `RequestTrust.kt`) — `client_id`/`request_uri`/`response_uri`
+  must all resolve to one origin, and the request object must be a compact
+  ES256 JWS verifying against a key resolved for that origin; either check
+  failing is a refusal, never a warn-and-continue. Trust anchor is the
+  origin itself, not an authority-bound allow-list: production resolves the
+  key from `https://<origin>/.well-known/zkagent-verifier` over TLS, but the
+  M2 spike (`spikes/m2-handoff`, plain `http://127.0.0.1`, no TLS, nothing
+  at that well-known path) is carved out with ONE build-time pinned DEV
+  public key, accepted only when the origin's scheme is `http` and its host
+  is `127.0.0.1` or `localhost` — never for any other origin. "No production
+  trust store yet" stands as a disclosure until a real TLS origin exists to
+  test the well-known path against (D34/Q29/D37).
 - **The masterlist CMS trust anchor (`assets/csca-germany-root.der`) is
   carried forward from the M2 opening session's provenance check
   (`docs/logs/M2-SCAN-EVIDENCE.md`), not independently re-verified by this
