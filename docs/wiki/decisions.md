@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D64
+title: zkagent — owner decisions D1–D65
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D64
+# Owner decisions D1–D65
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -143,4 +143,6 @@ for those.
 
 D57's exit criterion (3) (".claude/remember/findings.md has no OPEN entry at consequence HIGH") is now MET by D61/D62 closing findings #10/#11. The freeze's actual lift is a separate decision, withheld pending a device session covering: the Q47 fix check, a mid-read re-tap, a QR request plus forced recreation mid-verify, an Activity destroyed with the biometric prompt open, and a hostile link from a second origin — to be recorded after that session, not here. (owner, 2026-09-02)
 
-Device session 2026-09-03 (see `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md`) cleared the verification debt items; lift ruling pending owner.
+Device session 2026-09-03 (see `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md`) cleared the verification debt items; the lift ruling is recorded at D65 below.
+
+**D65 — The D57/D60 feature FREEZE on `apps/scanner` is LIFTED.** Basis: D57's exit criteria are all met — (1) MET; (2) MET (13 fenced sites, `72e0b2c`); (3) MET by D61/D62 (no OPEN finding at consequence HIGH). D60's remaining verification-debt items (the `BiometricPrompt` fence, code-verified only at close; the QR/manual-paste handoff path, never exercised under fence conditions) were cleared by the 2026-09-03 device session; finding #10 is now device-proven against a genuinely foreign origin; Q47 is device-confirmed. Carried forward as NOT freeze-related, next-module items: finding #4's non-rotation remainder (the `SessionState` design work), finding #6 (the mid-read gate, proven by unit test and source trace only — not device-reachable with real cards), finding #16's Option B marker (D64), and new finding #18 (QR thumbnail capture + three unlogged Snackbars). Rule after lift: NO-GO #10 still applies — nothing enters a milestone before it is written into the PRD; D57's process rules (briefed spawns, FIX-vs-ENHANCEMENT tags, device-first POCs) remain in force as standing practice, not as a freeze. (owner, 2026-09-03)
