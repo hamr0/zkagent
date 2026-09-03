@@ -89,7 +89,12 @@ that have not happened" rule).
 - **QR is decode-only, via the system camera app**, not a live in-app
   scanner (no CameraX/zxing-android-embedded dependency added). `zxing-core`
   (Apache-2.0, pure-Java, decode-only) is a **new dependency**, flagged for
-  owner sign-off.
+  owner sign-off. **Known limitation (finding #18, 2026-09-03, open,
+  non-blocking):** capture uses `TakePicturePreview`, a low-resolution
+  camera-preview thumbnail, which failed to decode a laptop-screen-rendered
+  `av://` link across three attempts on device — no crash, only a Snackbar.
+  The three Snackbars on that path (`MainActivity.kt:290`, `:295`, `:841`)
+  also have no matching `Log` call. See `.claude/remember/findings.md` #18.
 - **Incoming request-object (JAR/JWS) signatures are NOT verified** —
   there is no owner-approved `trustedChallengeIssuers` pinning surface in
   this build (D20 names the shape; §6.2 doesn't specify where an app build
