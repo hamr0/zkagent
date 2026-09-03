@@ -5,6 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs (D71 device-confirmed, 2026-09-03 ~17:30–17:45, build `a61bcc8`): item 19 code
+  removed, item 25 dialog mode sentence confirmed, tests 654/0.** Follow-up device session on the
+  two commits D71 anticipated: `5cf39bf` (item 19/D71a — `ReportLog`/`MainActivity`/
+  `ReportLogStore` dimming path removed) and `a61bcc8` (item 25/D71b — `OutcomeText.
+  withModeSentence`, `SessionDisplay.modeLabel`). Owner confirmed every log entry now renders in
+  the log view's normal text colour, no grey; a bare local scan on the NL ID card produced an
+  outcome dialog reading "This scan was Mode A, anonymous.", matching mode A on the scan-pane
+  status line and the log entry. Test counts on `a61bcc8`: 327 per variant × 2 = 654, 0 failures
+  (was 660: −8 removed `ReportLogTest` dimming cases, +5 new `OutcomeTextTest` cases). §6.2 item
+  19's exit-criteria row is filled in with the coder sha (was `<coder sha, pending>`); item 25's
+  row moves from "Built, device-pending" to device-confirmed. New evidence recorded in section 14
+  of `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md`.
 - **Docs (D71, 2026-09-03 ~15:30): item 19 withdrawn (Q44 closed as not wanted), item 25
   added (mode sentence in the outcome dialog), items 22/locked-button-wording owner-confirmed,
   item 18 device-confirmed.** Four owner decisions from the same device-session exchange, recorded

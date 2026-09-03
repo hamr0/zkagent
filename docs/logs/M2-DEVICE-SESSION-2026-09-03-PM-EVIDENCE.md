@@ -301,6 +301,33 @@ decisions.md D71(a)–(d).
 
 ---
 
+## 14 — Third device pass, 2026-09-03 ~17:30–17:45 (build `a61bcc8`, debug, installed 17:27:35)
+
+D71 follow-up check on the debug build built content-identical to `a61bcc8` — item 19's code
+removal (`5cf39bf`) and item 25's new mode sentence (`a61bcc8`), both landed on this branch after
+D71's docs-only commit (`76ba727`). Per this file's own rule, only value-free log lines and
+owner-reported outcomes appear below — no PII.
+
+**14.1 — Item 19 (dim a completed run, D71a): code removed, PASS.** Owner ran a scan and opened
+the log view: every entry, including terminal ones, rendered in the log view's normal text
+colour — no grey, no dimming contrast anywhere. This matches `5cf39bf`'s removal of
+`ReportLog`'s `terminalFlags`/`dimmedTextColor` styling branch and `MainActivity`'s
+`dimmedLogEntryColor()`/`DIM_ALPHA_FRACTION`. **Result: PASS**, closing item 19's code-removal
+follow-up (the exit-criteria row's `<coder sha, pending>` placeholder is filled in above).
+
+**14.2 — Item 25 (mode sentence in the terminal outcome dialog, D71b): PASS.** Owner ran a bare
+local scan (no pending handoff) on the NL ID card. The outcome dialog carried the sentence "This
+scan was Mode A, anonymous." — `OutcomeText.withModeSentence`'s mode-A wording, appended to the
+existing outcome message. The owner independently read mode A on the scan-pane status line and
+in the log entry's `Identity` line as well, matching `SessionDisplay.modeLabel`'s single source of
+wording. **Result: PASS**, closing item 25's device-verification-pending status.
+
+**14.3 — Test counts on `a61bcc8`: 327 per variant × 2 = 654, 0 failures.** Down from 660 recorded
+against the pre-`5cf39bf` build: −8 (the removed `ReportLogTest` dimming cases), +5
+(`OutcomeTextTest`).
+
+---
+
 ## Findings and questions this run produced or moved
 
 1. **Finding #19 — status refined, not changed.** The fix (`039fee7`, `android:launchMode=
@@ -334,6 +361,15 @@ decisions.md D71(a)–(d).
    built (every terminal entry renders equally dimmed when no scan is in flight); owner decision
    pending on whether the rule itself should change (keep as built vs. newest-entry-stays-bright).
 
+**Addendum, third device pass 2026-09-03 ~17:30–17:45 (section 14):**
+
+10. **Item 19 — superseded, code removed, PASS.** Section 14.1 supersedes item 9 above: D71a's
+    "drop dimming" ruling landed in `5cf39bf`; every log entry now renders in the log view's normal
+    text colour, device-confirmed. §6.2 item 19's exit-criteria row is filled in with the coder sha.
+11. **Item 25 — device-confirmed, PASS.** Section 14.2 closes item 25/D71b's device-verification-
+    pending status: a bare local scan's outcome dialog carried "This scan was Mode A, anonymous.",
+    matching the status line and log entry.
+
 ---
 
 ## What this run did and did NOT establish
@@ -362,6 +398,15 @@ decisions.md D71(a)–(d).
 - Item 19 (dim a completed run) — observed as built exactly as designed (all-terminal-entries
   render equally dimmed when idle); this is a design property, not a pass/fail outcome, and the
   owner's choice between "keep as built" and "newest entry stays bright" is still pending.
+
+**Addendum, third device pass 2026-09-03 ~17:30–17:45 (section 14) — now established:**
+- Item 19 (dim a completed run) — D71a's "drop dimming" ruling landed in code (`5cf39bf`); every
+  log entry renders in the log view's normal text colour, device-confirmed. Supersedes the "still
+  pending" line above — the owner's choice was drop dimming, not keep-as-built or
+  newest-entry-stays-bright.
+- Item 25 (mode sentence in the terminal outcome dialog) — PASS, device-confirmed. A bare local
+  scan's outcome dialog read "This scan was Mode A, anonymous.", matching the mode A shown on the
+  scan-pane status line and the log entry.
 
 ---
 
