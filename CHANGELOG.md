@@ -43,6 +43,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   `Snackbar`/`showBlockingOutcomeDialog` call site in `MainActivity.kt` found each already paired
   with a log line. Tests 285 → 293 (×2 build variants = 570 → 586), 0 failures. No device
   confirmation yet — source- and unit-test-verified only.
+- **Fix (finding #19): `apps/scanner`'s `RegularActivity` is `singleTask`,
+  not `singleTop`.** Device evidence 2026-09-03 12:54–12:57: a Chrome-tapped
+  `av://` link and a camera-app-scanned `av://` link each opened their own
+  task, producing two live `RegularActivity` instances — two independent
+  holders of handoff/session state — and a subsequent NFC tag tap routed by
+  `armNfcDispatch`'s foreground-dispatch `PendingIntent` at the invisible one
+  was blocked by Android's background-activity-launch hardening.
+  `singleTask` (not `singleInstance` — this app never launches a second
+  activity into the task, so `singleInstance`'s extra restriction buys
+  nothing here) collapses both launch paths onto one instance in one task;
+  a live instance receives the second link via `onNewIntent`, synchronously,
+  with no recreation and so no state loss (`handleIncomingIntent`'s
+  `av://`/`TECH_DISCOVERED` branches and `HandoffAdmission`'s guards are
+  unchanged). Verified `launchMode=2` in the built debug APK's manifest via
+  `aapt2 dump xmltree`. See `.claude/remember/findings.md` #19.
 - **Fix (D69): `apps/scanner`'s in-app Google Code Scanner is removed
   entirely — the QR route is a camera-app + `av://` app link, with no
   scanner dependency of any kind.** Same-day reversal of the previous

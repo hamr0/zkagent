@@ -5,8 +5,36 @@
         <activity
             android:name=".RegularActivity"
             android:screenOrientation="portrait"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:exported="true">
+
+            <!-- Finding #19 (2026-09-03, device-confirmed): a Chrome-launched
+                 av:// tap and a camera-app QR-scanned av:// link each landed
+                 in their OWN task under the previous singleTop, producing two
+                 live RegularActivity instances — two independent holders of
+                 handoff/session state (pendingHandoff, lockedMode,
+                 authorizedHandoff — see D58 step 3) — and a NFC
+                 TECH_DISCOVERED foreground-dispatch PendingIntent (see
+                 armNfcDispatch) that could only ever be armed by whichever
+                 instance last resumed, leaving the other invisible; a tag tap
+                 routed at the invisible one got dropped by Android's
+                 background-activity-launch hardening (device evidence
+                 2026-09-03 12:54–12:57). singleTask (not singleInstance — no
+                 other app ever needs this task to itself; singleInstance
+                 would additionally forbid launching a SECOND activity into
+                 this task, which this app never does anyway, so it buys
+                 nothing over singleTask here) collapses BOTH launch paths
+                 (browser tap, camera-app tap) onto ONE instance in ONE task:
+                 whichever one already exists is brought to front and handed
+                 the new intent via onNewIntent, never a second onCreate — see
+                 handleIncomingIntent's onNewIntent doc for why that delivery
+                 is synchronous to a live instance and needs no LifecycleFence
+                 guard, and MainActivity's onSaveInstanceState/onNewIntent for
+                 why no state is lost (a singleTask instance receiving a new
+                 intent while alive is not recreated). taskAffinity is left at
+                 its default (the package name) — identical for both launch
+                 paths, so it does not need to be pinned explicitly for this
+                 fix to hold. -->
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

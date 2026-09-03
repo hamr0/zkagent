@@ -104,6 +104,12 @@ that have not happened" rule).
   itself. Device-proven twice (12:19:28, 12:19:38) —
   `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 7. Both halves
   of finding #18 are CLOSED — see `.claude/remember/findings.md` #18.
+- **`RegularActivity` is `launchMode="singleTask"` (finding #19, 2026-09-03).**
+  A Chrome-tapped `av://` link and a camera-app-scanned one previously could
+  land in two separate tasks under the old `singleTop`, leaving two live
+  instances and two independent holders of handoff/session state; `singleTask`
+  collapses every `av://` and NFC `TECH_DISCOVERED` intent onto one instance
+  via `onNewIntent`, with no recreation and so no state loss.
 - **Incoming request-object (JAR/JWS) signatures ARE verified** (§6.2 item
   14, D34/D37, `RequestTrust.kt`) — `client_id`/`request_uri`/`response_uri`
   must all resolve to one origin, and the request object must be a compact
