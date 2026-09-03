@@ -110,9 +110,21 @@ object SessionDisplay {
         val lockButtonLabel: LockButtonLabel,
     )
 
+    /** §6.2 item 25 (D71b, 2026-09-03) — the plain-language label for each
+     * [LockedMode], factored out of the mode-line strings below so a
+     * terminal-outcome dialog ([MainActivity.showBlockingOutcomeDialog],
+     * via `OutcomeText`) can name the SAME "anonymous"/"recognisable to
+     * this site" wording this status line already uses, rather than a
+     * second, independently-typed pair of strings that could drift from
+     * it. Not private — `OutcomeText` is the one other caller. */
+    fun modeLabel(locked: LockedMode): String = when (locked) {
+        LockedMode.A -> "anonymous"
+        LockedMode.B -> "recognisable to this site"
+    }
+
     /** Matches the pre-refactor `refreshModeStatus`'s own "no handoff
      * pending" branch text verbatim — not a new string. */
-    private const val MODE_DEFAULT_TEXT = "Mode: A — anonymous (no site request pending)"
+    private val MODE_DEFAULT_TEXT = "Mode: A — ${modeLabel(LockedMode.A)} (no site request pending)"
 
     /**
      * @param locked the CURRENT `MainActivity.lockedMode`, mapped to
@@ -183,8 +195,8 @@ object SessionDisplay {
                 // Matches the pre-refactor refreshModeStatus's tier-mapping
                 // branch verbatim.
                 modeStatusText = when (handoff.tier) {
-                    "A" -> "Mode: A — anonymous"
-                    "B" -> "Mode: B — recognisable to this site"
+                    "A" -> "Mode: A — ${modeLabel(LockedMode.A)}"
+                    "B" -> "Mode: B — ${modeLabel(LockedMode.B)}"
                     else -> "Mode: pending — tap Lock & scan to see the outcome"
                 },
                 handoffStatusText = "Handoff verified — origin: ${handoff.origin}, requested tier: ${handoff.tier ?: "<absent>"}. Fill in your document details and lock to answer it.",

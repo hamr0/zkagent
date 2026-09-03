@@ -1420,11 +1420,23 @@ abstract class MainActivity : AppCompatActivity() {
      * @param isTransientChipCommunicationFailure bucket 2 (2026-09) — see
      *   [FailureTransition]'s doc. Defaults false; every call site except
      *   the one real read-failure path that can classify it leaves this at
-     *   the default; always false for a success confirmation. */
+     *   the default; always false for a success confirmation.
+     *
+     * **§6.2 item 25 (D71b, 2026-09-03):** [message] gains one sentence
+     * naming the presentation mode this outcome belongs to — see
+     * [OutcomeText.withModeSentence]'s doc for the exact rule and wording.
+     * The mode is read from [lockedMode] (via [lockedModeForDisplay], the
+     * SAME mapping the status line uses), never from [message]'s own
+     * caller-supplied text — a dialog shown before any mode was ever
+     * locked carries no sentence. The composed text is also `Log.i`'d
+     * here, at the same call site that shows the dialog — never a
+     * UI-only write (the standing rule this whole cluster follows). */
     private fun showBlockingOutcomeDialog(message: String, isAccessEstablishmentFailure: Boolean, isTransientChipCommunicationFailure: Boolean = false) {
         val keepMrzAndMode = FailureTransition.keepsMrzAndMode(isAccessEstablishmentFailure, isTransientChipCommunicationFailure)
+        val displayedMessage = OutcomeText.withModeSentence(message, lockedModeForDisplay())
+        Log.i(TAG, "M2 stage: terminal outcome dialog shown: $displayedMessage")
         AlertDialog.Builder(this)
-            .setMessage(message)
+            .setMessage(displayedMessage)
             .setCancelable(false)
             .setPositiveButton(R.string.dialog_ok) { dialog, _ ->
                 dialog.dismiss()
