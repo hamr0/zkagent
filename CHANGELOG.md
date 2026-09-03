@@ -66,6 +66,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   shape that class guards against — flagged for owner review. 5 new
   `PaneStateTest` cases. Built, device verification pending. Commit
   `ee45300`.
+- **Feature (§6.2 item 20, D68): scan-action button verb reads "Verify"/"Scan"
+  as a pure projection of handoff state — no new control.** Owner ruled
+  against the coder's proposed passive-banner shape: the existing single
+  scan-action button changes its VERB instead. Reads "Verify" while a
+  VERIFIED `av://` handoff request is pending or is driving the current
+  lock; reads "Scan" otherwise. `SessionDisplay.LockButtonLabel`'s prior
+  `DEFAULT`/`TAP_AND_SCAN` pair becomes `SCAN`/`VERIFY`/`TAP_AND_SCAN`/
+  `TAP_AND_VERIFY`; the LOCKED verb is driven by the lock-time
+  `authorizedHandoff != null` snapshot (D58 step 3's own pattern), never the
+  live handoff state, so a foreign handoff's async verification resolving
+  after a bare lock cannot flip the verb — mirrors the existing "locked
+  wins" immunity the mode/handoff text already has. Q40's "Tap and scan"
+  waiting-frame is preserved unchanged for a non-handoff lock; where it
+  would collide with item 20's verb, the locked+handoff-driven case reads
+  "Tap and verify" (a coder wording decision named in D68, not yet
+  owner-approved). 10 new unit tests, including an explicit REFUSED-handoff
+  → "Scan" case and a foreign-handoff-after-bare-lock immunity case (504 ->
+  524 passing per pair of variants). Not yet device-confirmed (Q45).
+- **Fix (Q36 follow-up): honest-under-threshold outcome now driven by this
+  device's OWN computed answer on an accepted `direct_post`, not only by a
+  body verdict.** `MintOutcome.classify` previously read the response
+  body's `allowed:false` FIRST and `claimedOverThreshold` only as a
+  tie-breaker underneath it — against `spikes/m2-handoff`'s reference
+  server, whose `direct_post` echoes only `{accepted:true}` (no `allowed`
+  key at all), an under-threshold holder therefore always landed on
+  `AcceptedOrUnknown` and saw the generic success dialog: WRONG, since this
+  device already knows from its own signed claim that the holder is under
+  threshold. `classify` now reads `claimedOverThreshold` first:
+  `over_threshold:false` is always `HonestUnderThreshold`, with or without
+  a body verdict; a body verdict, when present, may only make the outcome
+  STRICTER (demote a `claimedOverThreshold:true` claim to
+  `RefusedOtherReason` on an explicit body `allowed:false`), never override
+  an honest `false` back to a false success. Only the boolean and threshold
+  are logged (`M2 stage: age check — over_threshold=... threshold=...`,
+  unchanged) — no date of birth. 5 new/revised unit tests in
+  `MintOutcomeTest` covering both directions.
 - **Docs (D66/D67): Q36 resolved (real in-app age answer); Q39/Q40/Q43/Q44/Q45/Q48
   ruled; exit-criteria row 1 corrected.** D66 resolves Q36 — the scanner will
   compute a real over/under answer in-app, in a pure class, at mint time, from

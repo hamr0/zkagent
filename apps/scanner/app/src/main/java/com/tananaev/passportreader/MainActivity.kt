@@ -2242,15 +2242,22 @@ abstract class MainActivity : AppCompatActivity() {
                     deliveryResult = DeliveryResult.Rejected(result.httpStatus)
                 } else {
                     Log.i(TAG, "M2 stage: handoff direct_post response http_status=${result.httpStatus} body=${result.body}")
-                    // Q36/D66 item 3: an HTTP-2xx response CAN carry the PRD
-                    // §3 {ok, allowed, reason} verdict shape (MintOutcome's
-                    // class doc) — when it does, and `allowed:false`, this
+                    // Q36/D66 item 3, FIX pass (Q36 follow-up): this
                     // device's OWN claim (`overThreshold`, the SAME variable
-                    // signed above) tells an honest, expected under-threshold
-                    // refusal apart from any other verifier-side refusal.
-                    // The `spikes/m2-handoff` reference server today only
-                    // echoes `{accepted:true}` (no `allowed`), which parses
-                    // to null and keeps today's Accepted behaviour unchanged.
+                    // signed above) drives the honest-under-threshold
+                    // outcome directly — `MintOutcome.classify` no longer
+                    // waits for the body to say `allowed:false` first (see
+                    // that object's class doc for why the old
+                    // body-first order silently reported the generic
+                    // success dialog against `spikes/m2-handoff`, whose
+                    // `direct_post` echoes only `{accepted:true}`, no
+                    // `allowed` key at all). An HTTP-2xx response CAN still
+                    // carry the PRD §3 {ok, allowed, reason} verdict shape
+                    // when a real verifier is behind `response_uri` — that
+                    // body verdict, if present, can only make the outcome
+                    // STRICTER (demote an `over_threshold:true` claim to
+                    // [MintOutcome.Outcome.RefusedOtherReason]), never
+                    // override an honest `false` back to success.
                     val verdict = DirectPostVerdict.parse(result.body)
                     deliveryResult = when (val outcome = MintOutcome.classify(verdict, claimedOverThreshold = overThreshold)) {
                         MintOutcome.Outcome.AcceptedOrUnknown -> DeliveryResult.Accepted

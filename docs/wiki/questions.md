@@ -246,9 +246,13 @@ this is flagged in the report back to the caller.
   flag guessed from strings. 8 new `ReportLogTest` cases.
   (zkagent-prd.md:2146-2152)
 - **Q45 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — A single control
-  distinguishing a "verify" scan from a "scan local" one. Status: APPROVED into
-  §6.2 item 20 (D67), open shape only — the coder proposes at build time, owner
-  approves. (zkagent-prd.md:2154-2160)
+  distinguishing a "verify" scan from a "scan local" one. Status:
+  BUILT-IN-120d276, device verification pending — owner ruled D68 (2026-09-03):
+  no new control; the existing scan-action button's verb ("Verify"/"Scan",
+  locked "Tap and verify"/"Tap and scan") is a pure projection of handoff
+  state, driven by the lock-time `authorizedHandoff` snapshot. Unit-tested
+  (`SessionDisplayTest`); not yet exercised on a real device. (zkagent-prd.md:2154-2160;
+  decisions.md D68)
 - **Q46 (opened 2026-09-02, deferred under D57 — label CORRECTNESS defect, not a
   styling preference)** — The MRZ input field is labelled "Passport number," which
   is factually wrong since the app also reads ID cards. Status: **FIXED in
