@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-03
+
+First lockstep release (D72): from this release, `packages/chiproof` and
+`apps/scanner` share a single repo version, bumped together at every
+release — chiproof is republished unchanged when only the app moved, so its
+npm version always names the repo state. Closes out M2, the scanner
+reference app: §6.2 items 1–25 complete, D66–D71 recorded, findings #18–#21
+closed. chiproof code is unchanged since 0.4.0 (republished as 0.5.0 under
+the lockstep rule); `apps/scanner` moves 0.2.0 → 0.5.0.
+
 - **Docs (D71 device-confirmed, 2026-09-03 ~17:30–17:45, build `a61bcc8`): item 19 code
   removed, item 25 dialog mode sentence confirmed, tests 654/0.** Follow-up device session on the
   two commits D71 anticipated: `5cf39bf` (item 19/D71a — `ReportLog`/`MainActivity`/

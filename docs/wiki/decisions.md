@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D71
+title: zkagent — owner decisions D1–D72
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D71
+# Owner decisions D1–D72
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -182,3 +182,5 @@ Owner: from the 2026-09-03 device session, recorded to satisfy the scope gate (N
 (d) **Locked-button wording — CONFIRMED, owner-reviewed.** "Tap and verify" (a locked, handoff-driven session) and "Tap and scan" (a locked, non-handoff session) — the wording D68(a) flagged back as a coder decision not yet owner-approved — is confirmed as-is. No code change.
 
 Owner: item 19 "drop dimming"; item 25 approved from the same exchange that raised it; items 22 and 20's locked-button wording reviewed and confirmed without change. See milestones.md §6.2 items 19 (withdrawn), 22, 25 and the exit-criteria table; questions.md Q44 (closed, not wanted).
+
+**D72 (2026-09-03 ~18:15, owner) — lockstep versioning: one repo version from now on.** Every release bumps one number in three places: `packages/chiproof/package.json` version, `apps/scanner`'s `versionName`, and one `CHANGELOG.md` section — covering both packages under one heading. `chiproof` is published to npm at every release even when its code is unchanged, so its published version always names the repo state at that release. Tag convention becomes plain `vX.Y.Z` on `main` going forward; historical `chiproof-vX.Y.Z` tags are left as-is, not renamed. Rationale (owner): "why are we versioning the app separately from the lib, how am I going to keep track of both" — the app's prior `0.2.0` number had no decision behind it; it was inherited from §6.2 item 24's version-stamp acceptance criterion, not chosen as a release number. First release under this rule: v0.5.0 (chiproof 0.4.0 → 0.5.0, code unchanged; `apps/scanner` 0.2.0 → 0.5.0).
