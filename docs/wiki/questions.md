@@ -291,6 +291,11 @@ this is flagged in the report back to the caller.
   by this session's own reading of logcat (no logging requirement exists for
   this UI-only behaviour, by design). See
   `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` check 11.
+  **Device-confirmed 2026-09-03 PM, second pass (~15:02–15:15)**: the owner
+  tapped an older collapsed entry and it expanded — item 18's per-entry
+  toggle device-confirmed in the same glance as section 13's other checks.
+  See `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` section 13
+  addendum.
 - **Q44 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — Dim a completed
   run with ticked checkboxes to show it is done. Status: APPROVED into §6.2
   item 19 (D67). **BUILT-IN-`1bc345b`, device verification pending.** Item
@@ -316,6 +321,11 @@ this is flagged in the report back to the caller.
   as built" vs. "newest entry stays bright regardless of terminal state";
   neither is chosen yet. Not PASS, not FAIL. See
   `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` section 13.5.
+  **CLOSED 2026-09-03 ~15:30 (D71a) — not wanted.** Owner chose a third
+  option over both offered ("keep as built" / "newest entry stays bright"):
+  drop dimming entirely. §6.2 item 19 is WITHDRAWN (number reserved, not
+  reused); code removal is owed as a follow-up. See decisions.md D71(a);
+  milestones.md item 19 (withdrawn) and its exit-criteria row.
 - **Q45 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — A single control
   distinguishing a "verify" scan from a "scan local" one. Status:
   BUILT-IN-fc5faec, device verification pending — owner ruled D68 (2026-09-03):

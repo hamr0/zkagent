@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D70
+title: zkagent — owner decisions D1–D71
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D70
+# Owner decisions D1–D71
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -170,3 +170,15 @@ Built in 7daeba4 (cherry-picked onto chore/m2-exit-cleanup); device verification
 Owner: from the 2026-09-03 device session, recorded to satisfy the scope gate (NO-GO #10) before build starts. All three are ENHANCEMENT-tagged per D57's standing process rule, not FIX — none corrects a defect. See milestones.md §6.2 items 22–24 and exit-criteria table; questions.md Q38, Q43, Q44.
 
 (d) **Finding #19 — `singleTask` launch mode.** `android:launchMode="singleTask"` on `RegularActivity`, approved by the owner 2026-09-03 ~13:05, so every `av://` and NFC intent lands in the one instance via `onNewIntent` instead of a second instance in a separate task going invisible and having its intent-filter start blocked by Android's background-activity-launch hardening. Built in `039fee7`. See `.claude/remember/findings.md` #19; milestones.md exit-criteria table.
+
+**D71 (2026-09-03 ~15:30, owner) — item 19 dropped, item 25 added, items 22/20-verb confirmed.**
+
+(a) **Item 19 (dim a completed run, Q44) DROPPED.** Built in `1bc345b`, device-observed 2026-09-03 PM as uniform grey when idle (section 13.5 of the PM evidence page). Owner chose "Drop dimming" over the two offered alternatives (keep as built; newest-entry-stays-bright). Q44 closes as "not wanted," not as a defect. §6.2 item 19 becomes a WITHDRAWN item — the number stays reserved, not renumbered, not reused. Code removal is owed as a follow-up (coder side, this branch does not touch `apps/`); the exit-criteria row records "pending coder sha" literally until a follow-up docs commit fills it in.
+
+(b) **NEW §6.2 item 25 — mode sentence in the terminal outcome dialog (ENHANCEMENT, owner-approved, entered per NO-GO #10 before the code lands).** The blocking terminal-outcome dialog (item 15/D43, D52) MUST carry one additional sentence naming the mode of the presentation it reports: "Mode A, anonymous" or "Mode B, recognisable to this site" — the same wording already used on the post-lock status line. Rationale (owner exchange, 2026-09-03): the status line, the PIN/biometric prompt (which names the site, mode B only), and the log entry's `Identity` line already state the mode in three other places; the owner wants the outcome dialog, which is what the user actually reads at the end of a scan, to say it too. Mode A gets "Mode A, anonymous" verbatim; mode B gets "Mode B, recognisable to this site" verbatim — bare local scans (no pending handoff) are mode A by derivation (item 4) and get the same "Mode A, anonymous" sentence. Acceptance: an outcome dialog for a mode-A presentation and one for a mode-B presentation each show their respective sentence; a bare local scan's dialog shows the mode-A sentence.
+
+(c) **Item 22 glyph rule — CONFIRMED, owner-reviewed.** The rule as built (an honest under-threshold outcome — `over_threshold:false`, verifier `allowed=false under_threshold` — renders the fail glyph ✗, per `ReportLog.Outcome`'s documented `RefusedHonestUnderThreshold` → FAIL call) is correct and stays. Owner reviewed this rule specifically and confirmed it; no code change.
+
+(d) **Locked-button wording — CONFIRMED, owner-reviewed.** "Tap and verify" (a locked, handoff-driven session) and "Tap and scan" (a locked, non-handoff session) — the wording D68(a) flagged back as a coder decision not yet owner-approved — is confirmed as-is. No code change.
+
+Owner: item 19 "drop dimming"; item 25 approved from the same exchange that raised it; items 22 and 20's locked-button wording reviewed and confirmed without change. See milestones.md §6.2 items 19 (withdrawn), 22, 25 and the exit-criteria table; questions.md Q44 (closed, not wanted).

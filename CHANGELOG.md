@@ -5,6 +5,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs (D71, 2026-09-03 ~15:30): item 19 withdrawn (Q44 closed as not wanted), item 25
+  added (mode sentence in the outcome dialog), items 22/locked-button-wording owner-confirmed,
+  item 18 device-confirmed.** Four owner decisions from the same device-session exchange, recorded
+  before any code lands (scope gate, NO-GO #10): (a) item 19 (dim a completed run, built in
+  `1bc345b`, device-observed 2026-09-03 PM as uniform grey when idle) is DROPPED — owner chose
+  "drop dimming" over "keep as built"/"newest entry stays bright"; Q44 closes as "not wanted";
+  §6.2 item 19 is marked WITHDRAWN (number reserved, not reused), exit-criteria row updated to
+  "Withdrawn (D71a), code removed in `<coder sha, pending>`" pending a follow-up docs commit. (b)
+  NEW §6.2 item 25: the terminal outcome dialog gains one sentence naming the presentation mode
+  ("Mode A, anonymous" / "Mode B, recognisable to this site"), matching the existing status-line
+  wording; entered the PRD before the code lands. (c) Item 22's glyph rule (an honest
+  under-threshold outcome renders ✗) is owner-reviewed and confirmed, no change. (d) The
+  locked-button wording ("Tap and verify" / "Tap and scan") is owner-reviewed and confirmed, no
+  change. Also: item 18 (collapsed log entries, Q43) is now device-confirmed — the owner tapped an
+  older collapsed entry and it expanded, in the same glance as the PM evidence page's section 13
+  checks; exit-criteria row and Q43 updated the same way items 17/20/23 were in the prior commit.
+  Addendum added to `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` section 13.
 - **Docs (`apps/scanner`, M2 device session, 2026-09-03 PM, second pass): items 17/20/23
   device-confirmed, item 24 FIXED-IN-fb0e75f device-confirmed, item 19 observed as built.** A
   continuation of the same-day PM device session on the fix build (`fb0e75f`, versionName 0.2.0)

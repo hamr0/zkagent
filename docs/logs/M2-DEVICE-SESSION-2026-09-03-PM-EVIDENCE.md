@@ -287,6 +287,18 @@ visible during a live scan, mid-run. Owner has been offered two options: keep as
 the newest entry stay bright regardless of terminal state. **Result: not PASS, not FAIL —
 device-observed-as-built, owner decision pending.**
 
+**Addendum (item 18, D67/Q43):** in the same glance as 13.5, the owner tapped an older collapsed
+log entry and it expanded — item 18's per-entry collapse/expand toggle is device-confirmed.
+
+**Addendum (2026-09-03 ~15:30, D71 — owner decisions from this session's findings, recorded post
+hoc):** (a) item 19/Q44 (13.5 above) DROPPED — owner chose "drop dimming" over both offered
+alternatives, closing Q44 as "not wanted" and withdrawing §6.2 item 19; (b) NEW §6.2 item 25
+approved — the terminal outcome dialog gains one sentence naming the presentation mode ("Mode A,
+anonymous" / "Mode B, recognisable to this site"); (c) item 22's glyph rule (13.5's sibling; an
+honest under-threshold outcome renders ✗) reviewed and confirmed, no change; (d) the locked-button
+wording "Tap and verify"/"Tap and scan" (13.1, D68a) reviewed and confirmed, no change. See
+decisions.md D71(a)–(d).
+
 ---
 
 ## Findings and questions this run produced or moved
