@@ -924,6 +924,21 @@ JUnit XML, not from a device run.
   `RegularActivity`; built in `039fee7` (one instance for every `av://` and NFC intent). See
   decisions.md D70(d). Device re-check (Chrome-launched and camera-app-launched links both landing
   in and reusing the same instance) is still pending.
+- **Status update 2026-09-03 (device session,
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` check 2): device re-check done,
+  refined not overturned.** No second `MainActivity` pid/instance ever handles a tag read
+  anywhere in `device-session-3.log` (build `7f25f40`) — the actual two-instance defect this
+  finding names does not recur. **Correction to this session's own working assumption**: a
+  "Background activity launch blocked!" line against an invisible `ActivityRecord` still
+  appears on every foreground-dispatched NFC intent after the fix (`13:52:40`, `13:54:16`,
+  `13:56:10`, `13:58:38`, all post-`7f25f40`) — `singleTask` does not suppress the block
+  itself, only the second live instance. Each blocked start is immediately followed by an
+  `M2 stage: MRZ input` line on the SAME pid that had already captured that session's
+  handoff, confirming the intent still reaches the one live instance via `onNewIntent`
+  regardless of the superfluous blocked launch attempt. **Status: FIXED-IN-039fee7,
+  device-confirmed** (for the actual defect — two independent instances/session-state
+  holders); the BAL block itself is a harmless, unrelated side effect present before and
+  after this fix, not something `039fee7`/`7f25f40` were ever trying to eliminate.
 - **Also note**: the M2 exit-criteria table's row 1 status is unaffected by this finding and remains
   "NOT YET RE-RUN on the real build" for a different reason — the real-build re-run of the three
   `M2-SCAN-EVIDENCE.md` checkpoints is in progress: one mode-B mint completed on the real build
@@ -964,6 +979,13 @@ JUnit XML, not from a device run.
   variants = 570 → 586), 0 failures. **Residual**: no device evidence yet that the fixed guard
   produces the intended dialog/log on a real incomplete-field tap — this fix is source- and
   unit-test-verified only.
+- **Status update 2026-09-03 (device session,
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` check 2/finding-recap): device-confirmed,
+  residual CLOSED.** `13:58:13.260 W/MainActivity M2 stage: lock refused — document fields
+  incomplete (doc_present=false dob_present=false exp_present=false)` fired on a real
+  incomplete-field tap on build `7f25f40`, closing the fix's only remaining residual (no prior
+  device evidence of the guard's dialog/log actually firing).
+
 ### 2026-09-03 — #21: mode A never delivers a presentation — item 9's "ships bare" MUST unmet, item 15's modal missing for that outcome (consequence HIGH)
 
 - **Source**: device log 13:27 (NL card, mode A link from the 8788 spike), owner-tagged FIX
@@ -999,3 +1021,15 @@ JUnit XML, not from a device run.
   drive the actual compiled Kotlin bytecode (no JVM↔Android bridge available in this worktree), it
   hand-mirrored `HandoffClient.buildPresentation`'s rules in a parallel Node script — read that
   script's own doc comment before trusting it matches the Kotlin unconditionally.
+- **Status update 2026-09-03 (device session,
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` checks 5/7): residual CLOSED,
+  device-confirmed.** The original defect was reproduced live first, on build `039fee7`: a mode-A
+  NL-card presentation against the 8788 spike (13:27) completed its read but sent no
+  `direct_post` and left the transaction pending — the fix had not reached this device build yet.
+  On build `7f25f40` (13:54), the same handoff shape now produces `mint_gate: MET (present bare,
+  item 3)`, a real `direct_post` (`http_status=200`), `verdict: PASS (bare presentation sent)`, and
+  the verifier spike (`handoff-8788.log`) independently recorded `ok=true allowed=true tier=A
+  reason=no-evidence-required evidence=[]` — no `zktag_sha256_prefix` line anywhere in that block,
+  matching item 9's bare-mode requirement. This is the actual compiled Kotlin running on real
+  hardware, not the JVM-side hand-mirrored proof this entry's prior update flagged as unverified
+  against the real bytecode.

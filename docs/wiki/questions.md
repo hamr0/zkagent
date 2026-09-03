@@ -159,6 +159,11 @@ this is flagged in the report back to the caller.
   way tier does, so nothing needs it earlier. Closes D48's threshold-from-request
   MUST. `over_threshold` remains unconditionally `true` at the time of this fix
   (Q36, closed separately). (zkagent-prd.md:1985-2017)
+  **Device-confirmed 2026-09-03 PM**: a fresh verifier spike started with
+  `THRESHOLD=99` (not the default 18) produced `over_threshold=false
+  threshold=99` in the app's own log — the scanner is genuinely reading the
+  request-carried threshold, not a hardcoded value. See
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` check 8.
 - **Q36 (closed by D66, descendant of Q33 part b)** — Compute a real
   DOB-vs-threshold answer instead of asserting `true` unconditionally. Status:
   FIXED-IN-5a4b13b (D66) — owner ruled D66 (2026-09-03): the
@@ -181,6 +186,13 @@ this is flagged in the report back to the caller.
   `direct_post` returns only `accepted:true`, so this honest-under verdict
   split is not yet exercisable end-to-end; device verification pending.
   (zkagent-prd.md:2019-2032; decisions.md D66, owner 2026-09-03)
+  **Device-confirmed 2026-09-03 PM**: the honest-under path was exercised
+  end-to-end against a real verifier spike (`THRESHOLD=99`) — the app logged
+  `over_threshold=false threshold=99`, still minted and `direct_post`ed, and
+  the verifier independently recorded `ok=true allowed=false
+  reason=under_threshold`, confirming the split verdict the spike previously
+  could not exercise. See `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md`
+  check 8.
 - **Q37 (closed, resolved by implementation)** — Whether "consumed" vs. "expired"
   handoff sessions can be distinguished device-side without a verifier round-trip.
   Status: CLOSED 2026-09-01 — challenge expiry is reachable from the verified
@@ -212,6 +224,12 @@ this is flagged in the report back to the caller.
   session. Evidence: `docs/logs/M2-FENCE-EVIDENCE.md`,
   `.claude/remember/findings.md` #16. (owner,
   2026-09-02; 2026-09-03)
+  **Device-confirmed 2026-09-03 PM**: `M2 stage: loaded persisted log from
+  disk (entries=N)` observed at the start of three separate app instances in
+  one session, `entries` climbing 1→2→3 as scans accumulated — the log
+  genuinely persists across process death/restart. "Clear log" was not
+  exercised this session. See
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` check 11.
 - **Q39 (opened 2026-09-02)** — Whether an incoming handoff intent should switch
   the visible tab. Status: APPROVED into §6.2 item 17 (D67) — distinct from the
   already-rejected D55 (auto-switch on read completion); the tab-state ownership
@@ -264,6 +282,11 @@ this is flagged in the report back to the caller.
   Unicode prefixes "✓ "/"✗ "/"… " baked into the entry's stored title line,
   so both collapsed and expanded views show it identically with no extra
   span/styling work. 11 new `ReportLogTest` cases. (zkagent-prd.md:2138-2144)
+  **Owner-observed 2026-09-03 PM**: collapsed entries and their glyphs were
+  seen on device (item 18/22), not independently re-verified against the log
+  by this session's own reading of logcat (no logging requirement exists for
+  this UI-only behaviour, by design). See
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` check 11.
 - **Q44 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — Dim a completed
   run with ticked checkboxes to show it is done. Status: APPROVED into §6.2
   item 19 (D67). **BUILT-IN-`1bc345b`, device verification pending.** Item
@@ -322,6 +345,10 @@ this is flagged in the report back to the caller.
   routing resolves deterministically to the scanner app); does not bear on
   Q41/Q42's findings. (zkagent-prd.md:2181-2194)
 
+  **Device-confirmed 2026-09-03 PM**: owner saw the launcher icon/label on
+  device (~12:5x), matching this description. See
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` check 11.
+
   **Addendum (2026-09-03, item 24, D70(c)):** the launcher-level fix above
   distinguishes the three apps at the icon/label level, before install;
   item 24's version stamp (scan-pane footer + each log entry's `▸
@@ -330,5 +357,8 @@ this is flagged in the report back to the caller.
   two builds from different commits) once already open, which no launcher
   label alone can do. Not itself a Q48 answer — a separate, narrower
   ENHANCEMENT — noted here since both address the same underlying
-  "which app/build am I looking at" gap. Built, device verification
-  pending; see milestones.md §6.2 item 24, decisions.md D70(c).
+  "which app/build am I looking at" gap. Built, **DEVICE FAIL
+  2026-09-03 PM**: the stamp does not appear anywhere across the three
+  builds tested this session (`2525267`/`039fee7`/`7f25f40`) — see
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` check 11; see
+  milestones.md §6.2 item 24, decisions.md D70(c).

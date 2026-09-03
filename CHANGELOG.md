@@ -5,6 +5,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs (`apps/scanner`, M2 device session, 2026-09-03 PM): exit-criteria row 1 re-run on the
+  real build.** New evidence page
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` records device runs across three builds
+  (`2525267`, `039fee7`, `7f25f40` v0.2.0). Reinstall zktag stability, masterlist two-bucket rule
+  bucket (i), and mode A emitting no zktag after a mode-B presentation of the same document all
+  PASS on the real build for the first time. Finding #21 (mode A never delivers a presentation) is
+  reproduced failing on `039fee7` and confirmed fixed on `7f25f40` (a real bare tier-A `direct_post`
+  against a live verifier). Finding #20 (unlogged lock early-exit guards) is device-confirmed
+  fixed. Finding #19 is refined, not overturned: no second `RegularActivity` instance is ever seen
+  handling a tag read post-fix, but a "Background activity launch blocked!" line continues to
+  appear on every foreground-dispatched NFC intent — a harmless, unrelated side effect the
+  `singleTask` fix was never trying to eliminate. Item 24 (visible version stamp) is a **device
+  FAIL**: not found in either device-session log across all three builds — open. Q35/Q36's
+  request-carried-threshold and honest-under-threshold paths are device-confirmed against a
+  verifier spike started with a non-default threshold (99).
 - **Fix (`apps/scanner`, finding #19, D70(d)): `RegularActivity` launch mode
   is `singleTask`.** Every `av://` and NFC (`TECH_DISCOVERED`) intent now
   lands in the one live instance via `onNewIntent` instead of risking a
