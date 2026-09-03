@@ -5,6 +5,38 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Test (`apps/scanner`, M2 exit-criteria row 1): masterlist two-bucket
+  rule bucket (ii) unit-proven on the real build.** `M0Probe.passiveAuth`'s
+  inline `CertPathValidator` call is extracted into a new pure
+  `M0Probe.checkTrustPath(dsCerts, masterList): TrustPathResult`
+  (behavior-preserving — `passiveAuth` now calls it, same exception-class
+  message format). This is the narrowest seam that decides "is the
+  presenting issuer's CSCA present in an already-loaded, well-formed trust
+  store" without needing a real chip read. New
+  `PassiveAuthTrustTest` synthesizes a self-signed CSCA and a DS cert signed
+  by it (BouncyCastle `JcaX509v3CertificateBuilder`) and covers: (a) trust
+  store containing the issuing CSCA => `Trusted`; (b) well-formed trust
+  store lacking that CSCA => `NotTrusted("CertPathValidatorException")`,
+  reconstructed into `Verdict.no(...)` (`ok:true, allowed:false`), never
+  `Verdict.unknown(...)`; (c) an expired document-signer cert => not
+  trusted (PKIX path validation checks `notBefore`/`notAfter` for every
+  cert in the path, not just signatures — confirmed, no finding); (d) a
+  half-loaded masterlist stays a `passiveAuth`-level `ok:false`, never
+  reaching this seam at all. Verified non-vacuous: temporarily mutating
+  `checkTrustPath` to always return `Trusted` fails 2 of the 4 new tests
+  (the trusted/not-trusted pair), confirming they exercise real behavior,
+  then reverted. `MasterlistVerifierTest` already covers bucket (i)
+  (half-truncated CMS => `ok:false`) fully on the real bundled masterlist;
+  this closes the unit-level gap on bucket (ii) that only existed as
+  on-device evidence from the old M2-opening spike's `loadMasterList`
+  (`excludeAnchorFor`), a code path the real build does not call. Unit
+  tests 592 → 600 (296×2 → 300×2), 0 failures (measured directly from this
+  worktree's own baseline run at `1a8ab6d`, not the `576` figure quoted in
+  the prior CHANGELOG entry above — that entry predates two later commits,
+  `8c063ec`/`039fee7`, that also added tests without updating it). That
+  on-device spike evidence (2026-08-31) still stands and is not re-run here — a
+  planted-negative device run of the real build remains a separate,
+  outstanding exit-criteria item (see `docs/wiki/milestones.md`).
 - **Feature (`apps/scanner`, §6.2 item 24, D70(c)): version stamp — `versionName`
   + short git SHA on the scan pane and in each log entry's technical
   line.** `app/build.gradle.kts` computes the short SHA once at configure

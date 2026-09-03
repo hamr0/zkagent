@@ -130,6 +130,37 @@ object M0Probe {
 
     // --------------------------------------------------------- passive auth
 
+    /** Outcome of [checkTrustPath] — the two-bucket rule's bucket (ii)
+     * decision in isolation: is there a PKIX chain from the presenting
+     * issuer's document-signer certs to a trust anchor already loaded into
+     * [MasterList.keystore]? [NotTrusted] means the check RAN and the answer
+     * is "no" (masterList well-formed, issuer's CSCA simply absent) — never
+     * conflated with a broken/half-loaded masterlist, which passiveAuth
+     * already rejects earlier via `masterList.consistent`. */
+    sealed class TrustPathResult {
+        object Trusted : TrustPathResult()
+        data class NotTrusted(val exceptionClass: String) : TrustPathResult()
+    }
+
+    /**
+     * Pure PKIX chain-trust decision, extracted from [passiveAuth] so bucket
+     * (ii) of the masterlist two-bucket rule ("well-formed CMS list that
+     * simply lacks the presenting issuer's CSCA" => ok:true, allowed:false)
+     * can be exercised with synthetic certificates in a unit test, without a
+     * real chip read. Behavior-preserving: this is the exact
+     * CertPathValidator call [passiveAuth] used to run inline.
+     */
+    fun checkTrustPath(dsCerts: List<X509Certificate>, masterList: MasterList): TrustPathResult =
+        try {
+            val cf = CertificateFactory.getInstance("X.509")
+            val params = PKIXParameters(masterList.keystore).apply { isRevocationEnabled = false }
+            CertPathValidator.getInstance(CertPathValidator.getDefaultType())
+                .validate(cf.generateCertPath(dsCerts), params)
+            TrustPathResult.Trusted
+        } catch (e: Exception) {
+            TrustPathResult.NotTrusted(e.javaClass.simpleName)
+        }
+
     /**
      * Passive authentication with the three outcomes kept apart.
      *
@@ -181,16 +212,13 @@ object M0Probe {
             }
         }
 
-        try {
-            val cf = CertificateFactory.getInstance("X.509")
-            val params = PKIXParameters(masterList.keystore).apply { isRevocationEnabled = false }
-            CertPathValidator.getInstance(CertPathValidator.getDefaultType())
-                .validate(cf.generateCertPath(dsCerts), params)
-        } catch (e: Exception) {
-            // No trust anchor => this issuer's CSCA is absent from the list.
-            // That is a real "no" for this document, not a broken checker:
-            // we successfully determined we do not trust the signer.
-            return Verdict.no("no path to a trusted CSCA: ${e.javaClass.simpleName}")
+        when (val trust = checkTrustPath(dsCerts, masterList)) {
+            is TrustPathResult.NotTrusted ->
+                // No trust anchor => this issuer's CSCA is absent from the list.
+                // That is a real "no" for this document, not a broken checker:
+                // we successfully determined we do not trust the signer.
+                return Verdict.no("no path to a trusted CSCA: ${trust.exceptionClass}")
+            TrustPathResult.Trusted -> {}
         }
 
         return try {

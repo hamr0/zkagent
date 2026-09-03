@@ -90,7 +90,7 @@ gate, NO-GO #10).
 
 | Check | Pass | Status |
 |---|---|---|
-| Three `M2-SCAN-EVIDENCE.md` checkpoints re-run on the real build, both documents | Reinstall zktag stability; masterlist two-bucket rule with both negatives; mode A emits no zktag after a mode-B presentation (zkagent-prd.md:1639) | NOT YET RE-RUN on the real build — spike evidence only (2026-08-31); device session pending |
+| Three `M2-SCAN-EVIDENCE.md` checkpoints re-run on the real build, both documents | Reinstall zktag stability; masterlist two-bucket rule with both negatives; mode A emits no zktag after a mode-B presentation (zkagent-prd.md:1639) | NOT YET RE-RUN on the real build — spike evidence only (2026-08-31); device session pending. Masterlist bucket (ii) unit-proven on the real build in `4ca350e` (`PassiveAuthTrustTest`); device-level bucket (ii) needs a planted negative the real build deliberately lacks — spike-device evidence 2026-08-31 stands. |
 | Handoff roundtrip | Passes against `spikes/m2-handoff` over `av://`/`direct_post`, including a mode-B presentation under the any-of evidence set (zkagent-prd.md:1640) | Confirmed 2026-09-01 |
 | Mode-radio bug (F5) | Closed: mode radio removed entirely, mode derived — eliminates the bug class by construction (zkagent-prd.md:1641) | Closed |
 | Mode preselection (item 13) | Absent/invalid tier fails loudly, no default, now guarding derivation; tier C remains refused (zkagent-prd.md:1642) | Implemented |
