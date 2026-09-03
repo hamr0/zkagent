@@ -57,6 +57,17 @@ variant per the Blueprint AV Profile), `APP_LINK_BASE`, `SCOPE_DOMAIN`,
   `app_link_av`, via the `qrcode` npm package (pinned exact version,
   spike-only — never added to `packages/chiproof`). The text link is still
   shown alongside it.
+- **Cross-device route is a camera app, not an in-app scanner (D69,
+  2026-09-03, supersedes D68 part b).** `apps/scanner` carries no QR/camera
+  scanning dependency at all — the Google Code Scanner API tried under
+  D68(b) was removed the same day after a device test showed it still runs
+  in a Play services process and pulls Google's telemetry into the merged
+  manifest. This page's rendered QR image (above) is the whole cross-device
+  contract: the person scans it with whatever camera app they already have,
+  and that app's own `av://` VIEW intent lands directly on the scanner's
+  existing intent filter — the identical code path a same-device link uses.
+  Device-proven twice (12:19:28, 12:19:38) —
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 7.
 - **`ttlMs` in `POST /ui/presentations`** is a spike-only affordance so the expiry
   negative is testable; not part of the captured shape.
 - **`InMemoryNonceStore` with `allowInMemoryStore: true`** — single-process demo, the

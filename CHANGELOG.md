@@ -5,6 +5,38 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Fix (D69): `apps/scanner`'s in-app Google Code Scanner is removed
+  entirely — the QR route is a camera-app + `av://` app link, with no
+  scanner dependency of any kind.** Same-day reversal of the previous
+  entry's D68(b) fix, after a device test: `play-services-code-scanner`
+  still runs its scan UI in a Play services process, pulls Google's
+  data-transport telemetry into the merged manifest, and downloads its
+  scanning module from Google on first use — the app must be an
+  independent tool with zero doubt about bytes reaching Google.
+  `implementation(libs.play.services.code.scanner)` and its
+  `libs.versions.toml` entry are removed; `MainActivity.kt`'s
+  `qrScanner`/`launchQrScan` and imports, and the "Scan QR" button, are
+  deleted; a one-line non-interactive hint replaces the button ("On
+  another device? Scan the site's QR with your camera app, then tap the
+  link."). The manual-paste field (`handoff_manual_input` /
+  `applyPendingHandoffText`) is unchanged. The alternative route was
+  device-proven, not merely proposed: Pixel Camera scanned the spike's
+  rendered QR and fired the `av://` VIEW intent straight into the scanner
+  twice (origin `http://127.0.0.1:8788`, `signature_verified=true`), since
+  there is no public Android intent to launch a camera app directly into
+  QR-scanning mode. Merged release manifest re-verified clean of
+  `GmsBarcodeScanningDelegateActivity`/`MlKit*`/`datatransport`/
+  `GoogleApiActivity`; `aapt2 dump permissions` on the debug APK carries no
+  `CAMERA` or Google-services permission. `.claude/remember/findings.md`
+  #18's decode half is CLOSED by this decision. See decisions.md D69;
+  milestones.md §6.2 items 8/11; `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md`
+  check 7.
+- **Docs (D69): supersedes D68(b) — in-app QR scanner ruled out, native
+  camera-app route ruled in.** decisions.md gains D69 (heading now
+  D1–D69); milestones.md §6.2 items 8 and 11 amended; history.md gains
+  v1.51; `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` gains "Check
+  7 — native camera QR route"; `apps/scanner/README.md` and
+  `spikes/m2-handoff/README.md` describe the camera-app route.
 - **Docs: end-of-round sweep** — `docs/index.md` line counts/ranges regenerated,
   `history.md` intro version bumped, D-range metadata updated to D1–D68,
   `learnings.md` gets 2026-09-02/09-03 entries, and worktree commit shas cited

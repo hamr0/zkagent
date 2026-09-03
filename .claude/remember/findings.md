@@ -887,3 +887,15 @@ JUnit XML, not from a device run.
   camera QR scanner replaces thumbnail capture", logging half `eb36858` (above). Not
   yet device-confirmed against a real laptop-screen `av://` QR (see this build's report for the
   4-step device check).
+- **Status update 2026-09-03 (owner ruling, ~12:20, decisions.md D69): decode half CLOSED by D69
+  (in-app scanner removed; native camera-app route device-proven 2026-09-03).** Same-day reversal
+  of D68(b) after a device test: `play-services-code-scanner` still runs its scan UI in a Play
+  services process, pulls Google's data-transport telemetry into the merged manifest, and downloads
+  its module from Google on first use — the app must be an independent tool with zero doubt about
+  bytes reaching Google. The dependency, `launchQrScan`/`qrScanner`, and the "Scan QR" button are
+  removed entirely (replaced by a one-line non-interactive hint). The alternative was device-proven
+  instead of merely proposed: Pixel Camera scanned the spike's rendered QR and fired the `av://`
+  VIEW intent straight into the scanner twice (12:19:28, 12:19:38), both captured and verified
+  (origin `http://127.0.0.1:8788`, `signature_verified=true`) — see
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 7. See milestones.md §6.2 item 8/11
+  amendment and decisions.md D69.

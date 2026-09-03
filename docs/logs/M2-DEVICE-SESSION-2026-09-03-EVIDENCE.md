@@ -184,6 +184,43 @@ hostile links from the same local verifier origin").
 
 ---
 
+## 7 — Native camera QR route (12:19)
+
+Ruled out the in-app Google Code Scanner path (D68 part b) same-day, after this check, on privacy
+grounds (D69): a Play-services-hosted scanner still pulls Google's telemetry components into the
+merged manifest and downloads its module from Google on first use. Tested the alternative instead
+of just proposing it: the verifier spike renders `app_link_av` as a real QR image; the stock Pixel
+Camera app (`com.google.android.GoogleCamera`) scans it and fires the `av://` VIEW intent straight
+at the scanner's existing exported intent filter — no in-app scanner code involved at all.
+
+Two runs, each: launch Google Camera, point it at the spike's rendered QR, tap the resulting link.
+
+```
+09-03 12:19:21.792 I/ActivityTaskManager( 1668): START u0 {act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] flg=0x10200000 xflg=0x4 pkg=com.google.android.GoogleCamera cmp=com.google.android.GoogleCamera/com.android.camera.CameraLauncher bnds=[836,1905][1009,2100]} with LAUNCH_SINGLE_TASK from uid 10244 (com.google.android.apps.nexuslauncher) (sr=122897873) (BAL_ALLOW_VISIBLE_WINDOW) result code=0
+09-03 12:19:28.083 I/ActivityTaskManager( 1668): START u0 {act=android.intent.action.VIEW dat=av://authorize/... xflg=0x4 cmp=com.zkagent.scanner/com.tananaev.passportreader.RegularActivity} with LAUNCH_SINGLE_TOP from uid 10132 (com.google.android.GoogleCamera) (sr=264686014) (BAL_ALLOW_VISIBLE_WINDOW) result code=0
+09-03 12:19:28.207 I/MainActivity( 9966): M2 stage: pendingHandoff captured from av:// intent
+09-03 12:19:28.207 I/MainActivity( 9966): M2 stage: handoff captured, verifying request object before mode/lock become available (D33/D34/D37)
+09-03 12:19:28.259 I/ActivityTaskManager( 1668): Displayed com.zkagent.scanner/com.tananaev.passportreader.RegularActivity for user 0: +181ms
+09-03 12:19:28.270 I/MainActivity( 9966): M2 stage: handoff request object verified — origin=http://127.0.0.1:8788 signature_verified=true key_kind=dev-pinned
+09-03 12:19:32.020 W/ActivityTaskManager( 1668): Activity top resumed state loss timeout for ActivityRecord{219361118 u0 com.zkagent.scanner/com.tananaev.passportreader.RegularActivity t-1 f}}
+09-03 12:19:36.415 I/ActivityTaskManager( 1668): START u0 {act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] flg=0x10200000 xflg=0x4 pkg=com.google.android.GoogleCamera cmp=com.google.android.GoogleCamera/com.android.camera.CameraLauncher bnds=[836,1905][1009,2100]} with LAUNCH_SINGLE_TASK from uid 10244 (com.google.android.apps.nexuslauncher) (sr=122897873) (BAL_ALLOW_VISIBLE_WINDOW) result code=0
+09-03 12:19:38.346 I/ActivityTaskManager( 1668): START u0 {act=android.intent.action.VIEW dat=av://authorize/... xflg=0x4 cmp=com.zkagent.scanner/com.tananaev.passportreader.RegularActivity} with LAUNCH_SINGLE_TOP from uid 10132 (com.google.android.GoogleCamera) (sr=49349004) (BAL_ALLOW_VISIBLE_WINDOW) result code=0
+09-03 12:19:38.778 I/MainActivity(14239): M2 stage: pendingHandoff captured from av:// intent
+09-03 12:19:38.779 I/MainActivity(14239): M2 stage: handoff captured, verifying request object before mode/lock become available (D33/D34/D37)
+09-03 12:19:38.879 I/MainActivity(14239): M2 stage: handoff request object verified — origin=http://127.0.0.1:8788 signature_verified=true key_kind=dev-pinned
+09-03 12:19:38.882 I/ActivityTaskManager( 1668): Displayed com.zkagent.scanner/com.tananaev.passportreader.RegularActivity for user 0: +541ms
+```
+
+(`av://` URL elided as `...` in both fired intents, as in every other log excerpt in this doc.)
+
+**Result: PASS, twice.** Both runs captured and verified the request object
+(`origin=http://127.0.0.1:8788`, `signature_verified=true`) via the ordinary `av://` VIEW intent
+path, with zero in-app scanner code in the loop. This is the device evidence behind D69: the in-app
+Google Code Scanner (D68 part b) is removed the same day it was added, and this camera-app route is
+the sole cross-device QR path going forward.
+
+---
+
 ## Process notes
 
 - Forced Activity recreation via `settings put system font_scale 1.15` (then restored to `1.0`)

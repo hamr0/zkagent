@@ -7,7 +7,7 @@ sources: [docs/archive/zkagent-prd.md]
 
 # zkagent — PRD version history
 
-One row per PRD revision (v1.0 – v1.50), in order, from PRD §15 "Version history". Each entry gives the version, date, approval status, and what that revision changed. Decision (D) and question (Q) content itself is recorded on `decisions.md` and `questions.md`; this page tracks only the revision log.
+One row per PRD revision (v1.0 – v1.51), in order, from PRD §15 "Version history". Each entry gives the version, date, approval status, and what that revision changed. Decision (D) and question (Q) content itself is recorded on `decisions.md` and `questions.md`; this page tracks only the revision log.
 
 | Version | Date | Status | What changed |
 |---|---|---|---|
@@ -63,3 +63,4 @@ One row per PRD revision (v1.0 – v1.50), in order, from PRD §15 "Version hist
 | v1.48 | 2026-09-03 | owner-approved | D65 added: the D57/D60 feature FREEZE on `apps/scanner` is LIFTED — all three exit criteria met, and the 2026-09-03 device session cleared D60's remaining verification-debt items (`BiometricPrompt` fence, QR/paste path), device-proved finding #10, and device-confirmed Q47. Non-freeze items (findings #4, #6, #16, #18) carried forward to the next module; D57's process rules remain standing practice. (owner, 2026-09-03) |
 | v1.49 | 2026-09-03 | owner-approved | D66 added: Q36 resolved — a real in-app DOB-vs-threshold answer, minted honestly (`over_threshold:false` on an under-threshold holder still hands off, DOB never surfaced). D67 added: Q40 closed (wording sign-off); Q39/Q43/Q44/Q45/Q48 approved into §6.2 as new ENHANCEMENT items 17–21. Exit-criteria row 1 corrected to state the real-build re-run has not yet happened (spike evidence only). (owner, 2026-09-03) |
 | v1.50 | 2026-09-03 | owner-approved | D68 added: item 20 (Q45) shaped — no new control, the existing scan-action button's verb ("Verify"/"Scan") is a pure projection of handoff state, built and unit-tested; Q36 follow-up fix lands (`MintOutcome.classify` driven by this device's own over/under answer, not the response body, on an accepted `direct_post`). Exit-criteria row added for item 20. (owner, 2026-09-03) |
+| v1.51 | 2026-09-03 | owner-approved | D69 added, supersedes D68 part b same day: the in-app Google Code Scanner (`play-services-code-scanner`) is removed entirely after a device test found it still runs in a Play services process and pulls Google's telemetry/module-download into the app; the cross-device QR route is verifier-renders-QR + any camera app + the existing `av://` app link, device-proven twice (12:19:28, 12:19:38). §6.2 items 8/11 amended; finding #18's decode half CLOSED by D69. (owner, 2026-09-03) |
