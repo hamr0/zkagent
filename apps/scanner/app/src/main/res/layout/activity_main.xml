@@ -46,9 +46,16 @@
 
     </com.google.android.material.tabs.TabLayout>
 
+    <!-- FIX (§6.2 item 24 device FAIL 2026-09-03): this pane container was
+         match_parent with no weight inside the root vertical LinearLayout,
+         so it consumed all remaining height and laid version_stamp_view out
+         below the screen edge. 0dp + weight="1" makes it take only the
+         space left after the footer, per LinearLayout's weighted-sizing
+         pass — see version_stamp_view below. -->
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:paddingTop="@dimen/activity_vertical_margin">
 
         <LinearLayout

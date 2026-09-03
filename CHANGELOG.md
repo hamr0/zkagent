@@ -20,6 +20,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   FAIL**: not found in either device-session log across all three builds — open. Q35/Q36's
   request-carried-threshold and honest-under-threshold paths are device-confirmed against a
   verifier spike started with a non-default threshold (99).
+- **Fix (`apps/scanner`, §6.2 item 24 device FAIL 2026-09-03): version stamp footer now visible on screen.** `activity_main.xml`'s pane-container `FrameLayout` was `match_parent` with no `layout_weight` inside the root vertical `LinearLayout`, so it consumed all remaining height and laid `version_stamp_view` out below the screen edge; changed to `0dp` height + `layout_weight="1"`. (`ReportLog.kt`'s per-entry technical-block stamp line is unaffected — separately, it only renders when a log entry is expanded, which explains why the owner saw no stamp anywhere.)
 - **Fix (`apps/scanner`, finding #19, D70(d)): `RegularActivity` launch mode
   is `singleTask`.** Every `av://` and NFC (`TECH_DISCOVERED`) intent now
   lands in the one live instance via `onNewIntent` instead of risking a
