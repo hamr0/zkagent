@@ -5,6 +5,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Feature (§6.2 item 21, D67, ENHANCEMENT): launcher-distinguishable app
+  built.** `apps/scanner` gets its own adaptive launcher icon — solid
+  brand-colour background (`colorPrimary` `#009688`, reused from the app's
+  existing theme, not a new palette pick), a monochrome white
+  `verified_user` glyph foreground plus matching themed-icon (Android 13+)
+  layer, replacing the inherited byte-identical passportreader icon set
+  (five legacy `mipmap-*dpi/ic_launcher.png` fallbacks and `ic_launcher-web.png`
+  removed as unreferenced — `minSdk 30` means only the `mipmap-anydpi-v26`
+  adaptive-icon XML is ever resolved). Release label changed from
+  "zkagent scanner (reference)" to "zkagent Scanner"; a new
+  `app/src/debug/res/values/strings.xml` overrides it to
+  "zkagent Scanner (Debug)" for debug builds, paired with a debug-only
+  foreground override (`app/src/debug/res/drawable/ic_launcher_foreground.xml`)
+  adding a small orange corner badge, so a release+debug side-by-side
+  install is also distinguishable. `spikes/m0`/`spikes/m2-scan` intentionally
+  untouched (frozen spike forks, out of this item's scope — flagged to the
+  owner in Q48 if they're expected to stay installed long-term). Built and
+  test-verified only; device confirmation still pending. Implements Option A
+  of the coder's Q48 proposal (owner-approved 2026-09-03). See Q48;
+  decisions.md D67; milestones.md §6.2 item 21.
 - **Docs (D66/D67): Q36 resolved (real in-app age answer); Q39/Q40/Q43/Q44/Q45/Q48
   ruled; exit-criteria row 1 corrected.** D66 resolves Q36 — the scanner will
   compute a real over/under answer in-app, in a pure class, at mint time, from

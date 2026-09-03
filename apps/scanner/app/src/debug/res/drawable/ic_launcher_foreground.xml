@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- §6.2 item 21 (D67) — adaptive-icon foreground: Material Design's
-     "verified_user" glyph (public path data, Apache-2.0, from Google's
-     material-design-icons 24x24 grid), monochrome white, centered and
-     scaled 2x (24dp -> 48dp) into the 108dp canvas so it sits inside the
-     ~66dp adaptive-icon safe zone. -->
+<!-- §6.2 item 21 (D67) — debug-only override of the release foreground:
+     same glyph, plus a small orange corner badge so a device with both
+     the release and debug variant installed side by side (variant-sweep
+     testing, per this repo's own KEY TEST pattern) can tell them apart
+     on the launcher without opening either. Debug-only source set, never
+     packaged into a release build. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
         android:width="108dp"
         android:height="108dp"
@@ -18,4 +19,8 @@
             android:fillColor="#FFFFFF"
             android:pathData="M12,1L3,5v6c0,5.55 3.84,10.74 9,12 5.16,-1.26 9,-6.45 9,-12V5L12,1z M12,11.99h7c-0.53,4.12 -3.28,7.79 -7,8.94V12H5V6.3l7,-3.11V11.99z"/>
     </group>
+    <!-- debug badge: solid orange dot, upper-right corner -->
+    <path
+        android:fillColor="#FF6D00"
+        android:pathData="M84,24m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0"/>
 </vector>

@@ -1,6 +1,8 @@
 <resources>
 
-    <string name="app_name">zkagent scanner (reference)</string>
+    <!-- §6.2 item 21 (D67) — launcher label; debug builds override this via
+         app/src/debug/res/values/strings.xml ("zkagent Scanner (Debug)"). -->
+    <string name="app_name">zkagent Scanner</string>
 
     <string name="input_passport_number">Document number</string>
     <string name="input_expiration_date">Expiration date</string>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- §6.2 item 21 (D67) — debug-build launcher label override so a debug
+     install is distinguishable from the release install of this same app
+     (not just from the other spikes). No other string is overridden here. -->
+<resources>
+    <string name="app_name">zkagent Scanner (Debug)</string>
+</resources>

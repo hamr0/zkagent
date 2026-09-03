@@ -250,7 +250,12 @@ this is flagged in the report back to the caller.
   (zkagent-prd.md:2170-2179; owner, 2026-09-02/2026-09-03)
 - **Q48 (opened 2026-09-02 — UI/UX ENHANCEMENT, human-ID only, not a security
   question)** — Three installed reader apps are indistinguishable on the
-  launcher. Status: APPROVED into §6.2 item 21 (D67), open shape only — the
-  coder proposes an app label and icon at build time, owner approves. Verified
-  NOT a security gap (`av://` routing resolves deterministically to the scanner
-  app); does not bear on Q41/Q42's findings. (zkagent-prd.md:2181-2194)
+  launcher. Status: BUILT-IN-07285b4, device verification pending — Option
+  A of the coder's proposal shipped (adaptive icon, solid brand-colour
+  background + monochrome white glyph foreground/themed-icon layer, release
+  label "zkagent Scanner", debug label "zkagent Scanner (Debug)" plus a
+  corner-badge debug icon); confirmed via `aapt2 dump badging` on a built
+  debug APK. `spikes/m0`/`spikes/m2-scan` intentionally untouched (frozen
+  spike forks, out of item 21's scope). Verified NOT a security gap (`av://`
+  routing resolves deterministically to the scanner app); does not bear on
+  Q41/Q42's findings. (zkagent-prd.md:2181-2194)

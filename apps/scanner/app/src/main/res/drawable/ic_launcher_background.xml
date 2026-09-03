@@ -1,20 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- §6.2 item 21 (D67) — solid brand-colour adaptive-icon background.
+     Colour reused from the app's existing accent (colorPrimary, #009688 —
+     see res/values/colors.xml / styles.xml AppTheme), not a new palette
+     choice, so the launcher icon and the in-app theme agree. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
         android:width="108dp"
         android:height="108dp"
-        android:viewportWidth="270.93332"
-        android:viewportHeight="270.93332">
+        android:viewportWidth="108"
+        android:viewportHeight="108">
     <path
-        android:pathData="M0,-0h270.93v270.93h-270.93z"
-        android:fillAlpha="1"
-        android:strokeColor="#ffffff"
-        android:fillColor="#009688"
-        android:strokeWidth="0"
-        android:strokeAlpha="1"/>
-    <path
-        android:pathData="M0,128.85h270.93v13.23h-270.93z"
-        android:fillAlpha="1"
-        android:strokeColor="#ffffff"
-        android:fillColor="#ffffff"
-        android:strokeWidth="0"
-        android:strokeAlpha="1"/>
+        android:pathData="M0,0h108v108h-108z"
+        android:fillColor="#009688"/>
 </vector>
