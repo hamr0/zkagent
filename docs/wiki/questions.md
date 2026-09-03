@@ -186,14 +186,19 @@ this is flagged in the report back to the caller.
   Status: CLOSED 2026-09-01 — challenge expiry is reachable from the verified
   request object directly; "consumed" needs no detection since a used session is
   already cleared from app state. (zkagent-prd.md:2062-2077)
-- **Q38 (closed by D64)** — Whether the in-app log needs to survive app close
-  (process death). Status: CLOSED 2026-09-02 — Option A (accept and disclose):
-  a mid-`direct_post` recreation still delivers the proof to the site while the
-  phone shows nothing; zero code, D44's in-memory-only log stands unamended.
-  Option B (a tiny on-disk "sent, awaiting result" marker, host + timestamp only)
-  is deferred to the next module's list, not designed here. Owner: "option A."
-  Evidence: `docs/logs/M2-FENCE-EVIDENCE.md`, `.claude/remember/findings.md` #16.
-  (owner, 2026-09-02)
+- **Q38 (closed by D64, persistence promoted by D70(b))** — Whether the in-app
+  log needs to survive app close (process death). Status: CLOSED 2026-09-02 —
+  Option A (accept and disclose) for the in-flight-mint-loss case: a mid-
+  `direct_post` recreation still delivers the proof to the site while the phone
+  shows nothing; that half is unchanged. Option B (persist the log itself across
+  process death/restart, host + timestamp + outcome, in app-private storage) was
+  deferred to the next module's list at close; **promoted into §6.2 item 23
+  (D70(b), 2026-09-03)** — the value-free log now MUST persist under the D59 cap
+  with a "Clear log" control, but this does not change the accept-and-disclose
+  answer for the in-flight-mint-loss case itself. Owner: "option A," then (D70)
+  the persistence promotion from the device session. Evidence:
+  `docs/logs/M2-FENCE-EVIDENCE.md`, `.claude/remember/findings.md` #16. (owner,
+  2026-09-02; 2026-09-03)
 - **Q39 (opened 2026-09-02)** — Whether an incoming handoff intent should switch
   the visible tab. Status: APPROVED into §6.2 item 17 (D67) — distinct from the
   already-rejected D55 (auto-switch on read completion); the tab-state ownership
@@ -222,16 +227,20 @@ this is flagged in the report back to the caller.
   tell whose request they authorized. Status: MITIGATED, not closed — the prompt
   now renders the site (commit `730ef09`); remains OPEN for the full ownership
   fix. See `.claude/remember/findings.md` #11. (zkagent-prd.md:2136-2136)
-- **Q43 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — Collapse each
-  ~20-line log entry by default, behind a toggle. Status: APPROVED into §6.2
-  item 18 (D67). **BUILT-IN-`8bc37a4`, device verification pending.**
-  `ReportLog` owns the collapsed/expanded state (a parallel `expandedFlags`
-  list, same index space as `entries`); `rendered()` shows the title line
-  only when collapsed, the unmodified full block when expanded — the
-  stored content (`entriesSnapshot()`) is never altered. A tap on an
-  entry's title line (`ClickableSpan`, `logView.movementMethod =
-  LinkMovementMethod`) toggles via `MainActivity.onLogEntryTapped`. 11 new
-  `ReportLogTest` cases. (zkagent-prd.md:2138-2144)
+- **Q43 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix; follow-on glyph
+  ENHANCEMENT opened 2026-09-03)** — Collapse each ~20-line log entry by
+  default, behind a toggle. Status: APPROVED into §6.2 item 18 (D67).
+  **BUILT-IN-`8bc37a4`, device verification pending.** `ReportLog` owns the
+  collapsed/expanded state (a parallel `expandedFlags` list, same index space
+  as `entries`); `rendered()` shows the title line only when collapsed, the
+  unmodified full block when expanded — the stored content
+  (`entriesSnapshot()`) is never altered. A tap on an entry's title line
+  (`ClickableSpan`, `logView.movementMethod = LinkMovementMethod`) toggles via
+  `MainActivity.onLogEntryTapped`. 11 new `ReportLogTest` cases. Follow-on:
+  the collapsed title line alone gave no at-a-glance outcome — **APPROVED into
+  §6.2 item 22 (D70(a), 2026-09-03)**, a pass/fail/pending glyph on the
+  collapsed title line, derived from item 19's existing terminal-outcome
+  state; recorded, not yet built. (zkagent-prd.md:2138-2144)
 - **Q44 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — Dim a completed
   run with ticked checkboxes to show it is done. Status: APPROVED into §6.2
   item 19 (D67). **BUILT-IN-`1bc345b`, device verification pending.** Item
@@ -243,8 +252,10 @@ this is flagged in the report back to the caller.
   intended as well as, not instead of, dimming. `ReportLog` owns a new
   `terminalFlags` list (same index space as `entries`/`expandedFlags`),
   derived from the existing `append`'s `pending` parameter — never a new
-  flag guessed from strings. 8 new `ReportLogTest` cases.
-  (zkagent-prd.md:2146-2152)
+  flag guessed from strings. 8 new `ReportLogTest` cases. Follow-on:
+  **item 22 (D70(a), 2026-09-03)** derives its pass/fail/pending glyph from
+  this same `terminalFlags`-backed terminal-outcome state — no new state
+  introduced for the glyph. (zkagent-prd.md:2146-2152)
 - **Q45 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — A single control
   distinguishing a "verify" scan from a "scan local" one. Status:
   BUILT-IN-fc5faec, device verification pending — owner ruled D68 (2026-09-03):

@@ -5,6 +5,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs (D70): three new §6.2 ENHANCEMENT items recorded from the 2026-09-03
+  device session, before build (scope gate, NO-GO #10).** Item 22: a
+  pass/fail/pending glyph on each collapsed log entry's title line, derived
+  from item 19's existing terminal-outcome state (no new state, no document
+  data). Item 23: the value-free per-scan log (item 16) must persist across
+  process death/app restart in app-private storage, subject to the D59
+  20-entry cap, with a "Clear log" control — promoting D64's deferred Option
+  B; the in-flight-mint-loss case (finding #16/Q38) stays "accept and
+  disclose," unchanged by persistence. Item 24: the scan pane and each log
+  entry's `▸ technical:` line must show `versionName` plus the short git SHA
+  the build came from, after the device's three reader apps (M0 spike, M2
+  session POC, scanner) proved indistinguishable by version; only the
+  scanner resolves `av://`, so link routing was never at risk. None of the
+  three is built yet. See decisions.md D70; milestones.md §6.2 items 22–24;
+  questions.md Q38/Q43/Q44.
+- **Docs: new finding #19 — two live `RegularActivity` instances across two
+  tasks, unlocked `TECH_DISCOVERED` starts blocked by Android's
+  background-activity-launch hardening.** One instance from Chrome's task,
+  one from the camera app's task; a manifest-level NFC start against the
+  invisible instance was blocked twice (12:56:18, 12:57:20). Benign today
+  (unlocked taps are ignored by design) but a structural single-ownership
+  violation — two instances hold independent handoff/session state.
+  Proposed fix `android:launchMode="singleTask"`, owner ruling pending. See
+  `.claude/remember/findings.md` #19.
 - **Fix (D69): `apps/scanner`'s in-app Google Code Scanner is removed
   entirely — the QR route is a camera-app + `av://` app link, with no
   scanner dependency of any kind.** Same-day reversal of the previous

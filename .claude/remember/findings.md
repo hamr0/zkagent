@@ -899,3 +899,30 @@ JUnit XML, not from a device run.
   (origin `http://127.0.0.1:8788`, `signature_verified=true`) — see
   `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 7. See milestones.md §6.2 item 8/11
   amendment and decisions.md D69.
+
+### 2026-09-03 — #19: two live `RegularActivity` instances across two tasks; unlocked `TECH_DISCOVERED` starts blocked by BAL hardening, not by app logic (OPEN, consequence MEDIUM, owner ruling pending)
+
+- **Source**: owner, device session (`docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md`)
+- **Anchor**: `AndroidManifest.xml` (`RegularActivity` launch-mode entry, default `standard`), at `55ee40b`
+- **Finding**: two live `RegularActivity` instances existed simultaneously in two separate tasks —
+  one launched from Chrome's task at 12:54, one from the camera app's task at 12:55–12:56. With no
+  lock active on either instance, the manifest-level `TECH_DISCOVERED` intent-filter start at
+  12:56:18 and again at 12:57:20 targeted the invisible instance and was blocked by Android's
+  background-activity-launch hardening: logcat shows "Background activity launch blocked! ...
+  callingPackage: com.zkagent.scanner" and "invisible launch ActivityRecord". Benign today only
+  because an unlocked tap is ignored by design (nothing to admit or refuse); the structural problem
+  is that two instances means two independent holders of handoff/session state, a single-ownership
+  violation of the same class the D58 ownership refactor was built to close for in-Activity state —
+  this one is at the Activity-instance level instead.
+- **Proposed fix (not applied this session — DOCS-only pass, no code touched)**:
+  `android:launchMode="singleTask"` (or `singleInstance`) on `RegularActivity` so every `av://`
+  intent lands in the one instance via `onNewIntent`, which item 17 (D67/Q39, tab-switch-on-intent)
+  already handles. Needs an owner ruling before it ships, and a device re-check that both a
+  Chrome-launched and a camera-app-launched link land in and reuse the same single instance after
+  the change.
+- **Also note**: the M2 exit-criteria table's row 1 status is unaffected by this finding and remains
+  "NOT YET RE-RUN on the real build" for a different reason — the real-build re-run of the three
+  `M2-SCAN-EVIDENCE.md` checkpoints is in progress: one mode-B mint completed on the real build
+  (12:54, against the 8787 spike, US passport); reinstall, negatives, and mode-A steps are still
+  pending.
+- **Status**: OPEN, consequence MEDIUM, owner ruling pending.
