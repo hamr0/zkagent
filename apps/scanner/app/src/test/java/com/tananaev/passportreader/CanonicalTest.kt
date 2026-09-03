@@ -15,6 +15,16 @@ class CanonicalTest {
     }
 
     @Test
+    fun `Q36 D66 - a false over_threshold claim canonicalizes identically to chiproof's canonical json`() {
+        // Cross-checked byte-for-byte against packages/chiproof/src/canonical.js's
+        // stringify (no boolean special-casing there either — `false` and
+        // `true` take the same code path). This is a REGRESSION test, not
+        // a bug fix: Canonical.kt's Boolean branch was already generic.
+        val claim = mapOf("over_threshold" to false, "threshold" to 21)
+        assertEquals("""{"over_threshold":false,"threshold":21}""", Canonical.canonicalize(claim))
+    }
+
+    @Test
     fun `keys are sorted regardless of insertion order`() {
         val a = mapOf("threshold" to 18, "over_threshold" to true)
         val b = mapOf("over_threshold" to true, "threshold" to 18)

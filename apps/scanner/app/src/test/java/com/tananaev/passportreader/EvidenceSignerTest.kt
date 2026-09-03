@@ -62,6 +62,27 @@ class EvidenceSignerTest {
     }
 
     @Test
+    fun `Q36 D66 - an over_threshold false claim canonicalizes and signs identically to chiproof (known vector)`() {
+        // Regression test for the D66 review point: Canonical.kt has no
+        // boolean special-casing (see CanonicalTest), so this was already
+        // correct — this pins it with a REAL known vector so a future edit
+        // can't reintroduce a true-only assumption. Vector re-derived the
+        // same way as the class doc's node one-liner, with
+        // claim = { over_threshold: false, threshold: 21 }.
+        val falseClaim = mapOf("over_threshold" to false, "threshold" to 21)
+        val edMessage = EvidenceSigner.sigEd25519Message(falseClaim, nonce, scopeDomain, zktag)
+        assertEquals(
+            "64d8babef2f66e51cd88cc2cbe486f659563bf8ec1c73d3e421b42ba3449fe56",
+            edMessage.joinToString("") { "%02x".format(it) },
+        )
+        val p256Message = EvidenceSigner.sigP256Message(falseClaim, nonce, scopeDomain, zktag)
+        assertEquals(
+            "7369672d703235362f310a877d09573166ec68661dee9ae1abb7e535c881ebdb9161ca58e0e9bd1bf1dde4000102030405060708090a0b0c0d0e0f6578616d706c652e7465737464656164626565666361666562616265",
+            p256Message.joinToString("") { "%02x".format(it) },
+        )
+    }
+
+    @Test
     fun `messageFor routes P256_HARDWARE to the raw-preimage layout, not the ed25519 digest layout`() {
         val viaAlgorithm = EvidenceSigner.messageFor(DeviceKey.Algorithm.P256_HARDWARE, claim, nonce, scopeDomain, zktag)
         val direct = EvidenceSigner.sigP256Message(claim, nonce, scopeDomain, zktag)

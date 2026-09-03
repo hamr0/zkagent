@@ -1732,6 +1732,12 @@ abstract class MainActivity : AppCompatActivity() {
             }
             val candidates = M0Probe.deriveCandidates(dg1File, null, null, domain = scopeDomain)
             val zktag = candidates["document_number"]
+            // Q36/D66: the raw MRZ date of birth (ICAO 9303 YYMMDD), read
+            // ONCE here and threaded through promptAndMint/mintAndMaybeHandoff
+            // exactly like zktag/scopeDomain above — never re-read from
+            // dg1File a second time, and NEVER logged, rendered, or put in
+            // any report string anywhere below (see AgeCheck's class doc).
+            val dobYYMMDD = dg1File.mrzInfo.dateOfBirth
             if (zktag == null) {
                 Log.w(TAG, "M2 stage: no document_number field to derive zktag from (D9)")
                 // FIX pass (findings.md #5): fenced — see [LifecycleFence]'s
@@ -1792,12 +1798,12 @@ abstract class MainActivity : AppCompatActivity() {
                     Log.i(TAG, "M2 lifecycle: fence closed — dropped biometric prompt (promptAndMint)")
                     return@runOnUiThread
                 }
-                promptAndMint(keyState, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus, authorized)
+                promptAndMint(keyState, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus, authorized, dobYYMMDD)
             }
         }.start()
     }
 
-    private fun promptAndMint(keyState: DeviceKey.KeyState, baseReport: String, zktag: String, scopeDomain: String, site: String, attemptId: String, mode: PresentationMode, chipAuthStatus: M0Probe.ChipAuthStatus, authorized: AuthorizedHandoff) {
+    private fun promptAndMint(keyState: DeviceKey.KeyState, baseReport: String, zktag: String, scopeDomain: String, site: String, attemptId: String, mode: PresentationMode, chipAuthStatus: M0Probe.ChipAuthStatus, authorized: AuthorizedHandoff, dobYYMMDD: String?) {
         val sig = DeviceKey.initSignature(keyState)
         if (sig == null) {
             Log.w(TAG, "M2 stage: DeviceKey.initSignature returned null — no usable device key/signature")
@@ -1848,7 +1854,7 @@ abstract class MainActivity : AppCompatActivity() {
                     // [authorizedSig] later on another thread does not risk
                     // the auth window expiring the way a validity-duration
                     // key would.
-                    Thread { mintAndMaybeHandoff(keyState, authorizedSig, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus, authorized) }.start()
+                    Thread { mintAndMaybeHandoff(keyState, authorizedSig, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus, authorized, dobYYMMDD) }.start()
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -1946,7 +1952,7 @@ abstract class MainActivity : AppCompatActivity() {
      * @param authorized the lock-time snapshot ([AuthorizedHandoff]) this
      *   mint is against — its [AuthorizedHandoff.request] is what gets
      *   signed and reported below. */
-    private fun mintAndMaybeHandoff(keyState: DeviceKey.KeyState, signature: Signature, baseReport: String, zktag: String, scopeDomain: String, site: String, attemptId: String, mode: PresentationMode, chipAuthStatus: M0Probe.ChipAuthStatus, authorized: AuthorizedHandoff) {
+    private fun mintAndMaybeHandoff(keyState: DeviceKey.KeyState, signature: Signature, baseReport: String, zktag: String, scopeDomain: String, site: String, attemptId: String, mode: PresentationMode, chipAuthStatus: M0Probe.ChipAuthStatus, authorized: AuthorizedHandoff, dobYYMMDD: String?) {
         // §6.2 items 13/14: reuse the request object already fetched and
         // ES256-verified at capture time ([beginHandoffVerification]) —
         // never re-fetch here. Same nonce, same verified fields, one fetch
@@ -1989,7 +1995,43 @@ abstract class MainActivity : AppCompatActivity() {
             }
             return
         }
-        val claim = mapOf("over_threshold" to true, "threshold" to threshold)
+        // Q36/D66: the real over/under answer, from the chip's own DG1 date
+        // of birth vs. D28's coarsened current date — never a hardcoded
+        // `true` (that was Q36's whole defect: every prior "PASS (minted)"
+        // run was evidence about plumbing, not age). D28's coarsening is
+        // introduced HERE, as the one and only clock read for this mint —
+        // no earlier coarsening exists anywhere else in this app to reuse
+        // (see the D66 escalation note in the fix report), so this is not
+        // a second, independent read of an existing value.
+        val currentDateUtcMidnight = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+        val overThreshold = dobYYMMDD?.let { AgeCheck.overThreshold(it, currentDateUtcMidnight, threshold) }
+        if (overThreshold == null) {
+            Log.e(TAG, "M2 stage: DG1 date of birth is absent or unparsable — refusing to mint, no default (Q36)")
+            runOnUiThread {
+                if (!fence.passes()) {
+                    Log.i(TAG, "M2 lifecycle: fence closed — dropped mint-failure report (unparsable date of birth)")
+                    return@runOnUiThread
+                }
+                emitReport(
+                    baseReport + "\nmint: FAILED — this document's date of birth field could not be parsed; no default is used (Q36)",
+                    ReportLog.DisclosureSummary(
+                        site = site,
+                        result = "Failed — this document's date of birth could not be read",
+                        chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                        sent = "nothing left this device",
+                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                    ),
+                    attemptId = attemptId,
+                )
+                showBlockingOutcomeDialog("This document's date of birth could not be read.", isAccessEstablishmentFailure = false)
+            }
+            return
+        }
+        // Value-free per this project's logging discipline (see AgeCheck's
+        // class doc): only the boolean answer and the threshold, never a
+        // birth year or an age in years.
+        Log.i(TAG, "M2 stage: age check — over_threshold=$overThreshold threshold=$threshold")
+        val claim = mapOf("over_threshold" to overThreshold, "threshold" to threshold)
         // OpenID4VP request-object JSON, TOP LEVEL — response_uri/state/
         // client_id/response_mode live here (server.mjs ~line 230-270), NOT
         // inside zkagent.challenge (which carries only nonce/tier/expiry).
@@ -2113,7 +2155,21 @@ abstract class MainActivity : AppCompatActivity() {
                     deliveryResult = DeliveryResult.Rejected(result.httpStatus)
                 } else {
                     Log.i(TAG, "M2 stage: handoff direct_post response http_status=${result.httpStatus} body=${result.body}")
-                    deliveryResult = DeliveryResult.Accepted
+                    // Q36/D66 item 3: an HTTP-2xx response CAN carry the PRD
+                    // §3 {ok, allowed, reason} verdict shape (MintOutcome's
+                    // class doc) — when it does, and `allowed:false`, this
+                    // device's OWN claim (`overThreshold`, the SAME variable
+                    // signed above) tells an honest, expected under-threshold
+                    // refusal apart from any other verifier-side refusal.
+                    // The `spikes/m2-handoff` reference server today only
+                    // echoes `{accepted:true}` (no `allowed`), which parses
+                    // to null and keeps today's Accepted behaviour unchanged.
+                    val verdict = DirectPostVerdict.parse(result.body)
+                    deliveryResult = when (val outcome = MintOutcome.classify(verdict, claimedOverThreshold = overThreshold)) {
+                        MintOutcome.Outcome.AcceptedOrUnknown -> DeliveryResult.Accepted
+                        MintOutcome.Outcome.HonestUnderThreshold -> DeliveryResult.RefusedHonestUnderThreshold
+                        is MintOutcome.Outcome.RefusedOtherReason -> DeliveryResult.RefusedOtherReason(outcome.reason)
+                    }
                 }
                 report += "handoff: direct_post http_status=${result.httpStatus} -> ${result.body}\n"
             }
@@ -2184,14 +2240,12 @@ abstract class MainActivity : AppCompatActivity() {
         // correct-by-construction before this fix, per the signed-claim-map
         // discipline below — now also reflects a REAL, verifier-requested
         // threshold rather than a hardcoded one; D48's threshold-from-
-        // request MUST is met. `over_threshold` remains unconditionally
-        // `true` (Q36, a real DOB comparison, is separate, still-open
-        // design work, deliberately out of scope for this fix) — the signed
-        // claim map is the single source of truth for what was ACTUALLY
-        // SENT, so this rendering is a faithful, by-construction record of
-        // the disclosure, and will reflect a real over/under answer
-        // automatically the moment Q36 computes one, with no change to
-        // this rendering code.
+        // request MUST is met. Q36/D66 fix: `over_threshold` is now the
+        // REAL [AgeCheck.overThreshold] answer (DG1 DOB vs. D28's coarsened
+        // current date), not a hardcoded `true` — the signed claim map is
+        // the single source of truth for what was ACTUALLY SENT, so this
+        // rendering was already correct-by-construction and needed no
+        // change of its own to start reflecting the real answer.
         val disclosedThreshold = claim["threshold"]
         val disclosedAnswer = claim["over_threshold"]
         // §6.2 item 16 (D48): the predicate label is "age > <N>" — the
@@ -2212,6 +2266,32 @@ abstract class MainActivity : AppCompatActivity() {
             is DeliveryResult.Accepted -> ReportLog.DisclosureSummary(
                 site = site,
                 result = "Verified — the site accepted you",
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = sentClaimLine,
+                shared = ReportLog.DisclosureSummary.Shared.Disclosed(listOf(sharedClaim)),
+                identity = identity,
+                technicalNote = claimProofNote,
+            )
+            // Q36/D66 item 3: an honest, expected under-threshold refusal —
+            // this device already told the truth (over_threshold:false) and
+            // the site's own verdict agrees. This is NOT a plumbing failure:
+            // the claim really was disclosed, so `sent`/`shared` match the
+            // Accepted case exactly, only the plain-language `result` line
+            // differs — sourced from [MintOutcome.reportResult], the SAME
+            // string the blocking dialog uses, never a separately-typed
+            // duplicate.
+            DeliveryResult.RefusedHonestUnderThreshold -> ReportLog.DisclosureSummary(
+                site = site,
+                result = MintOutcome.reportResult(MintOutcome.Outcome.HonestUnderThreshold)!!,
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = sentClaimLine,
+                shared = ReportLog.DisclosureSummary.Shared.Disclosed(listOf(sharedClaim)),
+                identity = identity,
+                technicalNote = claimProofNote,
+            )
+            is DeliveryResult.RefusedOtherReason -> ReportLog.DisclosureSummary(
+                site = site,
+                result = MintOutcome.reportResult(MintOutcome.Outcome.RefusedOtherReason(deliveryResult.reason))!!,
                 chipAuthenticity = chipAuthLabel(chipAuthStatus),
                 sent = sentClaimLine,
                 shared = ReportLog.DisclosureSummary.Shared.Disclosed(listOf(sharedClaim)),
@@ -2272,16 +2352,34 @@ abstract class MainActivity : AppCompatActivity() {
             // uses — no separate post-success policy.
             if (MintConfirmation.confirmsSuccess(deliveryAccepted = deliveryResult is DeliveryResult.Accepted)) {
                 showBlockingOutcomeDialog(MINT_CONFIRMED_MESSAGE, isAccessEstablishmentFailure = false)
+            } else if (deliveryResult is DeliveryResult.RefusedHonestUnderThreshold) {
+                // Q36/D66 item 3: this outcome gets its own blocking dialog
+                // (not just a silent ReportLog entry, unlike Rejected/
+                // NoResponseUri/TransportFailed above) because it is a real,
+                // definitive answer from the site — the same "tell the user
+                // to go back to the browser" reasoning as MINT_CONFIRMED_MESSAGE,
+                // just the other outcome of the same real check.
+                showBlockingOutcomeDialog(MintOutcome.UNDER_THRESHOLD_DIALOG_MESSAGE, isAccessEstablishmentFailure = false)
             }
         }
     }
 
-    /** §6.2 item 16 (D46): which of the four ways `mintAndMaybeHandoff`'s
+    /** §6.2 item 16 (D46): which of the ways `mintAndMaybeHandoff`'s
      * `direct_post` attempt can end, so the log entry's Result line is
      * accurate per outcome rather than a fixed "Verified" regardless of
-     * whether the site actually received anything. */
+     * whether the site actually received anything.
+     *
+     * Q36/D66 item 3 added [RefusedHonestUnderThreshold] and
+     * [RefusedOtherReason] — both HTTP 2xx (the site DID receive the
+     * response), but the verifier's own `allowed:false` (via
+     * [MintOutcome.classify]) means it was not accepted. Splitting these
+     * out of the plain [Accepted] case is exactly what stops an honest,
+     * expected under-threshold refusal from being reported the same way
+     * as any other kind of verifier refusal. */
     private sealed class DeliveryResult {
-        object Accepted : DeliveryResult() // HTTP 2xx
+        object Accepted : DeliveryResult() // HTTP 2xx, allowed:true or unknown
+        object RefusedHonestUnderThreshold : DeliveryResult() // HTTP 2xx, allowed:false, this device claimed over_threshold:false
+        data class RefusedOtherReason(val reason: String?) : DeliveryResult() // HTTP 2xx, allowed:false, any other reason
         data class Rejected(val httpStatus: Int) : DeliveryResult() // non-2xx
         object NoResponseUri : DeliveryResult()
         object TransportFailed : DeliveryResult() // network/other exception

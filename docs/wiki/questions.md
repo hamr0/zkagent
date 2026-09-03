@@ -157,16 +157,30 @@ this is flagged in the report back to the caller.
   already parsed from the same `zkagent.challenge` object), not at lock time
   alongside tier — threshold plays no part in deriving the presentation mode the
   way tier does, so nothing needs it earlier. Closes D48's threshold-from-request
-  MUST. `over_threshold` remains unconditionally `true` (Q36, unchanged, out of
-  scope). (zkagent-prd.md:1985-2017)
-- **Q36 (descendant of Q33 part b)** — Compute a real DOB-vs-threshold answer
-  instead of asserting `true` unconditionally. Status: RESOLVED by D66 — build
-  in flight. The scanner computes the real over/under answer in-app, in a pure
-  class, at mint time, from the DG1 date of birth against the D28-coarsened
-  `current_date` with the Q35-sourced threshold; an under-threshold holder still
-  gets an honest `over_threshold:false` mint and handoff, and a blocking dialog
-  states the threshold was not met. Date of birth never enters the report, log,
-  or any screen. (zkagent-prd.md:2019-2032; decisions.md D66, owner 2026-09-03)
+  MUST. `over_threshold` remains unconditionally `true` at the time of this fix
+  (Q36, closed separately). (zkagent-prd.md:1985-2017)
+- **Q36 (closed by D66, descendant of Q33 part b)** — Compute a real
+  DOB-vs-threshold answer instead of asserting `true` unconditionally. Status:
+  FIXED-IN-7daeba4 (cherry-picked; D66) — owner ruled D66 (2026-09-03): the
+  scanner computes the real over/under answer in-app, in a pure class, at mint
+  time, from the DG1 date of birth against the D28-coarsened `current_date`
+  with the Q35-sourced threshold; an under-threshold holder still gets an
+  honest `over_threshold:false` mint and handoff, and a blocking dialog states
+  the threshold was not met. Date of birth never enters the report, log, or
+  any screen. Implementation: a new pure `AgeCheck` object computes the real
+  answer from the chip's own DG1 date of birth (`MRZInfo.getDateOfBirth()`)
+  against D28's client-side-coarsened current date, using the standard ICAO
+  9303 MRZ sliding-century-window rule and a "on-or-after the calendar
+  birthday, 29-Feb treated as 1 March in a non-leap year" birthday rule (both
+  stated as owner-overturnable in `AgeCheck`'s class doc). An unparsable DOB
+  refuses the mint the same way Q35's absent-threshold branch does. The
+  under-threshold path still mints and hands off as before; a new
+  `MintOutcome` object tells an honest, expected `allowed:false` refusal
+  (this device already claimed `over_threshold:false`) apart from any other
+  kind of verifier refusal — though the current verifier spike's
+  `direct_post` returns only `accepted:true`, so this honest-under verdict
+  split is not yet exercisable end-to-end; device verification pending.
+  (zkagent-prd.md:2019-2032; decisions.md D66, owner 2026-09-03)
 - **Q37 (closed, resolved by implementation)** — Whether "consumed" vs. "expired"
   handoff sessions can be distinguished device-side without a verifier round-trip.
   Status: CLOSED 2026-09-01 — challenge expiry is reachable from the verified

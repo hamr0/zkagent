@@ -20,6 +20,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   `M2-SCAN-EVIDENCE.md` checkpoints had been re-run on the real build — they
   have not; the row now states spike evidence only (2026-08-31), device
   session pending. Docs only, no code touched this session.
+- **Fix (Q36/D66): scanner signs a REAL over/under-threshold answer, never
+  `true` unconditionally.** `apps/scanner`'s `mintAndMaybeHandoff` previously
+  signed `over_threshold: true` for every mint-B, regardless of the document
+  holder's actual age — every prior "PASS (minted)" run was evidence about
+  plumbing, not age. A new pure `AgeCheck` object computes the real answer
+  from the chip's own DG1 date of birth (`MRZInfo.getDateOfBirth()`, ICAO 9303
+  `YYMMDD`) against D28's client-side-coarsened current date (introduced here
+  as the mint's one clock read — no other current-date coarsening existed in
+  `apps/scanner` to reuse), using the standard ICAO 9303 MRZ sliding-century
+  window and a birthday-on-or-after rule (29 Feb treated as 1 March in a
+  non-leap threshold year) — both stated as owner-overturnable in `AgeCheck`'s
+  class doc. An unparsable date of birth refuses the mint the same way Q35's
+  absent-threshold branch does (no default). The under-threshold path still
+  mints and hands off exactly as before; a new `MintOutcome` object tells an
+  honest, expected `allowed:false` refusal (this device already claimed
+  `over_threshold:false`) apart from any other kind of verifier refusal, so
+  the two are no longer both reported as a generic "site rejected" plumbing
+  failure — the blocking dialog and the `ReportLog` entry's `result` line both
+  read "The site's age threshold was not met." Also cross-checked
+  `Canonical`/`EvidenceSigner`'s byte layout against a `chiproof`-derived known
+  vector for `over_threshold:false` (already correct — no boolean
+  special-casing existed — added as a regression test). 29 new unit tests
+  (`AgeCheckTest`, `MintOutcomeTest`, plus one each in `CanonicalTest`/
+  `EvidenceSignerTest`; 223 -> 252 passing per variant).
 - **Fix (Q35): scanner signs the verified request's threshold, never a
   hardcoded `18`.** `apps/scanner`'s `mintAndMaybeHandoff` previously signed
   `threshold = 18` unconditionally, ignoring whatever the verifier's request
