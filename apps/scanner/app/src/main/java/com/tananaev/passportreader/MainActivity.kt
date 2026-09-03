@@ -561,12 +561,51 @@ abstract class MainActivity : AppCompatActivity() {
         val passportRaw = passportNumberView.text?.toString()
         val expirationRaw = expirationDateView.text?.toString()
         val birthRaw = birthDateView.text?.toString()
-        if (passportRaw.isNullOrEmpty() || expirationRaw.isNullOrEmpty() || birthRaw.isNullOrEmpty()) {
-            Snackbar.make(passportNumberView, R.string.error_input, Snackbar.LENGTH_SHORT).show()
-            return
+        val handoff = pendingHandoff
+        // Finding #20: the two early-exit conditions below are now decided
+        // by one pure predicate — see [LockPrecondition]'s doc — so each
+        // branch can carry a paired log line instead of the prior
+        // Snackbar-only, unlogged returns.
+        when (
+            val precondition = LockPrecondition.evaluate(
+                docPresent = !passportRaw.isNullOrEmpty(),
+                dobPresent = !birthRaw.isNullOrEmpty(),
+                expPresent = !expirationRaw.isNullOrEmpty(),
+                handoffPending = handoff != null,
+                requestVerified = verifiedRequest != null,
+            )
+        ) {
+            is LockPrecondition.Result.Incomplete -> {
+                Log.w(
+                    TAG,
+                    "M2 stage: lock refused — document fields incomplete " +
+                        "(doc_present=${precondition.docPresent} " +
+                        "dob_present=${precondition.dobPresent} " +
+                        "exp_present=${precondition.expPresent})",
+                )
+                // No scan attempt happened (nothing was read, no handoff
+                // was consumed) — a ReportLog/log-pane entry would imply an
+                // event that never occurred, so none is appended here; the
+                // Log.w line above is this branch's only durable trace.
+                // isAccessEstablishmentFailure = true (-> keepMrzAndMode =
+                // true in FailureTransition.keepsMrzAndMode) so OK does NOT
+                // clear pendingHandoff/verifiedRequest/lockedMode nor wipe
+                // the MRZ fields the user already typed — the user only
+                // forgot a field, they didn't fail a read, and a handoff
+                // may legitimately still be pending underneath this tap
+                // (finding #12's rule: a dismissal must never destroy a
+                // legitimate in-flight session as a side effect).
+                showBlockingOutcomeDialog(LOCK_FIELDS_INCOMPLETE_MESSAGE, isAccessEstablishmentFailure = true)
+                return
+            }
+            LockPrecondition.Result.Verifying -> {
+                Log.i(TAG, "M2 stage: lock deferred — handoff request still verifying")
+                Snackbar.make(passportNumberView, "Still verifying the handoff request — try again in a moment", Snackbar.LENGTH_SHORT).show()
+                return
+            }
+            LockPrecondition.Result.Ready -> Unit
         }
 
-        val handoff = pendingHandoff
         val mode: PresentationMode
         // D58 step 3 (findings #2/#3): the lock-time snapshot, captured
         // alongside [mode] itself — see [authorizedHandoff]'s doc and
@@ -576,11 +615,7 @@ abstract class MainActivity : AppCompatActivity() {
         // nullability.
         var snapshot: AuthorizedHandoff? = null
         if (handoff != null) {
-            val verified = verifiedRequest
-            if (verified == null) {
-                Snackbar.make(passportNumberView, "Still verifying the handoff request — try again in a moment", Snackbar.LENGTH_SHORT).show()
-                return
-            }
+            val verified = verifiedRequest!! // LockPrecondition.Result.Ready already proved this is non-null
             // 2026-09-01 real-device fix ("fix 3" — a spent/aged handoff
             // session inviting a document tap that cannot succeed): the
             // EARLIEST possible check, before the user is even asked to tap
@@ -2646,6 +2681,15 @@ abstract class MainActivity : AppCompatActivity() {
         // inbound av:// handoff because a session is already locked or a
         // read is in progress. Shortened 2026-09-02 to fit a Snackbar.
         private const val HANDOFF_REFUSED_MID_SESSION_MESSAGE = "Ignored a site request that arrived mid-scan."
+
+        // Finding #20 (.claude/remember/findings.md), device-found
+        // 2026-09-03: the prior Snackbar-only `error_input` string gave no
+        // logcat trace, so a real device silence looked identical to a
+        // hang. Not yet owner-approved (report requested back explicitly):
+        // tells the user what to DO, not just that something failed — same
+        // convention as TRANSIENT_READ_FAILURE_MESSAGE/SESSION_EXPIRED_MESSAGE.
+        private const val LOCK_FIELDS_INCOMPLETE_MESSAGE =
+            "Enter the document number, date of birth and expiry date, then tap again."
 
         // Q40 (owner UX, CLOSED D67 — owner sign-off 2026-09-03): finding
         // #9's owner observation (iii) — a disabled Lock button reads as
