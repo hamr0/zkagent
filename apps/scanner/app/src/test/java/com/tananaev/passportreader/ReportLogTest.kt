@@ -715,4 +715,113 @@ class ReportLogTest {
         // the survivor (oldest remaining, "filler 0") was never expanded
         assertFalse(log.expandedSnapshot()[0])
     }
+
+    // ------------------------------------------------------------- item 19
+    // §6.2 item 19 (D67, Q44): dim a completed run. Terminal is derived
+    // from the SAME pending/terminal model append()'s own attemptId/pending
+    // already tracks (never a new flag guessed from strings) — see
+    // ReportLog's terminalFlags doc.
+
+    @Test
+    fun `an ordinary (non-pending) entry is terminal immediately`() {
+        val log = ReportLog()
+        log.append("mode: A\nverdict: PASS (read)", summary(shared = notDisclosedNothing), nowMillis = 0L)
+        assertEquals(listOf(true), log.terminalSnapshot())
+    }
+
+    @Test
+    fun `a pending in-progress entry is NOT terminal`() {
+        val log = ReportLog()
+        log.append(
+            "mode: B\nmint_gate: MET",
+            summary(result = "In progress — waiting for you to authorize with biometrics or a device PIN", shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing yet")),
+            attemptId = "a1",
+            pending = true,
+            nowMillis = 0L,
+        )
+        assertEquals("an in-progress entry must not be dimmed", listOf(false), log.terminalSnapshot())
+    }
+
+    @Test
+    fun `a pending entry's terminal outcome becomes terminal after replacement`() {
+        val log = ReportLog()
+        log.append(
+            "mode: B\nmint_gate: MET",
+            summary(result = "In progress — waiting for you to authorize with biometrics or a device PIN", shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing yet")),
+            attemptId = "a1",
+            pending = true,
+            nowMillis = 0L,
+        )
+        log.append("mode: B\nmint: OK", summary(), attemptId = "a1", nowMillis = 5000L)
+        assertEquals(listOf(true), log.terminalSnapshot())
+    }
+
+    @Test
+    fun `an interrupted (never-resolved) in-progress entry stays non-terminal even after a later unrelated entry`() {
+        val log = ReportLog()
+        log.append(
+            "mode: B\nmint_gate: MET",
+            summary(result = "In progress — waiting for you to authorize with biometrics or a device PIN", shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing yet")),
+            attemptId = "interrupted",
+            pending = true,
+            nowMillis = 0L,
+        )
+        log.append("mode: A\nverdict: PASS (read)", summary(shared = notDisclosedNothing), nowMillis = 1000L)
+        assertEquals(listOf(false, true), log.terminalSnapshot())
+    }
+
+    @Test
+    fun `restore marks every entry terminal by default when no terminal state is supplied`() {
+        val log = ReportLog()
+        log.restore(listOf("09:00:00 · site-a.test\n\nResult    restored"))
+        assertEquals("no in-progress attempt can survive recreation", listOf(true), log.terminalSnapshot())
+    }
+
+    @Test
+    fun `restore round-trips terminal state via terminalSnapshot`() {
+        val log = ReportLog()
+        log.append(
+            "mode: B\nmint_gate: MET",
+            summary(result = "In progress — waiting for you to authorize with biometrics or a device PIN", shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing yet")),
+            attemptId = "a1",
+            pending = true,
+            nowMillis = 0L,
+        )
+        log.append("done", summary(site = "site-b.test"), nowMillis = 1000L)
+        val savedEntries = log.entriesSnapshot()
+        val savedTerminal = log.terminalSnapshot()
+        assertEquals(listOf(false, true), savedTerminal)
+
+        val restored = ReportLog()
+        restored.restore(savedEntries, terminal = savedTerminal)
+        assertEquals(savedTerminal, restored.terminalSnapshot())
+    }
+
+    @Test
+    fun `clear empties terminalSnapshot alongside entries`() {
+        val log = ReportLog()
+        log.append("x", summary(), nowMillis = 0L)
+        log.clear()
+        assertTrue(log.terminalSnapshot().isEmpty())
+    }
+
+    @Test
+    fun `eviction shifts terminal flags in lockstep with entries`() {
+        val log = ReportLog()
+        log.append(
+            "mode: B\nmint_gate: MET",
+            summary(result = "In progress — waiting for you to authorize with biometrics or a device PIN", shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing yet")),
+            attemptId = "survivor",
+            pending = true,
+            nowMillis = 0L,
+        )
+        repeat(ReportLog.MAX_ENTRIES) { i ->
+            log.append("filler $i", summary(site = "filler-$i.test"), nowMillis = (i + 1).toLong())
+        }
+        assertEquals(ReportLog.MAX_ENTRIES, log.entriesSnapshot().size)
+        assertEquals(ReportLog.MAX_ENTRIES, log.terminalSnapshot().size)
+        // the survivor's pending entry was evicted — every remaining filler
+        // entry is an ordinary (non-pending) append, so all are terminal.
+        assertTrue(log.terminalSnapshot().all { it })
+    }
 }

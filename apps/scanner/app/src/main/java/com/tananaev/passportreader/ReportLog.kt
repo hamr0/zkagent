@@ -4,6 +4,7 @@ import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.ClickableSpan
+import android.text.style.ForegroundColorSpan
 import android.view.View
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -176,6 +177,21 @@ class ReportLog {
     // entry's full block or just its title line.
     private val expandedFlags = mutableListOf<Boolean>()
 
+    // §6.2 item 19 (D67, Q44) — PARALLEL to [entries]/[expandedFlags], same
+    // index space, kept in lockstep the same way. Derived from the SAME
+    // pending/terminal model [append]'s `attemptId`/`pending` already
+    // tracks (never a new flag guessed from string content): an entry is
+    // terminal (dimmed) whenever it is NOT the currently-open "In
+    // progress" entry for some attempt. `pending = true` -> not terminal;
+    // every other append/replace -> terminal. This reuses the existing,
+    // already-correct pending model rather than re-deriving "done vs. in
+    // progress" from FailureTransition/MintConfirmation's enums directly —
+    // those enums decide WHICH terminal outcome a report describes, never
+    // WHETHER one has been reached yet; [pending] at this class's own call
+    // site is the exact fact item 19 needs, already threaded through
+    // unchanged.
+    private val terminalFlags = mutableListOf<Boolean>()
+
     /** D58 step 1 (Report/Log cluster, finding #7): the exact text of the
      * most recently emitted or restored report — this class is now the
      * SINGLE owner of this value, absorbing what used to be
@@ -235,10 +251,12 @@ class ReportLog {
             // item 18: a replaced entry keeps its OWN prior [expandedFlags]
             // state (a user who opened an "In progress" entry to watch it
             // is not collapsed out from under them when it resolves — see
-            // class doc).
+            // class doc); [terminalFlags] is recomputed below from THIS
+            // call's [pending], same as the append branch.
         } else {
             entries.add(rendered)
             expandedFlags.add(false) // item 18: collapsed by default
+            terminalFlags.add(false) // placeholder — the one true value is set below, in one place
             // D58 step 1 (finding #13): a genuinely NEW entry (never a
             // pending-replace, which never grows the list) can push
             // [entries] past [MAX_ENTRIES] — evict the single oldest entry
@@ -255,6 +273,7 @@ class ReportLog {
             if (entries.size > MAX_ENTRIES) {
                 entries.removeAt(0)
                 expandedFlags.removeAt(0)
+                terminalFlags.removeAt(0)
                 val iterator = pendingIndexByAttempt.entries.iterator()
                 while (iterator.hasNext()) {
                     val pendingEntry = iterator.next()
@@ -262,8 +281,12 @@ class ReportLog {
                 }
             }
         }
+        val finalIndex = existingIndex ?: entries.lastIndex
+        // item 19: terminal iff this entry is NOT the currently-open
+        // "In progress" entry — the exact fact [pending] already carries.
+        terminalFlags[finalIndex] = !pending
         if (pending && attemptId != null) {
-            pendingIndexByAttempt[attemptId] = existingIndex ?: entries.lastIndex
+            pendingIndexByAttempt[attemptId] = finalIndex
         }
     }
 
@@ -278,6 +301,7 @@ class ReportLog {
         entries.clear()
         pendingIndexByAttempt.clear()
         expandedFlags.clear()
+        terminalFlags.clear()
     }
 
     /** Immutable snapshot, OLDEST first — [MainActivity]'s
@@ -290,6 +314,12 @@ class ReportLog {
      * persistence for the per-entry expand/collapse toggle, so it survives
      * Activity recreation exactly like [entriesSnapshot] already does. */
     fun expandedSnapshot(): List<Boolean> = expandedFlags.toList()
+
+    /** §6.2 item 19 (D67, Q44): OLDEST-first, same index space as
+     * [entriesSnapshot] — persisted the same way, though in practice every
+     * RESTORED entry is terminal (see [restore]'s doc: no in-progress
+     * attempt-id state survives recreation either). */
+    fun terminalSnapshot(): List<Boolean> = terminalFlags.toList()
 
     /** §6.2 item 18 (D67, Q43) — the per-entry tap-to-expand toggle.
      * [displayIndex] is in DISPLAY order (0 = newest, matching what
@@ -326,14 +356,24 @@ class ReportLog {
      *   restores entries without ever having persisted this sibling state.
      *   A caller supplying a non-null list MUST size it to match [saved];
      *   a mismatched size falls back to the same all-collapsed default
-     *   rather than indexing out of bounds. */
-    fun restore(saved: List<String>, lastText: String? = null, expanded: List<Boolean>? = null) {
+     *   rather than indexing out of bounds.
+     * @param terminal (item 19) per-entry terminal/in-progress state, SAME
+     *   order as [saved]. Defaults to null, meaning "everything terminal" —
+     *   `List(saved.size) { true }` — since no in-progress attempt-id state
+     *   survives Activity recreation (see this function's own doc on
+     *   [pendingIndexByAttempt] being dropped): a restored entry can never
+     *   correctly be "still in progress" from a NEW instance's point of
+     *   view, even if it was mid-flight in the dying one. Same mismatched-
+     *   size fallback as [expanded]. */
+    fun restore(saved: List<String>, lastText: String? = null, expanded: List<Boolean>? = null, terminal: List<Boolean>? = null) {
         entries.clear()
         entries.addAll(saved)
         pendingIndexByAttempt.clear()
         this.lastText = lastText
         expandedFlags.clear()
         expandedFlags.addAll(expanded?.takeIf { it.size == saved.size } ?: List(saved.size) { false })
+        terminalFlags.clear()
+        terminalFlags.addAll(terminal?.takeIf { it.size == saved.size } ?: List(saved.size) { true })
     }
 
     /** The log view's full text, NEWEST entry first (2026-09-01 real-device
@@ -369,12 +409,20 @@ class ReportLog {
      *   [toggleExpandedAtDisplayIndex] plus a re-render, never mutating
      *   state here. Requires the caller's `TextView.movementMethod` be set
      *   to a link-aware one for the span to actually receive taps — this
-     *   function only places the span, it does not configure the View. */
-    fun rendered(titleSizePx: Int? = null, onEntryTap: ((Int) -> Unit)? = null): CharSequence {
+     *   function only places the span, it does not configure the View.
+     * @param dimmedTextColor (item 19, D67/Q44) when non-null, every entry
+     *   whose [terminalFlags] is true is styled in this exact ARGB color
+     *   via [ForegroundColorSpan] over its WHOLE displayed range (title
+     *   line included, whether collapsed or expanded) — [MainActivity]
+     *   computes it from the log view's OWN currently-configured text
+     *   color, alpha-reduced, never a hardcoded color, the same discipline
+     *   [titleSizePx] already follows for size. An entry still open as
+     *   "In progress" for some attempt is never dimmed. */
+    fun rendered(titleSizePx: Int? = null, onEntryTap: ((Int) -> Unit)? = null, dimmedTextColor: Int? = null): CharSequence {
         val storageIndicesNewestFirst = entries.indices.reversed().toList()
         val displayTexts = storageIndicesNewestFirst.map { displayText(it) }
         val joined = displayTexts.joinToString("\n\n")
-        if (titleSizePx == null && onEntryTap == null) return joined
+        if (titleSizePx == null && onEntryTap == null && dimmedTextColor == null) return joined
         val builder = SpannableStringBuilder(joined)
         val titleRanges = titleLineRanges(displayTexts)
         if (titleSizePx != null) {
@@ -393,6 +441,17 @@ class ReportLog {
                         }
                     }, range.first, range.last + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
+            }
+        }
+        if (dimmedTextColor != null) {
+            var offset = 0
+            displayTexts.forEachIndexed { displayIndex, text ->
+                if (displayIndex > 0) offset += 2 // the "\n\n" separator
+                val storageIndex = storageIndicesNewestFirst[displayIndex]
+                if (terminalFlags.getOrElse(storageIndex) { true } && text.isNotEmpty()) {
+                    builder.setSpan(ForegroundColorSpan(dimmedTextColor), offset, offset + text.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                offset += text.length
             }
         }
         return builder

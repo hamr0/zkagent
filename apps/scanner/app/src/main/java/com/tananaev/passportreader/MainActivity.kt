@@ -21,6 +21,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.Uri
 import android.nfc.NfcAdapter
 import android.nfc.Tag
@@ -707,9 +708,10 @@ abstract class MainActivity : AppCompatActivity() {
         // parallel MainActivity field — see ReportLog.lastText's doc.
         reportLog.lastText?.let { outState.putString(STATE_LAST_REPORT, it) }
         outState.putStringArrayList(STATE_LOG_ENTRIES, ArrayList(reportLog.entriesSnapshot()))
-        // §6.2 item 18 (D67): the sibling per-entry display state — see
-        // [ReportLog.expandedSnapshot]'s doc.
+        // §6.2 items 18/19 (D67): the sibling per-entry display state — see
+        // [ReportLog.expandedSnapshot]/[terminalSnapshot]'s doc.
         outState.putBooleanArray(STATE_LOG_EXPANDED, reportLog.expandedSnapshot().toBooleanArray())
+        outState.putBooleanArray(STATE_LOG_TERMINAL, reportLog.terminalSnapshot().toBooleanArray())
         // D58 step 2 (finding #1): reads FROM the owner (paneState), the
         // app's own tab index — see [PaneState]'s class doc.
         outState.putInt(STATE_TAB_INDEX, paneState.tabIndexToSave())
@@ -1115,16 +1117,17 @@ abstract class MainActivity : AppCompatActivity() {
         Log.i(TAG, "\n===== M2 REPORT (value-free) =====\n$text\n===== END =====")
     }
 
-    /** §6.2 item 18 (D67, Q43): the single place [logView.text] is ever set
-     * FROM [reportLog] — [emitReport], [restoreReport], and the per-entry
-     * tap handler ([onLogEntryTapped]) all call this rather than each
-     * computing [ReportLog.rendered]'s parameters independently, so the
-     * expand/collapse toggle stays wired the same way everywhere
-     * `logView.text` changes. */
+    /** §6.2 items 18/19 (D67, Q43/Q44): the single place [logView.text] is
+     * ever set FROM [reportLog] — [emitReport], [restoreReport], and the
+     * per-entry tap handler ([onLogEntryTapped]) all call this rather than
+     * each computing [ReportLog.rendered]'s parameters independently, so
+     * item 18's toggle and item 19's dimming stay wired the same way
+     * everywhere `logView.text` changes. */
     private fun refreshLogView() {
         logView.text = reportLog.rendered(
             titleSizePx = logTitleSizePx(),
             onEntryTap = ::onLogEntryTapped,
+            dimmedTextColor = dimmedLogEntryColor(),
         )
     }
 
@@ -1136,6 +1139,19 @@ abstract class MainActivity : AppCompatActivity() {
     private fun onLogEntryTapped(displayIndex: Int) {
         reportLog.toggleExpandedAtDisplayIndex(displayIndex)
         refreshLogView()
+    }
+
+    /** §6.2 item 19 (D67, Q44) — the ARGB color [ReportLog.rendered] dims a
+     * terminal-outcome entry to: [logView]'s OWN currently-configured text
+     * color, alpha reduced to roughly 60%, never a hardcoded color — same
+     * "derive from the view's own configured property" discipline as
+     * [logTitleSizePx]. Using [Color.alpha] composition rather than a fixed
+     * gray keeps the dim legible against both light and dark themes,
+     * whatever [logView]'s base color actually is on this device/theme. */
+    private fun dimmedLogEntryColor(): Int {
+        val base = logView.currentTextColor
+        val dimmedAlpha = (Color.alpha(base) * DIM_ALPHA_FRACTION).roundToInt()
+        return Color.argb(dimmedAlpha, Color.red(base), Color.green(base), Color.blue(base))
     }
 
     /** §6.2 item 16 (D44/D35) — D58 step 1: the NAMED sibling of
@@ -1157,11 +1173,12 @@ abstract class MainActivity : AppCompatActivity() {
         val text = savedInstanceState.getString(STATE_LAST_REPORT)
         val entries = savedInstanceState.getStringArrayList(STATE_LOG_ENTRIES)
         if (text == null && entries == null) return
-        // §6.2 item 18 (D67): restored alongside entries — see
+        // §6.2 items 18/19 (D67): restored alongside entries — see
         // [ReportLog.restore]'s doc for the mismatched-size/absent-key
-        // fallback (all-collapsed) this passes through to.
+        // fallback (all-collapsed, all-terminal) this passes through to.
         val expanded = savedInstanceState.getBooleanArray(STATE_LOG_EXPANDED)?.toList()
-        reportLog.restore(entries ?: emptyList(), lastText = text, expanded = expanded)
+        val terminal = savedInstanceState.getBooleanArray(STATE_LOG_TERMINAL)?.toList()
+        reportLog.restore(entries ?: emptyList(), lastText = text, expanded = expanded, terminal = terminal)
         if (text != null) reportView.text = reportLog.lastText
         if (entries != null) refreshLogView()
         Log.i(TAG, "M2 stage: restored report/log across Activity recreation (text=${text != null}, log_entries=${entries?.size ?: 0})")
@@ -2578,6 +2595,14 @@ abstract class MainActivity : AppCompatActivity() {
         // STATE_LOG_ENTRIES, see [ReportLog.expandedSnapshot]/
         // [ReportLog.terminalSnapshot].
         private const val STATE_LOG_EXPANDED = "m2_log_expanded"
+        // §6.2 item 19 (D67, Q44): the sibling per-entry terminal state —
+        // see [ReportLog.terminalSnapshot]'s doc.
+        private const val STATE_LOG_TERMINAL = "m2_log_terminal"
+        // §6.2 item 19 (D67, Q44): fraction of [logView]'s own configured
+        // text alpha a terminal entry is dimmed to — see
+        // [dimmedLogEntryColor]'s doc for why this is a fraction of the
+        // view's own color, never a hardcoded absolute color.
+        private const val DIM_ALPHA_FRACTION = 0.6
         // D58 step 2 (finding #1): the app's own tab index — see
         // [PaneState]'s class doc for why this is the fix.
         private const val STATE_TAB_INDEX = "m2_tab_index"
