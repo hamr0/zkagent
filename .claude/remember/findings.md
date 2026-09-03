@@ -317,6 +317,18 @@ JUnit XML, not from a device run.
   (message-only removal, no new test surface). This retires residual (a) above (Snackbar wording is
   moot now that there is no Snackbar). Residual (b) — no device evidence for the guard firing — still
   stands; still no device attached this session either.
+- Status update 2026-09-03 (device session, `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md`
+  check 3): residual (b) is resolved, but not by a device confirmation — the mid-read branch of
+  `HandoffAdmission.mayStartTagRead` is **NOT reachable on device with real cards**. A same-card
+  re-tap ~1s into a read produced no second NFC discovery at all: the in-flight read failed with
+  `Tag was lost` before the presence-check's own "Tag lost, restarting polling loop" line appeared,
+  meaning the NFC stack serialises tag sessions and the read fails first. A synthetic
+  `ACTION_TECH_DISCOVERED` intent cannot reach the gate either, since that branch requires a real
+  `Tag`/`IsoDep` parcelable that only a genuine discovery produces. The gate's mid-read path
+  therefore stays proven by the 4-case unit truth table and the source wiring trace only — it is
+  defence-in-depth against a state this platform already prevents, not a device-provable path. The
+  fix itself (`c60354e`) is unaffected and remains FIXED — this update is scoped to residual (b)'s
+  device-coverage claim only.
 
 ### 2026-09-02 — #7: `reportView.text` written outside `emitReport`, contradicting its own KDoc
 
@@ -528,6 +540,17 @@ JUnit XML, not from a device run.
   policy, not a kept-by-recommendation stopgap. Owner: "#10 ok." Item (2) — device proof against a
   genuinely foreign origin (`127.0.0.1:18787` firing mid-scan) — is recorded as pending device
   evidence owed, not as a condition of this closure. See `decisions.md` D61.
+- **Status update 2026-09-03 (device session,
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 6): item (2) above is now CLOSED.**
+  Two runs fired a hostile `av://` link from `127.0.0.1:18787` — a genuinely distinct second local
+  origin, delivered via `am start … --activity-single-top` from the host shell (a second process
+  hitting the exported `singleTop` activity). Both were refused
+  (`av:// handoff REFUSED — session locked or read in progress (D57 mitigation for finding #10)`).
+  Run 2's legitimate read/mint completed normally afterward and was cross-checked against both
+  verifiers independently: `127.0.0.1:8787` (the legitimate origin) recorded `ok=true allowed=true
+  attester=matched`; `127.0.0.1:18787` (the hostile origin) shows both its transactions still
+  `pending`, never receiving evidence. **Finding #10 is now device-proven against a genuinely
+  foreign origin, with no remaining open item under this entry.**
 
 ### 2026-09-02 — #11: biometric prompt shows no origin/site/tier — consent defect, independent of and surviving #10's mitigations
 
@@ -593,6 +616,9 @@ JUnit XML, not from a device run.
 - **Status update 2026-09-02 (D62, owner ruling): CLOSED.** Item (1) above is resolved: the
   site-named `BiometricPrompt` title is accepted as the fix. Owner confirmed it on device by eye:
   "it did work, confirmed." See `decisions.md` D62.
+- Status update 2026-09-03: n/a — the 2026-09-03 device session
+  (`docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md`) did not re-examine the prompt's content; D62
+  already closed this entry by owner eye-confirmation and nothing this session touches it.
 
 ### 2026-09-02 — #12: reused `showBlockingOutcomeDialog` for the #10 refusal path would have let a refused foreign intent wipe the legitimate locked session — CLOSED-BY-CONSTRUCTION before commit
 
@@ -771,6 +797,15 @@ JUnit XML, not from a device run.
   first small item, not designed further here. Owner: "oh well, they scan again or if you capture
   error log it after app restart as failed," then "option A." See `decisions.md` D64, `questions.md`
   Q38.
+- Status update 2026-09-03 (device session,
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 4): D64's Option A scenario was
+  reproduced live on device, not merely disclosed. A recreation forced while a `BiometricPrompt` was
+  outstanding (mid-mint) let the prompt's late callback complete `direct_post` on the destroyed
+  instance — verifier recorded a full tier-B verdict — while the phone showed and logged nothing
+  beyond the fence's own `Log.w` line. No crash. This also clears the `BiometricPrompt` fence
+  (`72e0b2c`, finding #5)'s own outstanding verification debt: `M2-FENCE-EVIDENCE.md` stated that fix
+  was "code-verified and bytecode-verified only... NO device evidence" — it now has direct device
+  confirmation.
 
 ### 2026-09-02 — #17: Q47 focus-steal — investigated, not fixed; root cause not isolable from source, needs device repro
 
@@ -809,3 +844,30 @@ JUnit XML, not from a device run.
   `questions.md` Q47.
 - **Status**: OPEN — needs device repro; not fixable from source alone. No device was attached this
   session; nothing here should be read as device evidence.
+- **Status update 2026-09-03 (device session,
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 1): CLOSED.** The in-flight
+  `clearFocus()`-plus-hide-keyboard fix (`0b71957`) is device-confirmed by owner eye: "cursor
+  fixed," after tapping OK on the `DatePickerDialog` for both date fields. No log line exists for
+  this by design. See `docs/wiki/questions.md` Q47 (now FIXED, device-confirmed).
+
+### 2026-09-03 — #18: "Scan QR" thumbnail capture does not decode a laptop-screen `av://` link; three unlogged Snackbars on that path
+
+- **Source**: device session, `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 5
+- **Anchor**: `MainActivity.kt:288` (`qrCaptureLauncher =
+  registerForActivityResult(ActivityResultContracts.TakePicturePreview())`), `:290` (Snackbar "QR
+  capture cancelled"), `:295` (Snackbar "No QR code found in that photo — try again"), `:841`
+  (Snackbar "Not a recognised av:// link or request_uri")
+- **Finding**: "Scan QR" uses `TakePicturePreview`, a low-resolution camera-preview thumbnail, not a
+  full-resolution capture or a dedicated barcode-scanning intent. A ~150-character `av://` link
+  rendered as a QR code on a laptop screen did not decode across three attempts on device
+  (09:13:12–09:13:22) — no decode, no crash, only a Snackbar. Separately, three UI-only Snackbars
+  on this same code path (`:290`, `:295`, `:841`) have no matching `Log` call, the same class of
+  defect the project already fixed once for finding #7's `reportView.text` write — a UI-only status
+  write with no log makes a real outcome indistinguishable from nothing having happened, in log
+  form.
+- **Status**: OPEN, non-blocking — **not a freeze item** (no async-lifecycle, ownership, or security
+  dimension; a capture-quality and logging-completeness defect only).
+- **Suggested, not applied**: log each of the three Snackbar sites (static, value-free — none of the
+  three needs interpolation); consider a proper barcode-scanning intent (e.g. a dedicated scanner
+  library) or a full-resolution capture instead of a preview thumbnail. Next module's list, not this
+  one.

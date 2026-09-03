@@ -208,20 +208,19 @@ this is flagged in the report back to the caller.
   device attached this session. (zkagent-prd.md:2162-2168)
 - **Q47 (opened 2026-09-02, deferred under D57 — input-focus CORRECTNESS defect,
   not a styling preference)** — Typing in the date fields steals focus back to the
-  document-number field, corrupting entered MRZ data. Status: **FIX IN FLIGHT,
-  DEVICE CHECK PENDING** — a coder fix (`clearFocus()` on the document-number
-  field plus hiding the keyboard after the `DatePickerDialog`'s OK) is landing on
-  this branch; not yet confirmed on device, so NOT marked FIXED. Prior session's
-  investigation traced and ruled out every app-code focus mechanism (see
-  `.claude/remember/findings.md` #17 for the full trace); standing hypothesis
-  (unconfirmed): Android's own post-`DatePickerDialog` default focus restoration
-  landing on `input_passport_number`, the form's only touch-focusable field — a
-  framework mechanism, not app code. The repro wording itself still needs the
-  owner's sharpening: `docs/logs/M2-FENCE-EVIDENCE.md` ~:168 describes the symptom
-  as occurring "while typing the date fields," but the date fields have no typing
-  path (tap-to-picker only). Evidence: `docs/logs/M2-FENCE-EVIDENCE.md`; full
-  record: `.claude/remember/findings.md` #17. (zkagent-prd.md:2170-2179; owner,
-  2026-09-02)
+  document-number field, corrupting entered MRZ data. Status: **FIXED,
+  device-confirmed 2026-09-03.** The `clearFocus()`-plus-hide-keyboard fix
+  (`0b71957`) is confirmed on device by owner eye ("cursor fixed") after using the
+  `DatePickerDialog` OK on both date fields; no log line exists for this by design.
+  Prior session's investigation traced and ruled out every app-code focus mechanism
+  (see `.claude/remember/findings.md` #17 for the full trace); standing hypothesis
+  (unconfirmed, and not needed to close this — the fix works regardless of root
+  cause): Android's own post-`DatePickerDialog` default focus restoration landing
+  on `input_passport_number`, the form's only touch-focusable field — a framework
+  mechanism, not app code. Evidence:
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 1; prior investigation:
+  `docs/logs/M2-FENCE-EVIDENCE.md`; full record: `.claude/remember/findings.md` #17.
+  (zkagent-prd.md:2170-2179; owner, 2026-09-02/2026-09-03)
 - **Q48 (opened 2026-09-02, deferred under D57 — UI/UX ENHANCEMENT, human-ID only,
   not a security question)** — Three installed reader apps are indistinguishable on
   the launcher. Status: DEFERRED — verified NOT a security gap (`av://` routing

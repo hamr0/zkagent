@@ -5,6 +5,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Device session 2026-09-03 clears the D57/D60 freeze's remaining verification-debt
+  items; lift ruling still pending owner.** Verified on the Pixel 6a: Q47's
+  input-focus fix (`0b71957`) confirmed by owner eye ("cursor fixed"); D63's
+  portrait lock (`d406f4b`) confirmed under both auto-rotate settings; the
+  `BiometricPrompt` fence (finding #5/#16, D64 Option A) reproduced live —
+  evidence left the device via a completed `direct_post` while the phone showed
+  and logged nothing, exactly as disclosed; the QR-scan/manual-paste handoff path
+  confirmed fenced under a mid-read recreation; finding #10/D61 device-proven
+  against a genuinely foreign origin (`127.0.0.1:18787`), cross-checked against
+  that origin's own verifier state. **Finding #6 note**: the mid-read branch of
+  `HandoffAdmission.mayStartTagRead` is confirmed NOT reachable on device with
+  real cards — the NFC stack serialises tag sessions and an in-flight read fails
+  before a second discovery could occur; the fix stays proven by unit test and
+  source trace only, recorded honestly rather than claimed as device-verified.
+  **New finding #18** (non-blocking, not a freeze item): "Scan QR" uses a
+  low-resolution preview thumbnail that does not decode a laptop-screen-sized
+  `av://` link, and three Snackbars on that path have no matching log line. See
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md`, `docs/wiki/decisions.md`
+  D57/D60, `docs/wiki/questions.md` Q47, `.claude/remember/findings.md`
+  #6/#10/#16/#17/#18. Docs only, no code touched this session.
 - **Owner rulings D61-D64: freeze exit criterion (3) MET; D57/D60 freeze not yet
   lifted.** D61 closes finding #10 (`av://` hijack) by construction —
   `HandoffAdmission` is now permanent policy, not a kept-by-recommendation
