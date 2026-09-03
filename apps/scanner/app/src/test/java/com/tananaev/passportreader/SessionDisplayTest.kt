@@ -29,7 +29,7 @@ class SessionDisplayTest {
         assertEquals("Mode: A — anonymous (no site request pending)", p.modeStatusText)
         assertEquals("", p.handoffStatusText)
         assertTrue(p.lockButtonEnabled)
-        assertEquals(SessionDisplay.LockButtonLabel.DEFAULT, p.lockButtonLabel)
+        assertEquals(SessionDisplay.LockButtonLabel.SCAN, p.lockButtonLabel)
     }
 
     @Test
@@ -38,7 +38,7 @@ class SessionDisplayTest {
         assertEquals("Mode: verifying the site's request…", p.modeStatusText)
         assertEquals("Handoff request received — verifying signature and origin…", p.handoffStatusText)
         assertFalse(p.lockButtonEnabled)
-        assertEquals(SessionDisplay.LockButtonLabel.DEFAULT, p.lockButtonLabel)
+        assertEquals(SessionDisplay.LockButtonLabel.SCAN, p.lockButtonLabel)
     }
 
     @Test
@@ -144,5 +144,72 @@ class SessionDisplayTest {
         assertEquals("", postMint.handoffStatusText)
         assertFalse(postMint.handoffStatusText.contains("verified"))
         assertFalse(postMint.handoffStatusText.contains("waiting"))
+    }
+
+    // ------------------------------------------- item 20 (D68): button verb
+
+    @Test
+    fun `no handoff pending renders the SCAN verb`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.None)
+        assertEquals(SessionDisplay.LockButtonLabel.SCAN, p.lockButtonLabel)
+    }
+
+    @Test
+    fun `verifying (not yet verified) renders SCAN, not VERIFY`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verifying)
+        assertEquals(SessionDisplay.LockButtonLabel.SCAN, p.lockButtonLabel)
+    }
+
+    @Test
+    fun `a verified handoff renders the VERIFY verb, unlocked`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("example.com", "B"))
+        assertEquals(SessionDisplay.LockButtonLabel.VERIFY, p.lockButtonLabel)
+    }
+
+    @Test
+    fun `a REFUSED handoff renders SCAN, not VERIFY`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Refused("origin mismatch"))
+        assertEquals(SessionDisplay.LockButtonLabel.SCAN, p.lockButtonLabel)
+    }
+
+    @Test
+    fun `a bare local lock (handoffDrivenLock=false) renders TAP_AND_SCAN`() {
+        val p = SessionDisplay.render(locked = SessionDisplay.LockedMode.A, handoff = SessionDisplay.HandoffState.None, handoffDrivenLock = false)
+        assertEquals(SessionDisplay.LockButtonLabel.TAP_AND_SCAN, p.lockButtonLabel)
+    }
+
+    @Test
+    fun `a handoff-driven lock renders TAP_AND_VERIFY`() {
+        val p = SessionDisplay.render(locked = SessionDisplay.LockedMode.B, handoff = SessionDisplay.HandoffState.None, handoffDrivenLock = true)
+        assertEquals(SessionDisplay.LockButtonLabel.TAP_AND_VERIFY, p.lockButtonLabel)
+    }
+
+    /**
+     * Extends the existing "locked always wins" defence (finding #14/D58
+     * step 3) to the new verb: [handoffDrivenLock] is this lock's OWN
+     * frozen snapshot (`authorizedHandoff != null`), not the live [handoff]
+     * argument — a foreign handoff's async verification resolving AFTER a
+     * bare (non-handoff) lock must not flip the verb to VERIFY, exactly as
+     * it must not resurrect the foreign origin text. Omitting
+     * `handoffDrivenLock` (default `false`) is itself the regression guard:
+     * every pre-item-20 call site keeps this behaviour with no code change.
+     */
+    @Test
+    fun `a foreign Verified outcome arriving after a bare lock does not flip the verb to VERIFY`() {
+        val p = SessionDisplay.render(
+            locked = SessionDisplay.LockedMode.B,
+            handoff = SessionDisplay.HandoffState.Verified("attacker.example", "A"),
+        )
+        assertEquals(SessionDisplay.LockButtonLabel.TAP_AND_SCAN, p.lockButtonLabel)
+    }
+
+    @Test
+    fun `a genuinely handoff-driven lock keeps the VERIFY verb even if a later outcome for it is Refused`() {
+        val p = SessionDisplay.render(
+            locked = SessionDisplay.LockedMode.B,
+            handoff = SessionDisplay.HandoffState.Refused("some later refusal"),
+            handoffDrivenLock = true,
+        )
+        assertEquals(SessionDisplay.LockButtonLabel.TAP_AND_VERIFY, p.lockButtonLabel)
     }
 }

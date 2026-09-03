@@ -484,11 +484,23 @@ abstract class MainActivity : AppCompatActivity() {
         handoffStatus.text = projection.handoffStatusText
         lockButton.isEnabled = projection.lockButtonEnabled
         lockButton.text = when (projection.lockButtonLabel) {
-            SessionDisplay.LockButtonLabel.DEFAULT -> getString(R.string.button_lock_and_scan)
-            // Q40 (owner UX, PROVISIONAL — see LOCK_BUTTON_WAITING_LABEL's
+            // §6.2 item 20 (D68): unlocked default verb, no site request
+            // active. Text lives in R.string.button_lock_and_scan (resource
+            // id/name unchanged on purpose, matching Q46's precedent —
+            // renaming the resource id would touch the XML default too for
+            // no behavioural gain).
+            SessionDisplay.LockButtonLabel.SCAN -> getString(R.string.button_lock_and_scan)
+            // §6.2 item 20 (D68): unlocked verb while a VERIFIED av://
+            // request is pending — not yet owner-device-confirmed, wording
+            // fixed by the ruling itself ("Verify").
+            SessionDisplay.LockButtonLabel.VERIFY -> LOCK_BUTTON_VERIFY_LABEL
+            // Q40 (owner UX, CLOSED D67 — see LOCK_BUTTON_WAITING_LABEL's
             // own doc): the disabled Lock button no longer reads as "stuck"
             // while a locked session is waiting for the document tap.
             SessionDisplay.LockButtonLabel.TAP_AND_SCAN -> LOCK_BUTTON_WAITING_LABEL
+            // §6.2 item 20 (D68): same waiting-frame as TAP_AND_SCAN, for a
+            // handoff-driven lock — the ruling's own collision wording.
+            SessionDisplay.LockButtonLabel.TAP_AND_VERIFY -> LOCK_BUTTON_WAITING_VERIFY_LABEL
         }
     }
 
@@ -529,7 +541,12 @@ abstract class MainActivity : AppCompatActivity() {
      * `refreshModeStatus`, which touched [modeStatusView] alone — see
      * [SessionDisplay]'s doc for why that was finding #14's exact defect. */
     private fun refreshSessionDisplay() {
-        applySessionDisplay(SessionDisplay.render(lockedModeForDisplay(), currentHandoffState()))
+        // §6.2 item 20 (D68): [authorizedHandoff] (D58 step 3's lock-time
+        // snapshot) — not the live [currentHandoffState] — decides the
+        // LOCKED verb, for the same reason [locked] already wins over a
+        // live [handoff] for mode/handoff text: see
+        // [SessionDisplay.render]'s `handoffDrivenLock` doc.
+        applySessionDisplay(SessionDisplay.render(lockedModeForDisplay(), currentHandoffState(), handoffDrivenLock = authorizedHandoff != null))
     }
 
     /** §6.2 item 13 (D33): the mode a pending, VERIFIED handoff request
@@ -1026,7 +1043,7 @@ abstract class MainActivity : AppCompatActivity() {
                 // handoff (non-null) and [verifiedRequest] is still null,
                 // indistinguishable from Verifying by field state alone. See
                 // [SessionDisplay.HandoffState]'s doc.
-                applySessionDisplay(SessionDisplay.render(lockedModeForDisplay(), SessionDisplay.HandoffState.Refused(outcome.reason)))
+                applySessionDisplay(SessionDisplay.render(lockedModeForDisplay(), SessionDisplay.HandoffState.Refused(outcome.reason), handoffDrivenLock = authorizedHandoff != null))
                 // §6.2 item 15 (D43): the state transition (clearing
                 // pendingHandoff/verifiedRequest, reverting the derived mode
                 // display via wipeSession) happens on dialog dismissal, not
@@ -2643,16 +2660,27 @@ abstract class MainActivity : AppCompatActivity() {
         // read is in progress. Shortened 2026-09-02 to fit a Snackbar.
         private const val HANDOFF_REFUSED_MID_SESSION_MESSAGE = "Ignored a site request that arrived mid-scan."
 
-        // Q40 (owner UX, PROVISIONAL — not yet owner-approved wording, per
-        // this project's rule that every user-facing string goes back to
-        // the owner): finding #9's owner observation (iii) — a disabled
-        // Lock button reads as "stuck" once a session is locked and
-        // waiting for the document tap. Substituted for
-        // R.string.button_lock_and_scan by [applySessionDisplay] whenever
-        // [SessionDisplay.render] returns [SessionDisplay.LockButtonLabel
-        // .TAP_AND_SCAN] — see that object's class doc. Owner's own exact
-        // wording, from the brief: "Tap and scan."
+        // Q40 (owner UX, CLOSED D67 — owner sign-off 2026-09-03): finding
+        // #9's owner observation (iii) — a disabled Lock button reads as
+        // "stuck" once a session is locked and waiting for the document
+        // tap. Substituted for R.string.button_lock_and_scan by
+        // [applySessionDisplay] whenever [SessionDisplay.render] returns
+        // [SessionDisplay.LockButtonLabel.TAP_AND_SCAN] — see that object's
+        // class doc. Owner's own exact wording, from the brief: "Tap and
+        // scan."
         private const val LOCK_BUTTON_WAITING_LABEL = "Tap and scan"
+
+        // §6.2 item 20 (D68, owner ruling 2026-09-03, Q45): the unlocked
+        // verb while a VERIFIED av:// request is pending. Owner's own exact
+        // wording, from the ruling. Not yet device-confirmed (Q45 status:
+        // BUILT-IN-<sha>, device verification pending).
+        private const val LOCK_BUTTON_VERIFY_LABEL = "Verify"
+
+        // §6.2 item 20 (D68): Q40's "Tap and scan" waiting-frame, for a
+        // LOCKED session that is itself handoff-driven — the ruling's own
+        // collision wording ("if the label slots collide, use 'Tap and
+        // verify'/'Tap and scan'"). Not yet device-confirmed.
+        private const val LOCK_BUTTON_WAITING_VERIFY_LABEL = "Tap and verify"
 
         // D56: per-process salt for [lastMrzHash] — a companion-object
         // field (not per-Activity-instance) so an Activity re-creation

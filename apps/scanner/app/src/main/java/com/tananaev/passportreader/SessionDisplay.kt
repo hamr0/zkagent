@@ -44,15 +44,24 @@ package com.tananaev.passportreader
  * and `HandoffAdmission`'s doc for the guard-removal recommendation this
  * enables (recommendation only — that guard is NOT removed by this step).
  *
- * **Q40 (owner UX, PROVISIONAL — not yet owner-approved wording, per this
- * project's rule that every user-facing string goes back to the owner):**
- * a disabled Lock button reads as "stuck" once a session is locked and
- * waiting for the document tap (finding #9's owner observation (iii)).
+ * **Q40 (owner UX, CLOSED D67 — owner sign-off 2026-09-03):** a disabled
+ * Lock button reads as "stuck" once a session is locked and waiting for the
+ * document tap (finding #9's owner observation (iii)).
  * [LockButtonLabel.TAP_AND_SCAN] is that relabel's pure decision —
  * `MainActivity` substitutes the actual owner-specified string (its own
- * companion-object constant, marked PROVISIONAL there too) rather than
- * this Android-free object owning English prose, matching
- * [MintPromptText]'s existing split between decision and copy.
+ * companion-object constant) rather than this Android-free object owning
+ * English prose, matching [MintPromptText]'s existing split between
+ * decision and copy.
+ *
+ * **§6.2 item 20 (D68, owner ruling 2026-09-03, Q45):** the single scan-
+ * action button ALSO changes verb — "Verify" while a verified `av://`
+ * handoff request is pending or driving the current lock, "Scan" otherwise
+ * — layered onto the same [LockButtonLabel] enum rather than a second
+ * control (owner: NO new control; the existing button's label is a pure
+ * projection of handoff state, exactly [HandoffState] already is for the
+ * mode/handoff lines above). See [render]'s `handoffDrivenLock` parameter
+ * doc for why the LOCKED verb cannot be derived from the live [handoff]
+ * argument the way the unlocked verb is.
  */
 object SessionDisplay {
 
@@ -81,11 +90,18 @@ object SessionDisplay {
         data class Refused(val reason: String) : HandoffState()
     }
 
-    /** [DEFAULT] is the button's XML-declared label
-     * (`R.string.button_lock_and_scan`, substituted by `MainActivity`, this
-     * object stays string-free); [TAP_AND_SCAN] is Q40's PROVISIONAL
-     * relabel, shown only while [locked] is non-null. */
-    enum class LockButtonLabel { DEFAULT, TAP_AND_SCAN }
+    /**
+     * [SCAN] is the button's default unlocked verb (no site request
+     * active); [VERIFY] is item 20's verb for a VERIFIED (not merely
+     * pending-verification) `av://` request, unlocked. [TAP_AND_SCAN] is
+     * Q40's locked relabel for a bare local lock; [TAP_AND_VERIFY] is the
+     * same locked relabel for a handoff-driven lock (item 20's collision
+     * wording, D68 — "Tap and verify"/"Tap and scan" once both Q40's
+     * waiting-frame and item 20's verb apply at once). `MainActivity`
+     * substitutes the actual owner-specified strings; this object stays
+     * string-free.
+     */
+    enum class LockButtonLabel { SCAN, VERIFY, TAP_AND_SCAN, TAP_AND_VERIFY }
 
     data class Projection(
         val modeStatusText: String,
@@ -104,9 +120,28 @@ object SessionDisplay {
      *   `null` for an unlocked session. Takes precedence over [handoff]:
      *   see class doc for why.
      * @param handoff the CURRENT handoff-verification phase — see
-     *   [HandoffState]'s doc for how callers obtain this.
+     *   [HandoffState]'s doc for how callers obtain this. Drives the
+     *   UNLOCKED verb ([LockButtonLabel.SCAN]/[VERIFY]) directly, since a
+     *   live incoming request legitimately changing what the unlocked
+     *   screen shows is the whole point of [Verifying]/[Verified].
+     * @param handoffDrivenLock whether THIS lock (if [locked] is non-null)
+     *   was itself authorized from a verified handoff — i.e. the caller's
+     *   OWN `authorizedHandoff != null` snapshot, frozen at lock time.
+     *   Deliberately NOT derived from [handoff]: [handoff] can keep
+     *   changing after lock (an admitted foreign handoff's async
+     *   verification resolving late — see class doc's "locked wins"
+     *   passage and finding #14/D58 step 3), and a locked screen's VERB
+     *   must be just as immune to that as its mode/handoff text already
+     *   is — `locked always wins over a foreign Verified outcome arriving
+     *   after lock` (`SessionDisplayTest`) pins exactly this: that test
+     *   passes this parameter's default (`false`) precisely because the
+     *   scenario's lock was never established as handoff-driven, so a
+     *   foreign [HandoffState.Verified] landing afterward must still
+     *   render [LockButtonLabel.TAP_AND_SCAN], never [TAP_AND_VERIFY].
+     *   Ignored while [locked] is `null`. Default `false` matches every
+     *   pre-item-20 call site (a bare mode-A lock).
      */
-    fun render(locked: LockedMode?, handoff: HandoffState): Projection {
+    fun render(locked: LockedMode?, handoff: HandoffState, handoffDrivenLock: Boolean = false): Projection {
         if (locked != null) {
             // Matches lockModeAndArm's pre-refactor text verbatim
             // ("Locked: mode ${lockedMode} — tap your document now") —
@@ -124,7 +159,7 @@ object SessionDisplay {
                 // .None] below.
                 handoffStatusText = "",
                 lockButtonEnabled = false,
-                lockButtonLabel = LockButtonLabel.TAP_AND_SCAN,
+                lockButtonLabel = if (handoffDrivenLock) LockButtonLabel.TAP_AND_VERIFY else LockButtonLabel.TAP_AND_SCAN,
             )
         }
         return when (handoff) {
@@ -132,14 +167,17 @@ object SessionDisplay {
                 modeStatusText = MODE_DEFAULT_TEXT,
                 handoffStatusText = "",
                 lockButtonEnabled = true,
-                lockButtonLabel = LockButtonLabel.DEFAULT,
+                lockButtonLabel = LockButtonLabel.SCAN,
             )
             HandoffState.Verifying -> Projection(
                 // Matches beginHandoffVerification's pre-refactor text verbatim.
+                // Verb stays SCAN, not VERIFY: D68's ruling names a
+                // VERIFIED request, and this signature has not resolved
+                // yet (the button is disabled here regardless).
                 modeStatusText = "Mode: verifying the site's request…",
                 handoffStatusText = "Handoff request received — verifying signature and origin…",
                 lockButtonEnabled = false,
-                lockButtonLabel = LockButtonLabel.DEFAULT,
+                lockButtonLabel = LockButtonLabel.SCAN,
             )
             is HandoffState.Verified -> Projection(
                 // Matches the pre-refactor refreshModeStatus's tier-mapping
@@ -151,7 +189,7 @@ object SessionDisplay {
                 },
                 handoffStatusText = "Handoff verified — origin: ${handoff.origin}, requested tier: ${handoff.tier ?: "<absent>"}. Fill in your document details and lock to answer it.",
                 lockButtonEnabled = true,
-                lockButtonLabel = LockButtonLabel.DEFAULT,
+                lockButtonLabel = LockButtonLabel.VERIFY,
             )
             is HandoffState.Refused -> Projection(
                 // The pre-refactor code left modeStatusView/lockButton
@@ -163,11 +201,12 @@ object SessionDisplay {
                 // "no handoff pending" defaults here is behaviourally
                 // invisible (a blocking, non-cancelable AlertDialog is
                 // already covering the screen by this point) rather than a
-                // real change.
+                // real change. Verb reverts to SCAN — the handoff that
+                // would have justified VERIFY is exactly what was refused.
                 modeStatusText = MODE_DEFAULT_TEXT,
                 handoffStatusText = "Handoff refused (${handoff.reason}) — you may still scan manually.",
                 lockButtonEnabled = false,
-                lockButtonLabel = LockButtonLabel.DEFAULT,
+                lockButtonLabel = LockButtonLabel.SCAN,
             )
         }
     }

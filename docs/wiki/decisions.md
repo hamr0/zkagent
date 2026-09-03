@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D67
+title: zkagent — owner decisions D1–D68
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D67
+# Owner decisions D1–D68
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -151,3 +151,5 @@ Device session 2026-09-03 (see `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.
 Built in 7daeba4 (cherry-picked onto chore/m2-exit-cleanup); device verification pending.
 
 **D67 — Six deferred UX questions ruled: Q40 closed, Q39/Q43/Q44/Q45/Q48 approved into §6.2 as new items 17–21.** Q40 ("Tap and scan" wording): owner signs off on the shipped label — CLOSED. Q39 (switch the visible tab to the scan pane on an incoming handoff intent), Q43 (collapse each log entry by default behind a toggle), Q44 (dim a completed run), Q45 (one control distinguishing a "verify" scan from a "scan local" one), and Q48 (make the scanner distinguishable from the other two reader apps on the launcher, by app label and icon) are each approved into §6.2 as one new MUST-language, ENHANCEMENT-tagged item — items 17 through 21 respectively, one item per question. Q45 and Q48 have no wording/design decided yet; both items are scoped as "shape decided by the owner at build time; the coder proposes, owner approves" so the work is in scope without pre-empting the design. See milestones.md §6.2 items 17–21 and each Qn's updated status in questions.md. (owner, 2026-09-03)
+
+**D68 — Item 20 (Q45) shaped: no new control, existing scan button changes verb.** The proposal doc's Option A (a passive, non-tappable banner alongside the existing button) is NOT what the owner picked. Instead: the single existing scan-action button (`R.id.button_lock_and_scan`) changes its VERB, as a pure projection of handoff state, never a control the user selects. Label reads "Verify" while a verified `av://` handoff request is pending or is driving the current lock (this device is about to answer a site's request); reads "Scan" whenever no such request is active (bare local scan). Q40's owner-approved "Tap and scan" waiting-frame (a locked session waiting for the document tap) is preserved as its own distinct state, per Q40; where the two would otherwise collide (a locked, handoff-driven session), the button reads "Tap and verify" instead, matching Q40's "Tap and scan" for a locked, non-handoff session — a coder wording decision flagged back per the ruling's own instruction, not yet owner-approved. Implementation: `SessionDisplay.LockButtonLabel` gains `SCAN`/`VERIFY`/`TAP_AND_VERIFY` alongside the existing `TAP_AND_SCAN` (renamed from `DEFAULT`); the LOCKED verb is driven by the lock-time `authorizedHandoff != null` snapshot (D58 step 3's own pattern), not the live handoff state, so a foreign handoff's async verification resolving after a bare lock cannot flip the verb — the same "locked wins" immunity `SessionDisplay` already gives the mode/handoff text. Owner: "The existing single scan action button changes its verb from state... The verb is a pure projection of handoff state... the button never selects anything." (owner, 2026-09-03)
