@@ -52,8 +52,11 @@ variant per the Blueprint AV Profile), `APP_LINK_BASE`, `SCOPE_DOMAIN`,
   doctype `eu.europa.ec.av.1`, claim `age_over_18`) but the credential actually
   verified is chiproof's `zkagent/1` presentation riding in the request's `zkagent`
   member — this spike is not an mdoc verifier and makes no interop claim (PRD §5).
-- **QR is TODO.** The app link is the QR payload; the page shows it as text.
-  Cross-device-only polish; no QR npm dependency without escalating.
+- **QR is rendered as an image (D68 part b, 2026-09-03).** `POST
+  /ui/presentations` returns `qr`, a `data:image/png;base64,...` QR code of
+  `app_link_av`, via the `qrcode` npm package (pinned exact version,
+  spike-only — never added to `packages/chiproof`). The text link is still
+  shown alongside it.
 - **`ttlMs` in `POST /ui/presentations`** is a spike-only affordance so the expiry
   negative is testable; not part of the captured shape.
 - **`InMemoryNonceStore` with `allowInMemoryStore: true`** — single-process demo, the

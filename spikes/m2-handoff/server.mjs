@@ -29,6 +29,10 @@
 
 import { createServer } from 'node:http';
 import { randomBytes, createPublicKey, createPrivateKey } from 'node:crypto';
+// NEW DEPENDENCY, spike-only — never added to packages/chiproof (D68 part b,
+// decisions.md; finding #18). Pure-JS QR encoder; renders app_link_av as a
+// scannable image instead of text-only. Pinned exact version in package.json.
+import QRCode from 'qrcode';
 import {
   createVerifier, InMemoryNonceStore, InMemoryAttesterStore, realNo, sigEd25519, sigP256,
 } from 'chiproof';
@@ -205,9 +209,10 @@ Mode B: tier B, either <code>sig-ed25519/1</code> or <code>sig-p256/1</code> acc
   <p><a id="applink" href="#"></a></p>
   <p class="muted">custom-scheme variant: <code id="avlink"></code></p>
   <h2>Cross-device</h2>
+  <img id="qrimg" width="240" height="240" alt="QR code encoding the av:// handoff link">
   <pre id="qrtext"></pre>
-  <p class="muted">TODO: render this link as a QR image (cross-device-only polish;
-  no QR dependency without escalation — link shown as text for now).</p>
+  <p class="muted">Scan the QR image above with the scanner app's "Scan QR" button
+  (D68 part b), or use the raw link below.</p>
   <h2>Status</h2>
   <p id="status">waiting for the app…</p>
   <p id="verdict"></p>
@@ -226,7 +231,8 @@ async function start(mode) {
   const a = document.getElementById('applink');
   a.href = tx.app_link; a.textContent = tx.app_link;
   document.getElementById('avlink').textContent = tx.app_link_av;
-  document.getElementById('qrtext').textContent = tx.app_link;
+  document.getElementById('qrimg').src = tx.qr;
+  document.getElementById('qrtext').textContent = tx.app_link_av;
   pollTimer = setInterval(async () => {
     const r = await fetch('/ui/presentations/' + tx.transactionId);
     if (!r.ok) return;
@@ -350,6 +356,10 @@ export function createApp() {
       };
 
       const links = buildAppLinks(requestUri, responseUri);
+      // D68 part b: render a real QR image of the av:// link (the actual
+      // cross-device scan payload), not the https variant — a data URI so
+      // no separate image route/static file is needed for a throwaway spike.
+      const qrDataUrl = await QRCode.toDataURL(links.av, { margin: 1, width: 240 });
       const tx = {
         transactionId, requestId, mode, challenge, requestObject,
         status: 'pending', verdict: null, createdAt: Date.now(),
@@ -372,8 +382,7 @@ export function createApp() {
         app_link: LINK_SCHEME === 'av' ? links.av : links.https,
         app_link_av: links.av,
         app_link_https: links.https,
-        qr: null, // TODO: QR data-URL rendering — cross-device-only polish;
-                  // no QR npm dependency without escalating. Link is the QR payload.
+        qr: qrDataUrl, // data:image/png;base64,... of app_link_av (D68 part b)
       });
       return;
     }

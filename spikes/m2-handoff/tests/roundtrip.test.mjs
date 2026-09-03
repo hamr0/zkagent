@@ -71,6 +71,9 @@ test('happy roundtrip: request -> request.jwt -> direct_post -> poll => allowed:
   assert.ok(tx.transactionId && tx.requestId && tx.request_uri);
   assert.match(tx.app_link_https, /^https:\/\/.+request_uri=/);
   assert.match(tx.app_link_av, /^av:\/\/authorize\?/);
+  // D68 part b (finding #18): a real QR image of app_link_av, not the
+  // former `qr: null` TODO placeholder.
+  assert.match(tx.qr, /^data:image\/png;base64,/);
 
   // pending before any response
   assert.deepEqual(await poll(tx), { status: 'pending' });
