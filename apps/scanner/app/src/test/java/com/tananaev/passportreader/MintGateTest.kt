@@ -1,5 +1,6 @@
 package com.tananaev.passportreader
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -39,5 +40,37 @@ class MintGateTest {
     @Test
     fun `mode A with an integrity failure does not mint`() {
         assertFalse(MintGate.mayMint(modeIsB = false, verdict = verdict(false, null)))
+    }
+
+    // -------------------------------------------- finding #21 (actionFor)
+
+    @Test
+    fun `mode B, ok true allowed true -- MintB`() {
+        assertEquals(MintGate.Action.MintB, MintGate.actionFor(modeIsB = true, verdict = verdict(true, true)))
+    }
+
+    @Test
+    fun `mode A, ok true allowed true -- PresentBareA (item 9, finding #21)`() {
+        assertEquals(MintGate.Action.PresentBareA, MintGate.actionFor(modeIsB = false, verdict = verdict(true, true)))
+    }
+
+    @Test
+    fun `mode B, a real masterlist no -- None`() {
+        assertEquals(MintGate.Action.None, MintGate.actionFor(modeIsB = true, verdict = verdict(true, false)))
+    }
+
+    @Test
+    fun `mode A, a real masterlist no -- None (never PresentBareA)`() {
+        assertEquals(MintGate.Action.None, MintGate.actionFor(modeIsB = false, verdict = verdict(true, false)))
+    }
+
+    @Test
+    fun `mode B, integrity failure (ok false, allowed null) -- None`() {
+        assertEquals(MintGate.Action.None, MintGate.actionFor(modeIsB = true, verdict = verdict(false, null)))
+    }
+
+    @Test
+    fun `mode A, integrity failure (ok false, allowed null) -- None (never PresentBareA)`() {
+        assertEquals(MintGate.Action.None, MintGate.actionFor(modeIsB = false, verdict = verdict(false, null)))
     }
 }

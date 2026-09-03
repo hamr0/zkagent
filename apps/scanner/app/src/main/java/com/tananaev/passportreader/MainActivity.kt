@@ -1807,31 +1807,54 @@ abstract class MainActivity : AppCompatActivity() {
         val site = snapshot?.site ?: SITE_NO_HANDOFF
 
         // Single source of truth (MintGate) — see its doc for the root-cause
-        // note on why the branch below now goes through emitReport.
-        val mayMint = MintGate.mayMint(mode == PresentationMode.B, verdict)
-        if (!mayMint) {
-            emitReport(
-                baseReport + "\nmint_gate: NOT MET — evidence: [] (D27${if (mode == PresentationMode.B) ", item 3: masterlist/passive-auth gate not satisfied" else ""})\nverdict: ${if (verdict.ok) "PASS (read)" else "FAIL (could not check)"}",
-                ReportLog.DisclosureSummary(
-                    site = site,
-                    result = when {
-                        !verdict.ok -> "Read finished, but the document could not be verified"
-                        mode == PresentationMode.A -> "Read OK — nothing sent"
-                        else -> "Read OK, but this document is not accepted for age verification"
-                    },
-                    chipAuthenticity = chipAuthLabel(chipAuthStatus),
-                    sent = "nothing left this device",
-                    shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
-                ),
-                // item 22: no mint was attempted here (mode A by design, or
-                // a masterlist real-no) — the run is PASS iff the read
-                // itself completed cleanly ([verdict.ok], the SAME boolean
-                // this report's own "PASS (read)"/"FAIL (could not check)"
-                // text above already renders); an integrity failure is
-                // FAIL. See ReportLog.Outcome's doc — owner-overturnable.
-                outcome = if (verdict.ok) ReportLog.Outcome.PASS else ReportLog.Outcome.FAIL,
-            )
-            return
+        // note on why the branch below now goes through emitReport, and for
+        // finding #21 (2026-09-03) on why this is now a 3-way [MintGate
+        // .Action] rather than a single boolean: mode A's own successful-
+        // read outcome ([MintGate.Action.PresentBareA]) used to be folded
+        // into the same "not met" branch as a real read failure, which is
+        // exactly how item 9's bare tier-A presentation (and item 15's
+        // outcome dialog for it) went missing.
+        when (MintGate.actionFor(mode == PresentationMode.B, verdict)) {
+            MintGate.Action.None -> {
+                val notMetResult = when {
+                    !verdict.ok -> "Read finished, but the document could not be verified"
+                    mode == PresentationMode.A -> "Read OK — nothing sent"
+                    else -> "Read OK, but this document is not accepted for age verification"
+                }
+                emitReport(
+                    baseReport + "\nmint_gate: NOT MET — evidence: [] (D27${if (mode == PresentationMode.B) ", item 3: masterlist/passive-auth gate not satisfied" else ""})\nverdict: ${if (verdict.ok) "PASS (read)" else "FAIL (could not check)"}",
+                    ReportLog.DisclosureSummary(
+                        site = site,
+                        result = notMetResult,
+                        chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                        sent = "nothing left this device",
+                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                    ),
+                    // item 22: no mint was attempted here (mode A by design, or
+                    // a masterlist real-no) — the run is PASS iff the read
+                    // itself completed cleanly ([verdict.ok], the SAME boolean
+                    // this report's own "PASS (read)"/"FAIL (could not check)"
+                    // text above already renders); an integrity failure is
+                    // FAIL. See ReportLog.Outcome's doc — owner-overturnable.
+                    outcome = if (verdict.ok) ReportLog.Outcome.PASS else ReportLog.Outcome.FAIL,
+                )
+                // finding #21 / item 15: mode A's own terminal outcomes now
+                // get the SAME blocking modal every other terminal outcome
+                // in this pipeline already shows — this branch used to be
+                // the ONLY silent `return` left in the file. Mode B's
+                // existing not-met branch (masterlist real-no / integrity
+                // failure) is UNCHANGED — it never showed a dialog here and
+                // none is added now; only mode A was in scope for #21.
+                if (mode == PresentationMode.A) {
+                    showBlockingOutcomeDialog(notMetResult, isAccessEstablishmentFailure = false)
+                }
+                return
+            }
+            MintGate.Action.PresentBareA -> {
+                presentBareA(chipAuthStatus, baseReport, snapshot, dg1File.mrzInfo.dateOfBirth)
+                return
+            }
+            MintGate.Action.MintB -> Unit // fall through to the existing mint pipeline below
         }
 
         // D38 (§6.2 item 1 amendment): a per-origin attester key needs an
@@ -2055,6 +2078,276 @@ abstract class MainActivity : AppCompatActivity() {
                 promptAndMint(keyState, baseReport, zktag, scopeDomain, site, attemptId, mode, chipAuthStatus, authorized, dobYYMMDD)
             }
         }.start()
+    }
+
+    /**
+     * finding #21 (2026-09-03), item 9's mode-A MUST: "mode A ships bare
+     * (evidence: [])" — a mode A holder whose read passed the SAME
+     * integrity check mode B mints on ([MintGate.Action.PresentBareA])
+     * still owes a real answer to whatever site is waiting, just an
+     * unauthenticated one: no zktag (D9 never runs), no device key (no
+     * [DeviceKey.ensureKey] call anywhere in this function), and therefore
+     * NO biometric prompt — the entire [promptAndMint]/`onAuthenticationSucceeded`
+     * detour mode B needs to unlock its key does not exist on this path.
+     *
+     * Two cases, both terminal (main-thread, called directly from
+     * [continueAfterRead], itself on the main thread — no [Thread] wrapper
+     * here; the network call this function makes lives in
+     * [presentBareAOnBackground], mirroring [continueAfterRead]'s own
+     * Thread{}.start() discipline for exactly the same NetworkOnMainThread
+     * reason):
+     *
+     * - item 2: [snapshot] is null (a bare local scan, no site to answer) —
+     *   the existing "Read OK — nothing sent" report, now ALSO paired with
+     *   item 15's blocking dialog (previously the one silent path finding
+     *   #21 named).
+     * - item 1: [snapshot] is a verified pending handoff — build the bare
+     *   tier-A presentation ([HandoffClient.buildPresentation], `evidence:
+     *   []`, `zktag = null`) and `direct_post` it, exactly like mode B's
+     *   [mintAndMaybeHandoff] does for its own presentation, minus every
+     *   step that touches a document identity.
+     */
+    private fun presentBareA(chipAuthStatus: M0Probe.ChipAuthStatus, baseReport: String, snapshot: AuthorizedHandoff?, dobYYMMDD: String?) {
+        if (snapshot == null) {
+            // item 2: nothing pending to answer — unchanged report text,
+            // now with the item-15 dialog finding #21 named as missing.
+            emitReport(
+                baseReport + "\nmint_gate: MET (present bare, item 3) — evidence: [] (D27); no handoff pending, nothing to send\nverdict: PASS (read)",
+                ReportLog.DisclosureSummary(
+                    site = SITE_NO_HANDOFF,
+                    result = "Read OK — nothing sent",
+                    chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                    sent = "nothing left this device",
+                    shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                ),
+                // item 22: reached only when MintGate already classified
+                // this read as PresentBareA (verdict.ok, mode A) — a clean
+                // read with nothing pending to answer is PASS, same rule as
+                // continueAfterRead's own mode-A "nothing to mint" branch.
+                outcome = ReportLog.Outcome.PASS,
+            )
+            showBlockingOutcomeDialog("Read OK — nothing was sent.", isAccessEstablishmentFailure = false)
+            return
+        }
+
+        // item 1: a verified handoff is pending — build and send the bare
+        // tier-A presentation. Same attemptId/"In progress" discipline as
+        // continueAfterRead's mode-B path (one id, threaded through every
+        // emitReport call below, so the eventual terminal outcome replaces
+        // this SAME entry rather than appending a second one).
+        val attemptId = java.util.UUID.randomUUID().toString()
+        emitReport(
+            baseReport + "\nmint_gate: MET (present bare, item 3) — sending a bare tier-A presentation (no zktag, no device key, no biometric prompt, item 9)\n",
+            ReportLog.DisclosureSummary(
+                site = snapshot.site,
+                result = "In progress — sending your answer to the site",
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = "nothing yet",
+                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing yet"),
+            ),
+            attemptId = attemptId,
+            pending = true,
+        )
+        Thread { presentBareAOnBackground(chipAuthStatus, baseReport, snapshot, attemptId, dobYYMMDD) }.start()
+    }
+
+    /** Runs on a background thread (see [presentBareA]) — `direct_post` is a
+     * blocking network call, same reason [mintAndMaybeHandoff] runs there.
+     * Mirrors [mintAndMaybeHandoff]'s threshold/age/claim/challenge/
+     * direct_post/[MintOutcome] plumbing exactly — the same refuse-loudly
+     * branches (Q35 absent/invalid threshold, Q36 unparsable DOB), the same
+     * [DeliveryResult] outcomes and [MintOutcome.classify] honest-under-
+     * threshold handling — with every zktag/device-key/evidence step
+     * removed: `claim` is signed by nobody, `evidence` is always `[]`,
+     * `zktag` is always `null` (item 9, D27). */
+    private fun presentBareAOnBackground(chipAuthStatus: M0Probe.ChipAuthStatus, baseReport: String, snapshot: AuthorizedHandoff, attemptId: String, dobYYMMDD: String?) {
+        val requestObject: JSONObject = snapshot.request.json
+        val site = snapshot.site
+        Log.i(TAG, "M2 stage: mode A present-bare using pre-verified handoff request object — origin=${snapshot.request.origin} signature_verified=true (no re-fetch)")
+
+        val threshold = RequestTrust.thresholdOf(requestObject)
+        if (threshold == null) {
+            Log.e(TAG, "M2 stage: mode A present-bare REFUSED — verified request has absent/invalid zkagent.challenge.threshold, no default (Q35)")
+            runOnUiThread {
+                if (!fence.passes()) {
+                    Log.i(TAG, "M2 lifecycle: fence closed — dropped present-bare failure report (absent/invalid threshold)")
+                    return@runOnUiThread
+                }
+                emitReport(
+                    baseReport + "\npresent: FAILED — the site's request did not carry a valid age threshold (absent, non-integer, or non-positive zkagent.challenge.threshold; no default is used, Q35)",
+                    ReportLog.DisclosureSummary(
+                        site = site,
+                        result = "Failed — the site's request did not specify a valid age threshold to check",
+                        chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                        sent = "nothing left this device",
+                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                    ),
+                    attemptId = attemptId,
+                    // item 22: a failure — see ReportLog.Outcome's doc.
+                    outcome = ReportLog.Outcome.FAIL,
+                )
+                showBlockingOutcomeDialog("The site's request did not specify a valid age threshold to check.", isAccessEstablishmentFailure = false)
+            }
+            return
+        }
+        val currentDateUtcMidnight = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+        val overThreshold = dobYYMMDD?.let { AgeCheck.overThreshold(it, currentDateUtcMidnight, threshold) }
+        if (overThreshold == null) {
+            Log.e(TAG, "M2 stage: mode A present-bare REFUSED — DG1 date of birth is absent or unparsable, no default (Q36)")
+            runOnUiThread {
+                if (!fence.passes()) {
+                    Log.i(TAG, "M2 lifecycle: fence closed — dropped present-bare failure report (unparsable date of birth)")
+                    return@runOnUiThread
+                }
+                emitReport(
+                    baseReport + "\npresent: FAILED — this document's date of birth field could not be parsed; no default is used (Q36)",
+                    ReportLog.DisclosureSummary(
+                        site = site,
+                        result = "Failed — this document's date of birth could not be read",
+                        chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                        sent = "nothing left this device",
+                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                    ),
+                    attemptId = attemptId,
+                    // item 22: a failure — see ReportLog.Outcome's doc.
+                    outcome = ReportLog.Outcome.FAIL,
+                )
+                showBlockingOutcomeDialog("This document's date of birth could not be read.", isAccessEstablishmentFailure = false)
+            }
+            return
+        }
+        // Value-free, same discipline as mintAndMaybeHandoff's D66 block.
+        Log.i(TAG, "M2 stage: mode A present-bare age check — over_threshold=$overThreshold threshold=$threshold")
+        val claim = mapOf("over_threshold" to overThreshold, "threshold" to threshold)
+        val zkagent = requestObject.optJSONObject("zkagent") ?: requestObject
+        val challenge = zkagent.optJSONObject("challenge") ?: JSONObject()
+        val nonce = challenge.optString("nonce", "")
+        Log.i(TAG, "M2 stage: mode A present-bare handoff challenge parsed — nonce_present=${nonce.isNotEmpty()} response_uri_present=${requestObject.has("response_uri")}")
+
+        var report = baseReport + "\npresent: bare tier-A (item 9) — evidence: [], no zktag, no device key\n"
+        var deliveryResult: DeliveryResult
+        try {
+            val presentation = HandoffClient.buildPresentation("A", claim, challenge, null, emptyList())
+            val responseUri = requestObject.optString("response_uri", "").ifEmpty { null }
+            if (responseUri == null) {
+                Log.w(TAG, "M2 stage: mode A present-bare — handoff request object carries no top-level response_uri — cannot direct_post")
+                report += "handoff: FAILED — request object carries no response_uri\n"
+                deliveryResult = DeliveryResult.NoResponseUri
+            } else {
+                val state = if (requestObject.has("state")) requestObject.getString("state") else null
+                Log.i(TAG, "M2 stage: mode A present-bare direct_post -> $responseUri (state_present=${state != null})")
+                val result = HandoffClient.postDirectPost(responseUri, state, presentation)
+                if (result.httpStatus !in 200..299) {
+                    Log.w(TAG, "M2 stage: mode A present-bare direct_post response NON-2xx http_status=${result.httpStatus} body=${result.body}")
+                    deliveryResult = DeliveryResult.Rejected(result.httpStatus)
+                } else {
+                    Log.i(TAG, "M2 stage: mode A present-bare direct_post response http_status=${result.httpStatus} body=${result.body}")
+                    val verdict = DirectPostVerdict.parse(result.body)
+                    deliveryResult = when (val outcome = MintOutcome.classify(verdict, claimedOverThreshold = overThreshold)) {
+                        MintOutcome.Outcome.AcceptedOrUnknown -> DeliveryResult.Accepted
+                        MintOutcome.Outcome.HonestUnderThreshold -> DeliveryResult.RefusedHonestUnderThreshold
+                        is MintOutcome.Outcome.RefusedOtherReason -> DeliveryResult.RefusedOtherReason(outcome.reason)
+                    }
+                }
+                report += "handoff: direct_post http_status=${result.httpStatus} -> ${result.body}\n"
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "M2 stage: mode A present-bare direct_post FAILED", e)
+            report += "handoff: FAILED ${e.javaClass.simpleName}: ${e.message}\n"
+            deliveryResult = DeliveryResult.TransportFailed
+        }
+
+        // Handoff has now definitively completed or failed — clear on the
+        // main thread, same lockstep discipline as mintAndMaybeHandoff.
+        runOnUiThread {
+            if (!fence.passes()) {
+                Log.i(TAG, "M2 lifecycle: fence closed — dropped post-present session clear/display refresh")
+                return@runOnUiThread
+            }
+            pendingHandoff = null
+            verifiedRequest = null
+            authorizedHandoff = null
+            refreshSessionDisplay()
+        }
+        report += "\nverdict: PASS (bare presentation sent)"
+
+        val disclosedThreshold = claim["threshold"]
+        val disclosedAnswer = claim["over_threshold"]
+        val disclosedPredicate = "age > $disclosedThreshold"
+        val sharedClaim = ReportLog.DisclosureSummary.Claim(predicate = disclosedPredicate, answer = "$disclosedAnswer")
+        // item 9/D24: a bare tier-A claim carries no identity and no
+        // signature — never worded "signed", unlike mode B's sentClaimLine.
+        val sentClaimLine = "an unauthenticated claim ($disclosedPredicate: $disclosedAnswer) — no identity, no device key"
+        val claimProofNote = "claim_proof: none — bare tier-A presentation carries no evidence (D24/D27)"
+        val summary = when (deliveryResult) {
+            is DeliveryResult.Accepted -> ReportLog.DisclosureSummary(
+                site = site,
+                result = "Verified — sent without identity",
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = sentClaimLine,
+                shared = ReportLog.DisclosureSummary.Shared.Disclosed(listOf(sharedClaim)),
+                technicalNote = claimProofNote,
+            )
+            DeliveryResult.RefusedHonestUnderThreshold -> ReportLog.DisclosureSummary(
+                site = site,
+                result = MintOutcome.reportResult(MintOutcome.Outcome.HonestUnderThreshold)!!,
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = sentClaimLine,
+                shared = ReportLog.DisclosureSummary.Shared.Disclosed(listOf(sharedClaim)),
+                technicalNote = claimProofNote,
+            )
+            is DeliveryResult.RefusedOtherReason -> ReportLog.DisclosureSummary(
+                site = site,
+                result = MintOutcome.reportResult(MintOutcome.Outcome.RefusedOtherReason(deliveryResult.reason))!!,
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = sentClaimLine,
+                shared = ReportLog.DisclosureSummary.Shared.Disclosed(listOf(sharedClaim)),
+                technicalNote = claimProofNote,
+            )
+            is DeliveryResult.Rejected -> ReportLog.DisclosureSummary(
+                site = site,
+                result = "Sent, but the site rejected the response (HTTP ${deliveryResult.httpStatus})",
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = "an unauthenticated claim was prepared, but the site did not accept it",
+                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing the site kept — it rejected the response"),
+                technicalNote = claimProofNote,
+            )
+            DeliveryResult.NoResponseUri -> ReportLog.DisclosureSummary(
+                site = site,
+                result = "Read OK, but there was no site address to send it to",
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = "nothing reached the site",
+                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                technicalNote = claimProofNote,
+            )
+            DeliveryResult.TransportFailed -> ReportLog.DisclosureSummary(
+                site = site,
+                result = "Read OK, but sending the result to the site failed",
+                chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                sent = "nothing reached the site — delivery failed",
+                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                technicalNote = claimProofNote,
+            )
+        }
+        runOnUiThread {
+            if (!fence.passes()) {
+                Log.w(TAG, "M2 lifecycle: fence closed — dropped present-bare report/confirmation (a COMPLETED result: the presentation already left the device, nothing recorded or shown)")
+                return@runOnUiThread
+            }
+            // item 22 (D70(a)): same rule as mintAndMaybeHandoff's own
+            // logOutcome — PASS iff the site actually accepted the
+            // delivered presentation, everything else (including an honest
+            // under-threshold refusal) is FAIL. See ReportLog.Outcome's doc.
+            val logOutcome = if (deliveryResult is DeliveryResult.Accepted) ReportLog.Outcome.PASS else ReportLog.Outcome.FAIL
+            emitReport(report, summary, attemptId = attemptId, outcome = logOutcome)
+            // item 15: the SAME confirm-success-only / honest-under-both-get-
+            // a-dialog discipline as mintAndMaybeHandoff — see its doc.
+            if (MintConfirmation.confirmsSuccess(deliveryAccepted = deliveryResult is DeliveryResult.Accepted)) {
+                showBlockingOutcomeDialog(MINT_CONFIRMED_MESSAGE, isAccessEstablishmentFailure = false)
+            } else if (deliveryResult is DeliveryResult.RefusedHonestUnderThreshold) {
+                showBlockingOutcomeDialog(MintOutcome.UNDER_THRESHOLD_DIALOG_MESSAGE, isAccessEstablishmentFailure = false)
+            }
+        }
     }
 
     private fun promptAndMint(keyState: DeviceKey.KeyState, baseReport: String, zktag: String, scopeDomain: String, site: String, attemptId: String, mode: PresentationMode, chipAuthStatus: M0Probe.ChipAuthStatus, authorized: AuthorizedHandoff, dobYYMMDD: String?) {
