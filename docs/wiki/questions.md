@@ -161,7 +161,7 @@ this is flagged in the report back to the caller.
   (Q36, closed separately). (zkagent-prd.md:1985-2017)
 - **Q36 (closed by D66, descendant of Q33 part b)** — Compute a real
   DOB-vs-threshold answer instead of asserting `true` unconditionally. Status:
-  FIXED-IN-7daeba4 (cherry-picked; D66) — owner ruled D66 (2026-09-03): the
+  FIXED-IN-5a4b13b (D66) — owner ruled D66 (2026-09-03): the
   scanner computes the real over/under answer in-app, in a pure class, at mint
   time, from the DG1 date of birth against the D28-coarsened `current_date`
   with the Q35-sourced threshold; an under-threshold holder still gets an
@@ -198,7 +198,7 @@ this is flagged in the report back to the caller.
   the visible tab. Status: APPROVED into §6.2 item 17 (D67) — distinct from the
   already-rejected D55 (auto-switch on read completion); the tab-state ownership
   seam (`.claude/remember/findings.md` #1) that previously blocked this is closed.
-  **BUILT-IN-`ee45300`, device verification pending.** `PaneState.
+  **BUILT-IN-`d584f00`, device verification pending.** `PaneState.
   onIncomingHandoffIntent(admitted: Boolean)` is a new writer on the SAME
   owner (not a second owner of the tab index); `MainActivity.
   handleIncomingIntent`'s already-admitted `av://` branch calls it before
@@ -224,7 +224,7 @@ this is flagged in the report back to the caller.
   fix. See `.claude/remember/findings.md` #11. (zkagent-prd.md:2136-2136)
 - **Q43 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — Collapse each
   ~20-line log entry by default, behind a toggle. Status: APPROVED into §6.2
-  item 18 (D67). **BUILT-IN-`2837b9a`, device verification pending.**
+  item 18 (D67). **BUILT-IN-`8bc37a4`, device verification pending.**
   `ReportLog` owns the collapsed/expanded state (a parallel `expandedFlags`
   list, same index space as `entries`); `rendered()` shows the title line
   only when collapsed, the unmodified full block when expanded — the
@@ -234,7 +234,7 @@ this is flagged in the report back to the caller.
   `ReportLogTest` cases. (zkagent-prd.md:2138-2144)
 - **Q44 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — Dim a completed
   run with ticked checkboxes to show it is done. Status: APPROVED into §6.2
-  item 19 (D67). **BUILT-IN-`a55ad9f`, device verification pending.** Item
+  item 19 (D67). **BUILT-IN-`1bc345b`, device verification pending.** Item
   19's approved MUST text is "visually dim a completed run" only — it does
   not carry the original "ticked checkboxes" phrasing forward, so the
   build implements dimming (a `ForegroundColorSpan` over the whole entry,
@@ -247,7 +247,7 @@ this is flagged in the report back to the caller.
   (zkagent-prd.md:2146-2152)
 - **Q45 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — A single control
   distinguishing a "verify" scan from a "scan local" one. Status:
-  BUILT-IN-120d276, device verification pending — owner ruled D68 (2026-09-03):
+  BUILT-IN-fc5faec, device verification pending — owner ruled D68 (2026-09-03):
   no new control; the existing scan-action button's verb ("Verify"/"Scan",
   locked "Tap and verify"/"Tap and scan") is a pure projection of handoff
   state, driven by the lock-time `authorizedHandoff` snapshot. Unit-tested

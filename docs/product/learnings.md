@@ -581,6 +581,36 @@ than resolved here.
   Docker image, and a source read of the ZK library's Kotlin) turned "we haven't checked" into
   "checked, does not interop, for two independent reasons." → source: `logs/M2-CONFORMANCE.md`
   Finding 1, §"What this establishes" (15/15 green tests).
+- **2026-09-02 — ~4,780 unreviewed LOC across seven isolated agent rounds, plus one shipped pane
+  bug, forced a feature freeze and a process reset.** D57 froze all new `apps/scanner` §6.2
+  items/enhancements until a full field-ownership audit and async-writer fencing were done, and
+  adopted standing rules going forward: entry gate is FIX-vs-ENHANCEMENT, never LOC; every agent
+  spawn carries prior history; one writer per mutable field; every async writer fenced; findings
+  recorded durably in `.claude/remember/findings.md`, never a code comment. The fence pass itself
+  found the fix's first sweep (11 sites, grepped on `runOnUiThread`) missed two `BiometricPrompt`
+  callback sites that land on the main thread the same late-async way but don't match that
+  syntactic pattern — caught only by enumerating the underlying hazard (a late framework callback
+  touching Activity state), not the grep. → source: `docs/wiki/decisions.md` D57–D60;
+  `docs/logs/M2-FENCE-EVIDENCE.md`.
+- **2026-09-03 — a device session cleared the freeze's remaining verification debt, and a hostile
+  link from a second origin proved the mint-path guard actually fires.** Six checks on the Pixel
+  6a (Q47 cursor fix, D63 portrait lock, a mid-read re-tap, an `av://` handoff plus forced
+  recreation with `BiometricPrompt` open, the QR/paste path plus recreation mid-read, and a
+  hostile `av://` request from a genuinely second local origin fired mid-scan) all passed with
+  zero crashes logged across the whole session. This was the third and decisive layer of proof for
+  one guard — after a unit-test truth table and a source wiring trace, only a real second process
+  hitting the exported surface confirmed the guard fires when it matters. → source:
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md`; `docs/wiki/decisions.md` D65.
+- **2026-09-03 — every `allowed=true` run to date had been evidence about plumbing, not age.** The
+  scanner asserted `over_threshold: true` unconditionally against a hardcoded 18 that only
+  coincidentally matched chiproof's already-signed threshold, so a successful handoff proved the
+  request/response wiring worked, never that the holder's actual age had been checked. Resolved
+  (Q35/Q36) by reading the threshold from the signed request and computing a real in-app
+  over/under answer from the DG1 date of birth, minted honestly either way. A related citation gap
+  in the same pass — an exit-criteria row citing spike evidence as if it were the real-build
+  re-run — was the same species of error: a passing-looking record that had never actually been
+  re-verified against the current build. → source: `docs/wiki/decisions.md` D66; CHANGELOG.md
+  Unreleased (Q35/Q36, exit-criteria row 1 correction).
 
 ## 6. Background — the ZK question, explained
 

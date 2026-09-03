@@ -865,9 +865,8 @@ JUnit XML, not from a device run.
   defect the project already fixed once for finding #7's `reportView.text` write — a UI-only status
   write with no log makes a real outcome indistinguishable from nothing having happened, in log
   form.
-- **Status**: split. The logging half is **FIXED** (worktree commit "fix(apps/scanner): #18 — log
-  the three unlogged Snackbar sites"; exact sha is self-referential and will be whatever this
-  commit lands as after cherry-pick — see git log, not a hardcoded value here) — `Log.i`/`Log.w`
+- **Status**: split. The logging half is **FIXED** (`eb36858` "fix(apps/scanner): #18 — log
+  the three unlogged Snackbar sites") — `Log.i`/`Log.w`
   calls added
   beside all three Snackbar sites (`MainActivity.kt:290/291`, `:295/296`, `:844/845`), each
   value-free (length/fixed-scheme-prefix only where the site has a string to describe; no pasted
@@ -884,7 +883,7 @@ JUnit XML, not from a device run.
   `applyPendingHandoffText` unchanged (same target function as the manual-paste path). The
   verifier spike (`spikes/m2-handoff/server.mjs`) additionally renders a real QR image of
   `app_link_av` (npm `qrcode@1.5.4`, spike-only). See milestones.md §6.2 item 8 amendment. **Both
-  halves of finding #18 are now FIXED** — exact app-side commit sha is self-referential and will be
-  whatever this commit lands as after cherry-pick — see git log, not a hardcoded value here. Not
+  halves of finding #18 are now FIXED** — decode half `e5f2008` "fix(apps/scanner): #18 — live
+  camera QR scanner replaces thumbnail capture", logging half `eb36858` (above). Not
   yet device-confirmed against a real laptop-screen `av://` QR (see this build's report for the
   4-step device check).

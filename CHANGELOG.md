@@ -5,6 +5,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs: end-of-round sweep** — `docs/index.md` line counts/ranges regenerated,
+  `history.md` intro version bumped, D-range metadata updated to D1–D68,
+  `learnings.md` gets 2026-09-02/09-03 entries, and worktree commit shas cited
+  in `findings.md`/`questions.md` remapped to their branch equivalents.
 - **Feature (§6.2 item 21, D67, ENHANCEMENT): launcher-distinguishable app
   built.** `apps/scanner` gets its own adaptive launcher icon — solid
   brand-colour background (`colorPrimary` `#009688`, reused from the app's

@@ -7,7 +7,7 @@ sources: [docs/archive/zkagent-prd.md]
 
 # zkagent — PRD version history
 
-One row per PRD revision (v1.0 – v1.46), in order, from PRD §15 "Version history". Each entry gives the version, date, approval status, and what that revision changed. Decision (D) and question (Q) content itself is recorded on `decisions.md` and `questions.md`; this page tracks only the revision log.
+One row per PRD revision (v1.0 – v1.50), in order, from PRD §15 "Version history". Each entry gives the version, date, approval status, and what that revision changed. Decision (D) and question (Q) content itself is recorded on `decisions.md` and `questions.md`; this page tracks only the revision log.
 
 | Version | Date | Status | What changed |
 |---|---|---|---|
