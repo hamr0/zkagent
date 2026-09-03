@@ -16,6 +16,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   13's tier-refusal discipline. Closes D48's threshold-from-request MUST;
   `over_threshold` remains unconditionally `true` (Q36, unchanged, still
   open). 10 new unit tests in `RequestTrustTest` (213 -> 223 passing).
+- Finding #18 (logging half) FIXED: `apps/scanner`'s three unlogged Snackbar sites in
+  `MainActivity.kt` (QR capture cancelled, no QR decoded, unrecognised pasted/QR handoff text)
+  each now log a value-free `Log.i`/`Log.w` line beside the Snackbar (length/fixed-scheme-prefix
+  only — never the pasted text itself). The decode half of #18 (low-resolution QR thumbnail
+  capture) remains OPEN, pending owner ruling. See `.claude/remember/findings.md` #18.
+- `apps/scanner`'s `PaneState.kt` class doc corrected: rotation no longer recreates the Activity
+  after D63's portrait lock (`d406f4b`); recreation now comes from other config changes only. The
+  tab-index race/ownership reasoning is unaffected.
 - Freeze lifted (D65).
 - **Device session 2026-09-03 clears the D57/D60 freeze's remaining verification-debt
   items; the lift was ruled the same day, see D65 above.** Verified on the Pixel 6a: Q47's

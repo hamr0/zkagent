@@ -287,11 +287,13 @@ abstract class MainActivity : AppCompatActivity() {
 
     private val qrCaptureLauncher = registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
         if (bitmap == null) {
+            Log.i(TAG, "M2 stage: QR capture cancelled (no bitmap returned)")
             Snackbar.make(reportView, "QR capture cancelled", Snackbar.LENGTH_SHORT).show()
             return@registerForActivityResult
         }
         val text = QrCapture.decode(bitmap)
         if (text == null) {
+            Log.w(TAG, "M2 stage: QR capture did not decode (finding #18 — thumbnail capture, no code found)")
             Snackbar.make(reportView, "No QR code found in that photo — try again", Snackbar.LENGTH_LONG).show()
             return@registerForActivityResult
         }
@@ -838,6 +840,8 @@ abstract class MainActivity : AppCompatActivity() {
     private fun applyPendingHandoffText(text: String) {
         val handoff = HandoffClient.parsePastedText(text)
         if (handoff == null) {
+            val recognisedScheme = listOf("av://", "https://", "http://", "openid4vp://").firstOrNull { text.startsWith(it) }
+            Log.w(TAG, "M2 stage: pasted/QR text not a recognised av:// link or request_uri (length=${text.length}, scheme=${recognisedScheme ?: "other"})")
             Snackbar.make(reportView, "Not a recognised av:// link or request_uri", Snackbar.LENGTH_LONG).show()
             return
         }

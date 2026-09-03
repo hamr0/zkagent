@@ -865,9 +865,14 @@ JUnit XML, not from a device run.
   defect the project already fixed once for finding #7's `reportView.text` write — a UI-only status
   write with no log makes a real outcome indistinguishable from nothing having happened, in log
   form.
-- **Status**: OPEN, non-blocking — **not a freeze item** (no async-lifecycle, ownership, or security
-  dimension; a capture-quality and logging-completeness defect only).
-- **Suggested, not applied**: log each of the three Snackbar sites (static, value-free — none of the
-  three needs interpolation); consider a proper barcode-scanning intent (e.g. a dedicated scanner
-  library) or a full-resolution capture instead of a preview thumbnail. Next module's list, not this
-  one.
+- **Status**: split. The logging half is **FIXED** (worktree commit "fix(apps/scanner): #18 — log
+  the three unlogged Snackbar sites"; exact sha is self-referential and will be whatever this
+  commit lands as after cherry-pick — see git log, not a hardcoded value here) — `Log.i`/`Log.w`
+  calls added
+  beside all three Snackbar sites (`MainActivity.kt:290/291`, `:295/296`, `:844/845`), each
+  value-free (length/fixed-scheme-prefix only where the site has a string to describe; no pasted
+  text logged). The decode half remains **OPEN**, non-blocking, pending owner ruling — no
+  async-lifecycle, ownership, or security dimension; a capture-quality defect only.
+- **Suggested, not applied (decode half)**: a proper barcode-scanning intent (e.g. a dedicated
+  scanner library) or a full-resolution capture instead of a preview thumbnail. Next module's list,
+  not this one.
