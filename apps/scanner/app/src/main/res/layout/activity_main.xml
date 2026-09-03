@@ -202,11 +202,12 @@
                      its own needed — see MainActivity.pendingHandoff). This
                      block is ONLY the cross-device fallback: a verifier
                      website shows a QR on another screen; "Scan QR" launches
-                     the system camera app for one still photo (no CameraX/
-                     live-preview dependency added — see README.md), decodes
-                     it locally with zxing-core, and feeds the result into the
-                     SAME pendingHandoff capture path as the av:// deep link.
-                     A manual-paste field is the fallback-of-the-fallback. -->
+                     a live camera barcode scan (Google Code Scanner API,
+                     finding #18 fix / D68 part b — see MainActivity.kt's
+                     qrScanner/launchQrScan and README.md), and feeds the
+                     decoded text into the SAME pendingHandoff capture path as
+                     the av:// deep link. A manual-paste field is the
+                     fallback-of-the-fallback. -->
                 <LinearLayout
                     android:id="@+id/handoff_container"
                     android:layout_width="match_parent"

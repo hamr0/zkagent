@@ -68,7 +68,7 @@ in the foreground, never the activity name alone.
 | 5 — no field rendering, no ResultActivity | (absence) | `ResultActivity.kt` deleted; `reportView` is value-free by construction |
 | 6 — lifecycle wipe rules | `MainActivity.kt` | `onStop` -> `wipeSession`; access-failure branch in `ReadTask.onPostExecute` |
 | 7 — masterlist CMS + two-bucket | `MasterlistVerifier.kt` | `load` |
-| 8 — av:// + direct_post, QR fallback | `HandoffClient.kt`, `QrCapture.kt`, regular-flavor manifest | `parseAvLink`, `fetchRequest`, `postDirectPost`, `decode` |
+| 8 — av:// + direct_post, QR fallback | `HandoffClient.kt`, `MainActivity.kt` (`qrScanner`/`launchQrScan`), regular-flavor manifest | `parseAvLink`, `fetchRequest`, `postDirectPost`, `launchQrScan` |
 | 9 — evidence byte layout | `EvidenceSigner.kt`, `Canonical.kt` | `sigMessage`, `sign` |
 | 10 — network security config | `app/src/main/res/xml/…` (release), `app/src/debug/res/xml/…` (debug) | — |
 | 11 — non-goals | (absence) | no ZK prover, no mdoc/wallet code, no Credential Manager provider, no rung-2 code anywhere in this module |
@@ -86,15 +86,21 @@ that have not happened" rule).
   `docs/logs/M2-SESSION-POC.md` F2). `EvidenceSigner.kt` signs the identical
   item-9 message bytes with ECDSA and reports `type: "sig-p256"` as this
   app's own best-effort extension, not a confirmed chiproof spec.
-- **QR is decode-only, via the system camera app**, not a live in-app
-  scanner (no CameraX/zxing-android-embedded dependency added). `zxing-core`
-  (Apache-2.0, pure-Java, decode-only) is a **new dependency**, flagged for
-  owner sign-off. **Known limitation (finding #18, 2026-09-03, open,
-  non-blocking):** capture uses `TakePicturePreview`, a low-resolution
-  camera-preview thumbnail, which failed to decode a laptop-screen-rendered
-  `av://` link across three attempts on device — no crash, only a Snackbar.
-  The three Snackbars on that path (`MainActivity.kt:290`, `:295`, `:841`)
-  also have no matching `Log` call. See `.claude/remember/findings.md` #18.
+- **QR is a live in-app camera scan (fixed, finding #18, D68 part b,
+  2026-09-03).** Superseded the earlier `TakePicturePreview` +
+  `QrCapture`/`zxing-core` single-thumbnail decode, which failed to decode a
+  laptop-screen-rendered `av://` link across three attempts on device.
+  `com.google.android.gms:play-services-code-scanner` (Google Code Scanner
+  API) is the **new dependency**, chosen over ML Kit's bundled
+  `barcode-scanning` because its scan UI runs in a Play-services-owned
+  delegate activity, adding neither an app-manifest `CAMERA` permission nor
+  a network dependency of this app's own (see item 10's constraint above and
+  `MainActivity.kt`'s `qrScanner` doc comment for the permission-inspection
+  evidence). Decoded text feeds `applyPendingHandoffText` unchanged; the
+  three Snackbars on that path stay logged (the earlier half of finding
+  #18's fix). Both halves of finding #18 are now FIXED — see
+  `.claude/remember/findings.md` #18. Not yet device-confirmed against a
+  real laptop-screen QR (see the device-check steps in this build's report).
 - **Incoming request-object (JAR/JWS) signatures are NOT verified** —
   there is no owner-approved `trustedChallengeIssuers` pinning surface in
   this build (D20 names the shape; §6.2 doesn't specify where an app build

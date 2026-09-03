@@ -20,7 +20,6 @@ package com.tananaev.passportreader
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.nfc.NfcAdapter
@@ -35,7 +34,6 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
@@ -46,6 +44,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.wdullaer.materialdatetimepicker.date.DatePickerDialog
 import net.sf.scuba.smartcards.CardService
 import org.apache.commons.io.IOUtils
@@ -287,19 +288,45 @@ abstract class MainActivity : AppCompatActivity() {
     private lateinit var handoffStatus: TextView
     private lateinit var handoffManualInput: EditText
 
-    private val qrCaptureLauncher = registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
-        if (bitmap == null) {
-            Log.i(TAG, "M2 stage: QR capture cancelled (no bitmap returned)")
-            Snackbar.make(reportView, "QR capture cancelled", Snackbar.LENGTH_SHORT).show()
-            return@registerForActivityResult
-        }
-        val text = QrCapture.decode(bitmap)
-        if (text == null) {
-            Log.w(TAG, "M2 stage: QR capture did not decode (finding #18 — thumbnail capture, no code found)")
-            Snackbar.make(reportView, "No QR code found in that photo — try again", Snackbar.LENGTH_LONG).show()
-            return@registerForActivityResult
-        }
-        applyPendingHandoffText(text)
+    // FIX (finding #18, decisions.md D68 part b): replaces the
+    // TakePicturePreview single-thumbnail capture (could not decode a
+    // laptop-screen-rendered av:// link) with a live camera barcode scanner
+    // — Google's Code Scanner API (play-services-code-scanner). Chosen over
+    // ML Kit's bundled barcode-scanning model because the scan UI runs
+    // inside a Play-services-owned delegate activity: it adds neither a
+    // manifest permission (no CAMERA declared here) nor a network
+    // dependency of this app's own, per item 10's constraint. Built once,
+    // reused per tap — the client itself is stateless. Decoded text feeds
+    // the SAME applyPendingHandoffText target as the manual-paste path;
+    // nothing else in the handoff pipeline changes.
+    private val qrScanner by lazy {
+        GmsBarcodeScanning.getClient(
+            this,
+            GmsBarcodeScannerOptions.Builder()
+                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                .build()
+        )
+    }
+
+    private fun launchQrScan() {
+        qrScanner.startScan()
+            .addOnSuccessListener { barcode ->
+                val text = barcode.rawValue
+                if (text == null) {
+                    Log.w(TAG, "M2 stage: QR scan succeeded with no rawValue (finding #18 fix — unexpected, treated as no code found)")
+                    Snackbar.make(reportView, "No QR code found — try again", Snackbar.LENGTH_LONG).show()
+                    return@addOnSuccessListener
+                }
+                applyPendingHandoffText(text)
+            }
+            .addOnCanceledListener {
+                Log.i(TAG, "M2 stage: QR scan cancelled by user")
+                Snackbar.make(reportView, "QR capture cancelled", Snackbar.LENGTH_SHORT).show()
+            }
+            .addOnFailureListener { e ->
+                Log.w(TAG, "M2 stage: QR scan failed (finding #18 fix)", e)
+                Snackbar.make(reportView, "No QR code found — try again", Snackbar.LENGTH_LONG).show()
+            }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -408,7 +435,7 @@ abstract class MainActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.button_scan_qr).setOnClickListener {
-            qrCaptureLauncher.launch(null)
+            launchQrScan()
         }
         handoffManualInput.setOnEditorActionListener { _, _, _ ->
             applyPendingHandoffText(handoffManualInput.text?.toString().orEmpty())

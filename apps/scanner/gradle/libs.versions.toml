@@ -10,9 +10,13 @@ jnbis = "com.github.mhshams:jnbis:1.1.0"
 bcpkix-jdk15on = "org.bouncycastle:bcpkix-jdk15on:1.65"
 commons-io = "commons-io:commons-io:2.22.0"
 androidx-biometric = "androidx.biometric:biometric:1.1.0"
-# NEW — §6.2 item 8 QR fallback (encode/decode only, no camera capture UI of
-# its own; see app/build.gradle.kts comment). Escalated for owner sign-off.
-zxing-core = "com.google.zxing:core:3.5.3"
+# §6.2 item 8 QR fallback, live camera scan (finding #18 fix, D68 part b,
+# 2026-09-03; supersedes the removed zxing-core + TakePicturePreview
+# thumbnail-decode path). Chosen over com.google.mlkit:barcode-scanning
+# specifically because its scan UI runs in a Play-services-owned delegate
+# activity and adds neither a manifest CAMERA permission nor a network
+# dependency of this app's own — see app/build.gradle.kts comment.
+play-services-code-scanner = "com.google.android.gms:play-services-code-scanner:16.1.0"
 junit = "junit:junit:4.13.2"
 # TEST-ONLY — android.jar's org.json classes are stubs under the plain JVM
 # unit-test sandbox (`unitTests.isReturnDefaultValues`): JSONObject compiles

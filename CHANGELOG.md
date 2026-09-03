@@ -102,6 +102,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   are logged (`M2 stage: age check — over_threshold=... threshold=...`,
   unchanged) — no date of birth. 5 new/revised unit tests in
   `MintOutcomeTest` covering both directions.
+- **Fix (finding #18, D68 part b): `apps/scanner`'s QR fallback replaces the
+  thumbnail capture with a live camera barcode scanner.** The
+  `TakePicturePreview` + `QrCapture` (zxing-core) single-photo decode path —
+  which could not decode a laptop-screen-rendered `av://` link — is
+  removed. `MainActivity`'s "Scan QR" button now launches Google's Code
+  Scanner API (`com.google.android.gms:play-services-code-scanner:16.1.0`),
+  chosen over ML Kit's bundled `barcode-scanning` because its scan UI runs
+  inside a Play-services-owned delegate activity: `aapt2 dump permissions`
+  on the built debug APK is identical to the pre-change baseline — no
+  `CAMERA` permission or any other new permission was added, and the
+  release manifest merge carries no new `<uses-permission>` or network
+  config change. Decoded text still feeds `applyPendingHandoffText`
+  unchanged, the same target function the manual-paste path already used.
+  The three already-logged Snackbars on this path (cancel/no-code) are
+  unaffected. `.claude/remember/findings.md` #18 is now FIXED (both
+  halves) — not yet device-confirmed against a real laptop-screen QR.
 - **Docs (D68 part b): finding #18's decode half ruled — keep QR, replace with a
   live camera scanner.** Owner ruling amends `docs/wiki/milestones.md` §6.2
   item 8: the QR cross-device fallback's inbound capture becomes a live

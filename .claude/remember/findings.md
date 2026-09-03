@@ -850,7 +850,7 @@ JUnit XML, not from a device run.
   fixed," after tapping OK on the `DatePickerDialog` for both date fields. No log line exists for
   this by design. See `docs/wiki/questions.md` Q47 (now FIXED, device-confirmed).
 
-### 2026-09-03 — #18: "Scan QR" thumbnail capture does not decode a laptop-screen `av://` link; three unlogged Snackbars on that path
+### 2026-09-03 — #18: "Scan QR" thumbnail capture does not decode a laptop-screen `av://` link; three unlogged Snackbars on that path (FIXED, both halves)
 
 - **Source**: device session, `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 5
 - **Anchor**: `MainActivity.kt:288` (`qrCaptureLauncher =
@@ -872,13 +872,19 @@ JUnit XML, not from a device run.
   beside all three Snackbar sites (`MainActivity.kt:290/291`, `:295/296`, `:844/845`), each
   value-free (length/fixed-scheme-prefix only where the site has a string to describe; no pasted
   text logged).
-- **Status update 2026-09-03 (owner ruling, decisions.md D68 part b): decode half FIX IN FLIGHT.**
+- **Status update 2026-09-03 (owner ruling, decisions.md D68 part b): decode half FIXED.**
   Owner: keep QR as the cross-device fallback; replace the `TakePicturePreview`/`QrCapture`
   (zxing-core) thumbnail-decode path with a live camera barcode scanner (Google Code Scanner API,
-  `com.google.android.gms:play-services-code-scanner` — chosen over ML Kit's bundled
-  `barcode-scanning` because it adds no manifest permission and no app-owned network surface,
-  meeting item 10's constraint). Decoded text feeds `applyPendingHandoffText` unchanged. The
+  `com.google.android.gms:play-services-code-scanner:16.1.0` — chosen over ML Kit's bundled
+  `barcode-scanning` because its scan UI runs inside a Play-services-owned delegate activity,
+  confirmed by inspecting that aar's own `AndroidManifest.xml` to declare zero permissions, adding
+  no manifest permission and no app-owned network surface, meeting item 10's constraint;
+  `aapt2 dump permissions` on the built debug APK is byte-identical to the pre-change baseline —
+  no `CAMERA` line, no new permission of any kind). `QrCapture.kt` deleted; decoded text feeds
+  `applyPendingHandoffText` unchanged (same target function as the manual-paste path). The
   verifier spike (`spikes/m2-handoff/server.mjs`) additionally renders a real QR image of
-  `app_link_av` (npm `qrcode`, spike-only). See milestones.md §6.2 item 8 amendment. Both halves
-  close to FIXED-IN-<sha> once the app-side commit lands and its exact sha is known — see git log,
-  not a hardcoded value here.
+  `app_link_av` (npm `qrcode@1.5.4`, spike-only). See milestones.md §6.2 item 8 amendment. **Both
+  halves of finding #18 are now FIXED** — exact app-side commit sha is self-referential and will be
+  whatever this commit lands as after cherry-pick — see git log, not a hardcoded value here. Not
+  yet device-confirmed against a real laptop-screen `av://` QR (see this build's report for the
+  4-step device check).

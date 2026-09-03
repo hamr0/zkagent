@@ -99,13 +99,18 @@ dependencies {
     implementation(libs.bcpkix.jdk15on) // do not update — also supplies CMS (org.bouncycastle.cms.*) for §6.2 item 7
     implementation(libs.commons.io)
     implementation(libs.androidx.biometric) // §6.2 item 2 — BiometricPrompt (biometric-or-device-credential gate)
-    // §6.2 item 8 QR fallback rendering only (encode, not decode/camera-scan —
-    // see README.md / conformance report escalation: QR CAMERA SCANNING for
-    // the cross-device *inbound* path is not implemented in this build).
-    // NEW DEPENDENCY — flagged for owner confirmation, not previously in any
-    // M2 spike's build.gradle.kts. Apache-2.0, pure-Java, no transitive
-    // Android deps.
-    implementation(libs.zxing.core)
+    // §6.2 item 8 QR fallback, live camera scan (finding #18 fix, D68 part
+    // b, 2026-09-03) — Google's Code Scanner API. Evaluated against
+    // com.google.mlkit:barcode-scanning (bundled model) and chosen instead
+    // because its scan UI runs inside a Play-services-owned delegate
+    // activity in a separate process: it requests android.permission.CAMERA
+    // itself, at that process's own manifest, so THIS app's manifest gains
+    // no new <uses-permission> (confirmed by inspecting the aar's own
+    // AndroidManifest.xml — it declares zero permissions) and no new
+    // network dependency of this app's own, meeting item 10's constraint.
+    // ML Kit's bundled model would instead require this app to declare
+    // CAMERA and build its own CameraX preview.
+    implementation(libs.play.services.code.scanner)
 
     testImplementation(libs.junit)
     testImplementation(libs.json) // see libs.versions.toml — real org.json for unit tests only
