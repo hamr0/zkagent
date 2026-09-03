@@ -41,6 +41,16 @@ class ReportLogTest {
         assertTrue(entry.contains("Shared    age > 18: true"))
         assertTrue(entry.contains("Identity  new — minted fresh for this site"))
         assertTrue("technical block is present and subordinated", entry.contains("▸ technical:"))
+        // §6.2 item 24 (D70(c)) — the build stamp lives on the technical
+        // block's own header line. Matched against a literal regex, not
+        // against VersionStamp.format() itself (which would only ever
+        // agree with the code under test) — sha shape is either 7 hex
+        // chars, optionally "-dirty", or the "nogit" fallback.
+        assertTrue(
+            "technical header carries the build stamp",
+            entry.lines().first { it.startsWith("▸ technical:") }
+                .matches(Regex("""^▸ technical: · build v\d+\.\d+\.\d+ \(([0-9a-f]{7}(-dirty)?|nogit)\)$""")),
+        )
         assertTrue("technical block carries the exact report text, not a curated subset", entry.contains("  mode: B"))
         assertTrue(entry.contains("  mint: OK"))
         assertTrue(entry.contains("  verdict: PASS (minted)"))

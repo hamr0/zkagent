@@ -319,6 +319,10 @@ abstract class MainActivity : AppCompatActivity() {
         logView.movementMethod = LinkMovementMethod.getInstance()
         handoffStatus = findViewById(R.id.handoff_status)
         handoffManualInput = findViewById(R.id.handoff_manual_input)
+        // §6.2 item 24 (D70(c)) — one-line, write-once stamp; not part of
+        // any state cluster this Activity owns (see ReportLog's technical-
+        // line sibling stamp for the log entries).
+        findViewById<TextView>(R.id.version_stamp_view).text = VersionStamp.format(BuildConfig.VERSION_NAME, BuildConfig.GIT_SHA)
 
         // §6.2 item 16 (D44) / D55 / D58 step 2 (finding #1): a real user
         // tap or reselect WRITES [paneState] first, then applies via

@@ -5,6 +5,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Feature (`apps/scanner`, §6.2 item 24, D70(c)): version stamp — `versionName`
+  + short git SHA on the scan pane and in each log entry's technical
+  line.** `app/build.gradle.kts` computes the short SHA once at configure
+  time via `ProcessBuilder` (`git rev-parse --short=7 HEAD`, `-dirty`
+  suffix if `git status --porcelain` is non-empty, `nogit` fallback if git
+  itself is unavailable) and exposes it as `BuildConfig.GIT_SHA`. A new
+  pure `VersionStamp.format(versionName, sha)` (literal-expectation unit
+  tests, `VersionStampTest`) builds the `"v<versionName> (<sha>)"` string;
+  a new non-interactive footer `TextView` (`version_stamp_view`) on
+  `activity_main.xml`, set once from `MainActivity.onCreate`, shows it on
+  the scan pane; `ReportLog.renderEntry`'s `▸ technical:` header line
+  carries the same stamp (`▸ technical: · build v<versionName>
+  (<sha>)`) — the one place a log entry's technical line is composed.
+  `versionName` bumped `0.1.0` → `0.2.0` (this round's items 17-24;
+  proposed by the coder, owner-overturnable). The debug launcher label
+  (item 21) is NOT extended with the SHA — doing so via `resValue` would
+  collide with the existing static `app_name` string resource in
+  `src/debug/res/values/strings.xml`; extending it correctly needs a
+  second, coordinated change outside this task's scope, so it is left
+  alone. Verified: `assembleRegularDebug`, `aapt2 dump badging` shows
+  `versionName='0.2.0'`, and the built commit's short SHA is present,
+  verbatim, in the APK's `classes3.dex`. Unit tests 570 → 576 (285×2 →
+  288×2), 0 failures.
 - **Docs (D70): three new §6.2 ENHANCEMENT items recorded from the 2026-09-03
   device session, before build (scope gate, NO-GO #10).** Item 22: a
   pass/fail/pending glyph on each collapsed log entry's title line, derived

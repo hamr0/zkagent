@@ -5,6 +5,35 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
+// §6.2 item 24 (D70(c)) — visible version stamp. Computed once at
+// configure time (not per-task) via plain ProcessBuilder rather than a
+// Gradle exec API, so it has no dependency on which exec surface this
+// Gradle version exposes. Falls back to "nogit" when git itself is
+// unavailable (e.g. a source tarball with no .git directory) rather than
+// failing the build over a cosmetic stamp — this must never be load-bearing
+// for anything, only diagnostic.
+fun runGitCommand(vararg args: String): String? = try {
+    val process = ProcessBuilder("git", *args)
+        .directory(projectDir)
+        .redirectErrorStream(false)
+        .start()
+    val output = process.inputStream.bufferedReader().readText().trim()
+    val exitCode = process.waitFor()
+    if (exitCode == 0) output else null
+} catch (e: Exception) {
+    null
+}
+
+val gitShortSha: String = run {
+    val sha = runGitCommand("rev-parse", "--short=7", "HEAD")
+    if (sha.isNullOrBlank()) {
+        "nogit"
+    } else {
+        val porcelain = runGitCommand("status", "--porcelain")
+        if (!porcelain.isNullOrEmpty()) "$sha-dirty" else sha
+    }
+}
+
 android {
     // Kotlin package/namespace left as upstream's (fork of spikes/m0, itself a fork
     // of tananaev/passport-reader) — cosmetic only for a throwaway spike. The
@@ -23,7 +52,17 @@ android {
         minSdk = 30
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1.0"
+        // §6.2 items 17-24 (Q35/Q36 opened, item 22/23/24 built this round)
+        // — bump proposed by the coder per the PRD's Unreleased CHANGELOG
+        // entries; owner-overturnable, not a unilateral scope decision.
+        versionName = "0.2.0"
+
+        // §6.2 item 24 (D70(c)) — exposed as BuildConfig.GIT_SHA, consumed
+        // by VersionStamp.format(). Not a manifest label: a manifest
+        // placeholder can't feed both the scan-pane footer and each log
+        // entry's technical line from one source the way a BuildConfig
+        // constant can.
+        buildConfigField("String", "GIT_SHA", "\"$gitShortSha\"")
     }
 
     signingConfigs {

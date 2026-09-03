@@ -104,7 +104,7 @@ gate, NO-GO #10).
 | Launcher-distinguishable app (item 21) | Adaptive icon (solid brand-colour background, monochrome white glyph foreground + themed-icon layer) and a distinct release label ("zkagent Scanner") replace the inherited passportreader icon/label; debug builds carry their own label suffix and a corner badge so a side-by-side release+debug install is also distinguishable. See Q48; decisions.md D67. | Built, device-pending |
 | Outcome glyph on collapsed log entries (item 22, D70(a)) | Three log entries in the pass/fail/pending states each render a distinct glyph while collapsed, derived from item 19's existing terminal-outcome state; no new state, no document data | Recorded 2026-09-03, not yet built |
 | Log survives app close (item 23, D70(b)) | Force-stopping the app after a scan and relaunching still shows the entry; "Clear log" empties it; MRZ/session state (item 6) still does not persist | Recorded 2026-09-03, not yet built |
-| Visible version stamp (item 24, D70(c)) | The scan-pane stamp and the log entry's technical-line stamp both match `git rev-parse --short` of the commit the running build was compiled from | Recorded 2026-09-03, not yet built |
+| Visible version stamp (item 24, D70(c)) | The scan-pane stamp and the log entry's technical-line stamp both match `git rev-parse --short` of the commit the running build was compiled from | Built, device-pending |
 
 (zkagent-prd.md:1637-1646)
 

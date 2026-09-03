@@ -568,7 +568,13 @@ class ReportLog {
             }
             summary.identity?.let { lines += "Identity  $it" }
             lines += ""
-            lines += "▸ technical:"
+            // §6.2 item 24 (D70(c)) — the build stamp lives on the
+            // technical block's own header line, not a new label: it is
+            // diagnostic metadata about the running build, not a fact
+            // about this scan. BuildConfig.GIT_SHA is computed once, in
+            // build.gradle.kts — VersionStamp.format is the one place its
+            // string shape is decided (see that class's doc).
+            lines += "▸ technical: · build ${VersionStamp.format(BuildConfig.VERSION_NAME, BuildConfig.GIT_SHA)}"
             text.lines().forEach { lines += "  $it" }
             // §6.2 item 16 (D24, D48): the bare-claim disclosure, subordinate
             // to the technical block, never the plain-language one.

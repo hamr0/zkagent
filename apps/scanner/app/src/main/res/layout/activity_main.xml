@@ -305,4 +305,22 @@
 
     </FrameLayout>
 
+    <!-- §6.2 item 24 (D70(c)) — build stamp footer: versionName + short git
+         sha of the commit the running build was compiled from. Set from
+         MainActivity.onCreate via VersionStamp.format(BuildConfig.VERSION_NAME,
+         BuildConfig.GIT_SHA); text-only, no click target, present regardless
+         of which tab (Scan/Log) is selected. -->
+    <TextView
+        android:id="@+id/version_stamp_view"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:clickable="false"
+        android:focusable="false"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="10sp"
+        tools:text="v0.2.0 (abc1234)" />
+
 </LinearLayout>

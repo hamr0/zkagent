@@ -129,3 +129,10 @@ that have not happened" rule).
   build.**
 - **`apps/` as the top-level location is the implementing agent's call**,
   not the owner's.
+- **Version stamp (§6.2 item 24, D70(c)):** the scan pane's footer and each
+  log entry's `▸ technical:` line show `versionName` + the short git SHA
+  the running build was compiled from (`VersionStamp.format`, `BuildConfig.
+  GIT_SHA` computed once in `app/build.gradle.kts`, `-dirty`-suffixed or
+  `nogit` when git isn't available) — disambiguates this app's own builds
+  from each other; see Q48's addendum for how it complements item 21's
+  launcher-level fix.

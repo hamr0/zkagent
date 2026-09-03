@@ -298,3 +298,14 @@ this is flagged in the report back to the caller.
   spike forks, out of item 21's scope). Verified NOT a security gap (`av://`
   routing resolves deterministically to the scanner app); does not bear on
   Q41/Q42's findings. (zkagent-prd.md:2181-2194)
+
+  **Addendum (2026-09-03, item 24, D70(c)):** the launcher-level fix above
+  distinguishes the three apps at the icon/label level, before install;
+  item 24's version stamp (scan-pane footer + each log entry's `▸
+  technical:` line) is the in-app complement — it disambiguates two
+  installs of the SAME app (e.g. a debug build over a release build, or
+  two builds from different commits) once already open, which no launcher
+  label alone can do. Not itself a Q48 answer — a separate, narrower
+  ENHANCEMENT — noted here since both address the same underlying
+  "which app/build am I looking at" gap. Built, device verification
+  pending; see milestones.md §6.2 item 24, decisions.md D70(c).
