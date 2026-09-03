@@ -102,6 +102,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   are logged (`M2 stage: age check — over_threshold=... threshold=...`,
   unchanged) — no date of birth. 5 new/revised unit tests in
   `MintOutcomeTest` covering both directions.
+- **Docs (D68 part b): finding #18's decode half ruled — keep QR, replace with a
+  live camera scanner.** Owner ruling amends `docs/wiki/milestones.md` §6.2
+  item 8: the QR cross-device fallback's inbound capture becomes a live
+  camera barcode scanner (Google Code Scanner API,
+  `com.google.android.gms:play-services-code-scanner`, chosen over ML Kit's
+  bundled `barcode-scanning` for adding no manifest permission and no
+  app-owned network surface) in place of the `TakePicturePreview` +
+  `QrCapture` (zxing-core) single-photo thumbnail decode that could not
+  decode a laptop-screen-rendered `av://` link. Decoded text still feeds
+  `applyPendingHandoffText`, unchanged. The verifier spike
+  (`spikes/m2-handoff/server.mjs`) will render `app_link_av` as a real QR
+  image (npm `qrcode`, spike-only) alongside the existing text link.
+  `.claude/remember/findings.md` #18's decode half moves OPEN → FIX in
+  flight. Docs only this commit, no code touched.
 - **Docs (D66/D67): Q36 resolved (real in-app age answer); Q39/Q40/Q43/Q44/Q45/Q48
   ruled; exit-criteria row 1 corrected.** D66 resolves Q36 — the scanner will
   compute a real over/under answer in-app, in a pure class, at mint time, from

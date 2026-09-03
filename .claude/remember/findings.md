@@ -871,8 +871,14 @@ JUnit XML, not from a device run.
   calls added
   beside all three Snackbar sites (`MainActivity.kt:290/291`, `:295/296`, `:844/845`), each
   value-free (length/fixed-scheme-prefix only where the site has a string to describe; no pasted
-  text logged). The decode half remains **OPEN**, non-blocking, pending owner ruling — no
-  async-lifecycle, ownership, or security dimension; a capture-quality defect only.
-- **Suggested, not applied (decode half)**: a proper barcode-scanning intent (e.g. a dedicated
-  scanner library) or a full-resolution capture instead of a preview thumbnail. Next module's list,
-  not this one.
+  text logged).
+- **Status update 2026-09-03 (owner ruling, decisions.md D68 part b): decode half FIX IN FLIGHT.**
+  Owner: keep QR as the cross-device fallback; replace the `TakePicturePreview`/`QrCapture`
+  (zxing-core) thumbnail-decode path with a live camera barcode scanner (Google Code Scanner API,
+  `com.google.android.gms:play-services-code-scanner` — chosen over ML Kit's bundled
+  `barcode-scanning` because it adds no manifest permission and no app-owned network surface,
+  meeting item 10's constraint). Decoded text feeds `applyPendingHandoffText` unchanged. The
+  verifier spike (`spikes/m2-handoff/server.mjs`) additionally renders a real QR image of
+  `app_link_av` (npm `qrcode`, spike-only). See milestones.md §6.2 item 8 amendment. Both halves
+  close to FIXED-IN-<sha> once the app-side commit lands and its exact sha is known — see git log,
+  not a hardcoded value here.
