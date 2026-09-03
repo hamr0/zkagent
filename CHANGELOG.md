@@ -25,6 +25,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   test-verified only; device confirmation still pending. Implements Option A
   of the coder's Q48 proposal (owner-approved 2026-09-03). See Q48;
   decisions.md D67; milestones.md §6.2 item 21.
+- **Feature (§6.2 item 19, D67/Q44): dim a completed run.** `ReportLog`
+  gains a second parallel flag list, `terminalFlags` (same index space as
+  `entries`/`expandedFlags`), derived from the SAME pending/terminal model
+  `append`'s own `attemptId`/`pending` parameters already track — never a
+  new flag guessed from string content. `rendered()` gains a
+  `dimmedTextColor` parameter applying a `ForegroundColorSpan` over every
+  terminal entry's whole displayed range. `MainActivity.
+  dimmedLogEntryColor()` derives the color from `logView`'s own configured
+  text color at ~60% alpha, never a hardcoded color. Terminal state
+  persists across recreation via a new `STATE_LOG_TERMINAL` Bundle key.
+  Note: item 19's approved MUST text is dimming only, not the original
+  Q44 "ticked checkboxes" phrasing — no checkbox was added; flagged for
+  owner review. 8 new `ReportLogTest` cases. Built, device verification
+  pending. Commit `a55ad9f`.
 - **Feature (§6.2 item 18, D67/Q43): log entries collapsed by default,
   per-entry toggle.** `ReportLog` owns a new parallel `expandedFlags` list
   (same index space as `entries`), collapsed (`false`) by default for every

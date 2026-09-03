@@ -234,7 +234,17 @@ this is flagged in the report back to the caller.
   `ReportLogTest` cases. (zkagent-prd.md:2138-2144)
 - **Q44 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — Dim a completed
   run with ticked checkboxes to show it is done. Status: APPROVED into §6.2
-  item 19 (D67). (zkagent-prd.md:2146-2152)
+  item 19 (D67). **BUILT-IN-`a55ad9f`, device verification pending.** Item
+  19's approved MUST text is "visually dim a completed run" only — it does
+  not carry the original "ticked checkboxes" phrasing forward, so the
+  build implements dimming (a `ForegroundColorSpan` over the whole entry,
+  color derived from `logView`'s own text color at ~60% alpha) and does
+  NOT add checkboxes; flagged for owner review in case a checkbox was
+  intended as well as, not instead of, dimming. `ReportLog` owns a new
+  `terminalFlags` list (same index space as `entries`/`expandedFlags`),
+  derived from the existing `append`'s `pending` parameter — never a new
+  flag guessed from strings. 8 new `ReportLogTest` cases.
+  (zkagent-prd.md:2146-2152)
 - **Q45 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — A single control
   distinguishing a "verify" scan from a "scan local" one. Status: APPROVED into
   §6.2 item 20 (D67), open shape only — the coder proposes at build time, owner
