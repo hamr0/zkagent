@@ -242,6 +242,10 @@ this is flagged in the report back to the caller.
   switches Log -> Scan, is a no-op already on Scan, and — the MUST NOT half
   — a refused (`HandoffAdmission`) intent leaves the tab untouched.
   (zkagent-prd.md:2099-2111)
+  **Device-confirmed 2026-09-03 PM**: owner sat on the Log tab; an `av://`
+  link fired at 15:10:22 and the app switched to the Scan tab on its own,
+  with no manual tap. See
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` section 13.3.
 - **Q40 (opened 2026-09-02)** — The disabled Lock button after an
   access-establishment failure reads as "stuck"; owner wants copy closer to
   "Tap and scan." Status: CLOSED (owner sign-off 2026-09-03) — the ownership
@@ -302,6 +306,16 @@ this is flagged in the report back to the caller.
   **item 22 (D70(a), 2026-09-03)** derives its pass/fail/pending glyph from
   this same `terminalFlags`-backed terminal-outcome state — no new state
   introduced for the glyph. (zkagent-prd.md:2146-2152)
+  **Device-observed 2026-09-03 PM (as built, owner decision pending)**: owner
+  saw every log entry rendered in the same monotone grey, with no visible
+  contrast between entries. This is the design as built, not a bug —
+  `ReportLog.rendered` dims every terminal-outcome entry (60% alpha) and only
+  an in-progress entry keeps full colour; with no scan in flight during this
+  check, every visible entry was terminal, so all rendered equally dimmed.
+  Contrast is only visible during a live scan. Owner has been offered "keep
+  as built" vs. "newest entry stays bright regardless of terminal state";
+  neither is chosen yet. Not PASS, not FAIL. See
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` section 13.5.
 - **Q45 (opened 2026-09-02 — UI/UX ENHANCEMENT, not a fix)** — A single control
   distinguishing a "verify" scan from a "scan local" one. Status:
   BUILT-IN-fc5faec, device verification pending — owner ruled D68 (2026-09-03):
@@ -310,6 +324,10 @@ this is flagged in the report back to the caller.
   state, driven by the lock-time `authorizedHandoff` snapshot. Unit-tested
   (`SessionDisplayTest`); not yet exercised on a real device. (zkagent-prd.md:2154-2160;
   decisions.md D68)
+  **Device-confirmed 2026-09-03 PM**: with a verified `av://` link pending the
+  button read "Verify"; after a fresh open with no link pending it read
+  "Scan". See `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md`
+  section 13.1.
 - **Q46 (opened 2026-09-02, deferred under D57 — label CORRECTNESS defect, not a
   styling preference)** — The MRZ input field is labelled "Passport number," which
   is factually wrong since the app also reads ID cards. Status: **FIXED in
@@ -358,7 +376,13 @@ this is flagged in the report back to the caller.
   label alone can do. Not itself a Q48 answer — a separate, narrower
   ENHANCEMENT — noted here since both address the same underlying
   "which app/build am I looking at" gap. Built, **DEVICE FAIL
-  2026-09-03 PM**: the stamp does not appear anywhere across the three
-  builds tested this session (`2525267`/`039fee7`/`7f25f40`) — see
-  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` check 11; see
-  milestones.md §6.2 item 24, decisions.md D70(c).
+  2026-09-03 PM** on builds `2525267`/`039fee7`/`7f25f40` — the stamp did not
+  appear anywhere across the three builds tested that pass; root-caused
+  same day to a layout bug (the pane-container `FrameLayout` consuming all
+  weighted height and pushing `version_stamp_view` off-screen) and fixed in
+  `fb0e75f`. **Device-confirmed 2026-09-03 PM, second pass (~15:02–15:15)**:
+  the stamp is now visible on `fb0e75f`. Status: **FIXED-IN-fb0e75f,
+  device-confirmed.** See
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` check 11 (FAIL)
+  and section 13.2 (fix confirmed); see milestones.md §6.2 item 24,
+  decisions.md D70(c).

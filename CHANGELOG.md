@@ -5,6 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs (`apps/scanner`, M2 device session, 2026-09-03 PM, second pass): items 17/20/23
+  device-confirmed, item 24 FIXED-IN-fb0e75f device-confirmed, item 19 observed as built.** A
+  continuation of the same-day PM device session on the fix build (`fb0e75f`, versionName 0.2.0)
+  closed out the four checks the first pass had recorded as "not exercised" plus a re-check of
+  item 24's device FAIL. Item 24's version stamp is now visible on screen — the layout fix
+  overturns the earlier device FAIL. Item 17 (tab switches to Scan on an incoming `av://` link)
+  and item 20 (button verb "Verify"/"Scan") are both device-confirmed PASS. Item 23's remaining
+  half ("Clear log" survives a swipe-away/reopen) is device-confirmed PASS. Item 19 (dim a
+  completed run) is recorded as device-observed-as-built, not PASS/FAIL: with no scan in flight
+  every log entry is terminal so all render equally dimmed by design — an owner decision on the
+  dimming rule itself is still pending. New evidence recorded in section 13 of
+  `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md`.
 - **Docs (`apps/scanner`, M2 device session, 2026-09-03 PM): exit-criteria row 1 re-run on the
   real build.** New evidence page
   `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` records device runs across three builds

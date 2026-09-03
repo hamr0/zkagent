@@ -241,6 +241,54 @@ Recorded as "not observed," honestly, rather than inferred from adjacent evidenc
 
 ---
 
+## 13 — Second device pass, 2026-09-03 ~15:02–15:15 (build `fb0e75f`, versionName 0.2.0,
+installed 14:04:35)
+
+Continuation session on the same Pixel 6a and the same verifier spike (`127.0.0.1:8788`, via
+`adb reverse`), running the fix build `fb0e75f` — content-identical to the `e8e0c33` worktree
+build installed at 14:04 (per the layout fix committed same-day for item 24's device FAIL in
+section 11 above). The orchestrator fired `av://` links with `adb shell am start -a
+android.intent.action.VIEW -d <link>`, the same VIEW-intent path a browser or camera-app tap
+uses. This pass exercises the four checks section 12 recorded as "not exercised" (items 17, 19,
+20, and "Clear log") plus a re-check of item 24's device FAIL from section 11. Per this file's own
+rule, only value-free log lines and owner-reported outcomes appear below — no PII.
+
+**13.1 — Item 20 (button verb, D68a): PASS.** With a verified `av://` link pending, the
+scan-action button read "Verify"; after a fresh open with no link pending it read "Scan". App log
+at `15:02:27` and again at `15:10:22`: "pendingHandoff captured from av:// intent" then "handoff
+request object verified — origin=http://127.0.0.1:8788 signature_verified=true
+key_kind=dev-pinned". **Result: PASS**, closing Q45/item 20's device-verification-pending status.
+
+**13.2 — Item 24 (version stamp footer): PASS, overturns section 11's device FAIL.** On this
+build (`fb0e75f`) the owner saw the version/short-git-SHA stamp at the bottom of the screen. This
+overturns the DEVICE FAIL recorded in section 11 above (build `7f25f40`) — the same-day `fb0e75f`
+commit had already diagnosed and fixed the layout bug (the pane-container `FrameLayout` consuming
+all weighted height in the parent's weighted-sizing pass and pushing `version_stamp_view` below
+the screen edge) before this owner pass confirmed it on screen. **Result: FIXED-IN-fb0e75f,
+device-confirmed.**
+
+**13.3 — Item 17 (tab switch on link arrival): PASS.** Owner sat on the Log tab; the `av://` link
+fired at `15:10:22` and the app switched to the Scan tab on its own, with no manual tap. **Result:
+PASS**, closing Q39/item 17's device-verification-pending status.
+
+**13.4 — Item 23 (persistent log + Clear log survival): PASS.** Clear log, swipe the app away,
+reopen: the log came back empty. (Earlier the same day, log persistence across restart with
+populated entries was already confirmed in section 11 — "loaded persisted log from disk
+(entries=6)" at `15:02:24`; this pass adds the "Clear log" half section 12 had flagged as not
+exercised.) **Result: PASS**, closing the last unexercised half of item 23/Q38.
+
+**13.5 — Item 19 (dim completed runs, Q44): OBSERVED AS BUILT, owner decision pending.** Owner saw
+every log entry rendered in the same monotone grey, with no visible dimming contrast between
+entries. This matches the design as built, not a bug: `ReportLog.rendered` dims every
+terminal-outcome entry (60% alpha of `logView`'s text colour, `DIM_ALPHA_FRACTION = 0.6` in
+`MainActivity`) and only an "in progress" entry keeps full colour — with no scan in flight during
+this check, every visible entry was terminal, so all rendered equally dimmed; contrast is only
+visible during a live scan, mid-run. Owner has been offered two options: keep as built, or have
+the newest entry stay bright regardless of terminal state. **Result: not PASS, not FAIL —
+device-observed-as-built, owner decision pending.**
+
+---
+
 ## Findings and questions this run produced or moved
 
 1. **Finding #19 — status refined, not changed.** The fix (`039fee7`, `android:launchMode=
@@ -261,6 +309,19 @@ Recorded as "not observed," honestly, rather than inferred from adjacent evidenc
    (`3f65290`/`4ca350e`), no device-plantable negative available with these two documents. Mode A
    emits no zktag after a mode-B presentation of the same document (checks 4/6 → check 7): PASS.
 
+**Addendum, second device pass 2026-09-03 ~15:02–15:15 (section 13):**
+
+6. **Item 24 — status corrected, PASS.** Section 13.2 supersedes item 4 above: the DEVICE FAIL
+   recorded against build `7f25f40` does not hold against the fix build `fb0e75f` — the stamp is
+   visible. Status: **FIXED-IN-fb0e75f, device-confirmed.**
+7. **Items 17 and 20 — device-confirmed, PASS.** Section 13.1 (item 20/Q45) and section 13.3 (item
+   17/Q39) close both items' device-verification-pending status.
+8. **Item 23's "Clear log" half — device-confirmed, PASS.** Section 13.4 closes the one half of
+   item 23 section 11 had left unexercised.
+9. **Item 19 — observed as built, not a pass/fail.** Section 13.5: the dimming design works as
+   built (every terminal entry renders equally dimmed when no scan is in flight); owner decision
+   pending on whether the rule itself should change (keep as built vs. newest-entry-stays-bright).
+
 ---
 
 ## What this run did and did NOT establish
@@ -280,6 +341,15 @@ Recorded as "not observed," honestly, rather than inferred from adjacent evidenc
   available this session lacks CSCA coverage; stays unit-proven only.
 - Items 17, 19, 20, or "Clear log" — not reported by the owner, not independently observed, recorded
   as not-observed rather than assumed.
+
+**Addendum, second device pass 2026-09-03 ~15:02–15:15 (section 13) — now established:**
+- Item 24's version stamp — visible on build `fb0e75f`. FIXED-IN-fb0e75f, device-confirmed
+  (overturns the FAIL above, which stands as the record for build `7f25f40`).
+- Items 17 (tab switch) and 20 (button verb) — both PASS, device-confirmed.
+- "Clear log" — PASS, device-confirmed (log empties and stays empty across a swipe-away/reopen).
+- Item 19 (dim a completed run) — observed as built exactly as designed (all-terminal-entries
+  render equally dimmed when idle); this is a design property, not a pass/fail outcome, and the
+  owner's choice between "keep as built" and "newest entry stays bright" is still pending.
 
 ---
 
