@@ -3,6 +3,8 @@ package com.tananaev.passportreader
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.AbsoluteSizeSpan
+import android.text.style.ClickableSpan
+import android.view.View
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -161,6 +163,19 @@ class ReportLog {
     // (see its doc, the 2026-09-01 real-device fix: newest-first display).
     private val entries = mutableListOf<String>()
 
+    // §6.2 item 18 (D67, Q43) — PARALLEL to [entries], same index space,
+    // kept in lockstep by every mutation site below (append/replace/evict/
+    // clear/restore). Per the standing "pure logic in pure classes" rule,
+    // this class — not MainActivity, not a View — is the single owner of
+    // the collapsed/expanded display state; MainActivity only renders
+    // whatever [rendered] returns.
+    //
+    // Collapsed (`false`) by default for every newly-added entry; only
+    // [toggleExpandedAtDisplayIndex] flips a flag. Content is NEVER altered
+    // by this flag (item 18's own MUST) — only whether [rendered] shows an
+    // entry's full block or just its title line.
+    private val expandedFlags = mutableListOf<Boolean>()
+
     /** D58 step 1 (Report/Log cluster, finding #7): the exact text of the
      * most recently emitted or restored report — this class is now the
      * SINGLE owner of this value, absorbing what used to be
@@ -217,8 +232,13 @@ class ReportLog {
         if (existingIndex != null) {
             entries[existingIndex] = rendered
             pendingIndexByAttempt.remove(attemptId)
+            // item 18: a replaced entry keeps its OWN prior [expandedFlags]
+            // state (a user who opened an "In progress" entry to watch it
+            // is not collapsed out from under them when it resolves — see
+            // class doc).
         } else {
             entries.add(rendered)
+            expandedFlags.add(false) // item 18: collapsed by default
             // D58 step 1 (finding #13): a genuinely NEW entry (never a
             // pending-replace, which never grows the list) can push
             // [entries] past [MAX_ENTRIES] — evict the single oldest entry
@@ -234,6 +254,7 @@ class ReportLog {
             // index 0.
             if (entries.size > MAX_ENTRIES) {
                 entries.removeAt(0)
+                expandedFlags.removeAt(0)
                 val iterator = pendingIndexByAttempt.entries.iterator()
                 while (iterator.hasNext()) {
                     val pendingEntry = iterator.next()
@@ -256,12 +277,34 @@ class ReportLog {
     fun clear() {
         entries.clear()
         pendingIndexByAttempt.clear()
+        expandedFlags.clear()
     }
 
     /** Immutable snapshot, OLDEST first — [MainActivity]'s
      * `onSaveInstanceState` (D35) storage shape and for tests. Deliberately
      * NOT the display order [rendered] uses — see that function's doc. */
     fun entriesSnapshot(): List<String> = entries.toList()
+
+    /** §6.2 item 18 (D67, Q43): OLDEST-first, same index space as
+     * [entriesSnapshot] — [MainActivity]'s `onSaveInstanceState` sibling
+     * persistence for the per-entry expand/collapse toggle, so it survives
+     * Activity recreation exactly like [entriesSnapshot] already does. */
+    fun expandedSnapshot(): List<Boolean> = expandedFlags.toList()
+
+    /** §6.2 item 18 (D67, Q43) — the per-entry tap-to-expand toggle.
+     * [displayIndex] is in DISPLAY order (0 = newest, matching what
+     * [rendered] shows and what a tap callback naturally reports — see
+     * [MainActivity]'s log-view click wiring), converted to storage order
+     * here so [MainActivity] never has to reason about the newest-first/
+     * oldest-first split itself. Silently ignored if out of range (a stale
+     * tap racing a concurrent restore/clear), never throws — the same
+     * defensive posture as every other public entry point on this class. */
+    fun toggleExpandedAtDisplayIndex(displayIndex: Int) {
+        val storageIndex = entries.lastIndex - displayIndex
+        if (storageIndex in expandedFlags.indices) {
+            expandedFlags[storageIndex] = !expandedFlags[storageIndex]
+        }
+    }
 
     /** Replaces the current entries with [saved] verbatim (already fully
      * rendered by a prior [append], oldest first — the SAME order
@@ -276,12 +319,21 @@ class ReportLog {
      *   than split across a second `MainActivity` field. Defaults to null:
      *   an ordinary restore that supplies only [saved] (no report text —
      *   e.g. a test pinning entry-restore behaviour in isolation) leaves
-     *   [lastText] null, never re-derived from [saved]'s content. */
-    fun restore(saved: List<String>, lastText: String? = null) {
+     *   [lastText] null, never re-derived from [saved]'s content.
+     * @param expanded (item 18) per-entry collapsed/expanded state, SAME
+     *   order as [saved]. Defaults to null, meaning "collapse everything" —
+     *   `List(saved.size) { false }` — matching a caller (or a test) that
+     *   restores entries without ever having persisted this sibling state.
+     *   A caller supplying a non-null list MUST size it to match [saved];
+     *   a mismatched size falls back to the same all-collapsed default
+     *   rather than indexing out of bounds. */
+    fun restore(saved: List<String>, lastText: String? = null, expanded: List<Boolean>? = null) {
         entries.clear()
         entries.addAll(saved)
         pendingIndexByAttempt.clear()
         this.lastText = lastText
+        expandedFlags.clear()
+        expandedFlags.addAll(expanded?.takeIf { it.size == saved.size } ?: List(saved.size) { false })
     }
 
     /** The log view's full text, NEWEST entry first (2026-09-01 real-device
@@ -309,18 +361,57 @@ class ReportLog {
      *   whether it actually LOOKS right — `SpannableStringBuilder` is a
      *   stub with no real behavior under this module's plain-JVM unit-test
      *   sandbox, `unitTests.isReturnDefaultValues`, so no unit test here
-     *   can observe the styled `CharSequence` itself). */
-    fun rendered(titleSizePx: Int? = null): CharSequence {
-        val entriesNewestFirst = entries.asReversed()
-        val joined = entriesNewestFirst.joinToString("\n\n")
-        if (titleSizePx == null) return joined
+     *   can observe the styled `CharSequence` itself).
+     * @param onEntryTap (item 18, D67/Q43) when non-null, each entry's
+     *   title line becomes a [ClickableSpan] that invokes this callback
+     *   with the entry's DISPLAY index (0 = newest, matching this
+     *   function's own newest-first order) — [MainActivity] wires this to
+     *   [toggleExpandedAtDisplayIndex] plus a re-render, never mutating
+     *   state here. Requires the caller's `TextView.movementMethod` be set
+     *   to a link-aware one for the span to actually receive taps — this
+     *   function only places the span, it does not configure the View. */
+    fun rendered(titleSizePx: Int? = null, onEntryTap: ((Int) -> Unit)? = null): CharSequence {
+        val storageIndicesNewestFirst = entries.indices.reversed().toList()
+        val displayTexts = storageIndicesNewestFirst.map { displayText(it) }
+        val joined = displayTexts.joinToString("\n\n")
+        if (titleSizePx == null && onEntryTap == null) return joined
         val builder = SpannableStringBuilder(joined)
-        titleLineRanges(entriesNewestFirst).forEach { range ->
-            if (!range.isEmpty()) {
-                builder.setSpan(AbsoluteSizeSpan(titleSizePx, false), range.first, range.last + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val titleRanges = titleLineRanges(displayTexts)
+        if (titleSizePx != null) {
+            titleRanges.forEach { range ->
+                if (!range.isEmpty()) {
+                    builder.setSpan(AbsoluteSizeSpan(titleSizePx, false), range.first, range.last + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+            }
+        }
+        if (onEntryTap != null) {
+            titleRanges.forEachIndexed { displayIndex, range ->
+                if (!range.isEmpty()) {
+                    builder.setSpan(object : ClickableSpan() {
+                        override fun onClick(widget: View) {
+                            onEntryTap(displayIndex)
+                        }
+                    }, range.first, range.last + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
             }
         }
         return builder
+    }
+
+    /** item 18: the exact CharSequence content [rendered] shows for one
+     * stored entry at [storageIndex] — full, unmodified block when
+     * [expandedFlags] is true; otherwise just the title line (the same
+     * substring [titleLineRanges] would compute for the un-collapsed
+     * entry), plus a fixed "▸" affordance so a collapsed entry visibly
+     * invites the tap [onEntryTap] wires up. Item 18's "MUST NOT change the
+     * block's content" is about [entries]/[entriesSnapshot] — the STORED,
+     * persisted content — which this function never touches; it only
+     * decides what [rendered] projects from it. */
+    private fun displayText(storageIndex: Int): String {
+        val full = entries[storageIndex]
+        if (expandedFlags.getOrElse(storageIndex) { false }) return full
+        val titleLine = full.substringBefore('\n')
+        return "$titleLine  ▸"
     }
 
     companion object {

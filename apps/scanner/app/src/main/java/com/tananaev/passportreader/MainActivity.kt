@@ -27,6 +27,7 @@ import android.nfc.Tag
 import android.nfc.tech.IsoDep
 import android.os.AsyncTask
 import android.os.Bundle
+import android.text.method.LinkMovementMethod
 import android.util.Log
 import android.view.View
 import android.view.inputmethod.InputMethodManager
@@ -324,6 +325,14 @@ abstract class MainActivity : AppCompatActivity() {
         loadingLayout = findViewById(R.id.loading_layout)
         reportView = findViewById(R.id.report_view)
         logView = findViewById(R.id.log_view)
+        // §6.2 item 18 (D67, Q43): required for the ClickableSpan
+        // [ReportLog.rendered]'s `onEntryTap` places over each entry's
+        // title line to actually receive taps — [TextView] does not
+        // dispatch span clicks without a link-aware movement method. This
+        // is the ONLY behavioral wiring item 18 needs on the View side;
+        // all toggle/collapse STATE lives in [reportLog] (see
+        // [onLogEntryTapped]/[refreshLogView]).
+        logView.movementMethod = LinkMovementMethod.getInstance()
         handoffStatus = findViewById(R.id.handoff_status)
         handoffManualInput = findViewById(R.id.handoff_manual_input)
 
@@ -698,6 +707,9 @@ abstract class MainActivity : AppCompatActivity() {
         // parallel MainActivity field — see ReportLog.lastText's doc.
         reportLog.lastText?.let { outState.putString(STATE_LAST_REPORT, it) }
         outState.putStringArrayList(STATE_LOG_ENTRIES, ArrayList(reportLog.entriesSnapshot()))
+        // §6.2 item 18 (D67): the sibling per-entry display state — see
+        // [ReportLog.expandedSnapshot]'s doc.
+        outState.putBooleanArray(STATE_LOG_EXPANDED, reportLog.expandedSnapshot().toBooleanArray())
         // D58 step 2 (finding #1): reads FROM the owner (paneState), the
         // app's own tab index — see [PaneState]'s class doc.
         outState.putInt(STATE_TAB_INDEX, paneState.tabIndexToSave())
@@ -1099,8 +1111,31 @@ abstract class MainActivity : AppCompatActivity() {
         // to the 2026-09-01 stale-in-progress-entry fix.
         reportLog.append(text, summary, attemptId = attemptId, pending = pending)
         reportView.text = reportLog.lastText
-        logView.text = reportLog.rendered(titleSizePx = logTitleSizePx())
+        refreshLogView()
         Log.i(TAG, "\n===== M2 REPORT (value-free) =====\n$text\n===== END =====")
+    }
+
+    /** §6.2 item 18 (D67, Q43): the single place [logView.text] is ever set
+     * FROM [reportLog] — [emitReport], [restoreReport], and the per-entry
+     * tap handler ([onLogEntryTapped]) all call this rather than each
+     * computing [ReportLog.rendered]'s parameters independently, so the
+     * expand/collapse toggle stays wired the same way everywhere
+     * `logView.text` changes. */
+    private fun refreshLogView() {
+        logView.text = reportLog.rendered(
+            titleSizePx = logTitleSizePx(),
+            onEntryTap = ::onLogEntryTapped,
+        )
+    }
+
+    /** §6.2 item 18 (D67, Q43) — [logView]'s `ClickableSpan` callback (see
+     * [ReportLog.rendered]'s `onEntryTap` doc): toggles the tapped entry's
+     * expand/collapse state on the single owner ([reportLog]) and
+     * re-renders via [refreshLogView] — this function never holds or
+     * mutates display state itself. */
+    private fun onLogEntryTapped(displayIndex: Int) {
+        reportLog.toggleExpandedAtDisplayIndex(displayIndex)
+        refreshLogView()
     }
 
     /** §6.2 item 16 (D44/D35) — D58 step 1: the NAMED sibling of
@@ -1122,9 +1157,13 @@ abstract class MainActivity : AppCompatActivity() {
         val text = savedInstanceState.getString(STATE_LAST_REPORT)
         val entries = savedInstanceState.getStringArrayList(STATE_LOG_ENTRIES)
         if (text == null && entries == null) return
-        reportLog.restore(entries ?: emptyList(), lastText = text)
+        // §6.2 item 18 (D67): restored alongside entries — see
+        // [ReportLog.restore]'s doc for the mismatched-size/absent-key
+        // fallback (all-collapsed) this passes through to.
+        val expanded = savedInstanceState.getBooleanArray(STATE_LOG_EXPANDED)?.toList()
+        reportLog.restore(entries ?: emptyList(), lastText = text, expanded = expanded)
         if (text != null) reportView.text = reportLog.lastText
-        if (entries != null) logView.text = reportLog.rendered(titleSizePx = logTitleSizePx())
+        if (entries != null) refreshLogView()
         Log.i(TAG, "M2 stage: restored report/log across Activity recreation (text=${text != null}, log_entries=${entries?.size ?: 0})")
     }
 
@@ -2534,6 +2573,11 @@ abstract class MainActivity : AppCompatActivity() {
         private val TAG = MainActivity::class.java.simpleName
         private const val STATE_LAST_REPORT = "m2_last_report"
         private const val STATE_LOG_ENTRIES = "m2_log_entries"
+        // §6.2 items 18/19 (D67, Q43/Q44): the sibling per-entry display
+        // state ReportLog now also owns — same index space/order as
+        // STATE_LOG_ENTRIES, see [ReportLog.expandedSnapshot]/
+        // [ReportLog.terminalSnapshot].
+        private const val STATE_LOG_EXPANDED = "m2_log_expanded"
         // D58 step 2 (finding #1): the app's own tab index — see
         // [PaneState]'s class doc for why this is the fix.
         private const val STATE_TAB_INDEX = "m2_tab_index"

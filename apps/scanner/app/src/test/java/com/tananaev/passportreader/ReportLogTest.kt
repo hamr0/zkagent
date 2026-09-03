@@ -589,4 +589,130 @@ class ReportLogTest {
         val entry = log.entriesSnapshot()[0]
         assertFalse(entry.contains("Chip auth"))
     }
+
+    // ------------------------------------------------------------- item 18
+    // §6.2 item 18 (D67, Q43): collapsed by default, per-entry toggle,
+    // content unchanged. [entriesSnapshot] is the stored, persisted
+    // content — item 18's MUST NOT applies to it, and every test above
+    // already pins it in full regardless of collapse state. [rendered]/
+    // [expandedSnapshot] are what this section pins.
+
+    @Test
+    fun `a newly-added entry is collapsed by default`() {
+        val log = ReportLog()
+        log.append("mode: A\nverdict: PASS (read)", summary(shared = notDisclosedNothing), nowMillis = 0L)
+        assertEquals(listOf(false), log.expandedSnapshot())
+    }
+
+    @Test
+    fun `rendered shows only the title line for a collapsed entry, not the body`() {
+        val log = ReportLog()
+        log.append("mode: A\nverdict: PASS (read)", summary(result = "Read OK — nothing sent"), nowMillis = 0L)
+        val rendered = log.rendered().toString()
+        assertFalse("collapsed entry must not show the Result body line", rendered.contains("Result"))
+        assertTrue("collapsed entry still shows its title (timestamp + site)", rendered.contains("127.0.0.1:8787"))
+    }
+
+    @Test
+    fun `toggling expanded at display index 0 reveals the full block, content unchanged from entriesSnapshot`() {
+        val log = ReportLog()
+        log.append("mode: A\nverdict: PASS (read)", summary(result = "Read OK — nothing sent"), nowMillis = 0L)
+        log.toggleExpandedAtDisplayIndex(0)
+        assertEquals(listOf(true), log.expandedSnapshot())
+        val rendered = log.rendered().toString()
+        assertTrue("expanded entry shows the Result body line", rendered.contains("Result    Read OK — nothing sent"))
+        // Item 18's own MUST: expanding never changes the block's content —
+        // the stored, full entry must appear byte-identical inside rendered().
+        assertTrue(rendered.contains(log.entriesSnapshot()[0]))
+    }
+
+    @Test
+    fun `toggling twice returns to collapsed`() {
+        val log = ReportLog()
+        log.append("x", summary(), nowMillis = 0L)
+        log.toggleExpandedAtDisplayIndex(0)
+        log.toggleExpandedAtDisplayIndex(0)
+        assertEquals(listOf(false), log.expandedSnapshot())
+    }
+
+    @Test
+    fun `toggling one entry does not affect a sibling entry's expand state`() {
+        val log = ReportLog()
+        log.append("first", summary(site = "site-a.test"), nowMillis = 0L)
+        log.append("second", summary(site = "site-b.test"), nowMillis = 1000L)
+        // display index 0 = newest = "second" (site-b.test)
+        log.toggleExpandedAtDisplayIndex(0)
+        assertEquals(listOf(false, true), log.expandedSnapshot()) // oldest-first: [site-a, site-b]
+    }
+
+    @Test
+    fun `toggleExpandedAtDisplayIndex out of range is ignored, never throws`() {
+        val log = ReportLog()
+        log.append("x", summary(), nowMillis = 0L)
+        log.toggleExpandedAtDisplayIndex(5)
+        log.toggleExpandedAtDisplayIndex(-1)
+        assertEquals(listOf(false), log.expandedSnapshot())
+    }
+
+    @Test
+    fun `restore defaults every entry to collapsed when no expanded state is supplied`() {
+        val log = ReportLog()
+        log.restore(listOf("09:00:00 · site-a.test\n\nResult    restored"))
+        assertEquals(listOf(false), log.expandedSnapshot())
+    }
+
+    @Test
+    fun `restore round-trips expanded state via expandedSnapshot`() {
+        val log = ReportLog()
+        log.append("first", summary(site = "site-a.test"), nowMillis = 0L)
+        log.append("second", summary(site = "site-b.test"), nowMillis = 1000L)
+        log.toggleExpandedAtDisplayIndex(1) // the oldest, "first"
+        val savedEntries = log.entriesSnapshot()
+        val savedExpanded = log.expandedSnapshot()
+
+        val restored = ReportLog()
+        restored.restore(savedEntries, expanded = savedExpanded)
+        assertEquals(savedExpanded, restored.expandedSnapshot())
+    }
+
+    @Test
+    fun `clear empties expandedSnapshot alongside entries`() {
+        val log = ReportLog()
+        log.append("x", summary(), nowMillis = 0L)
+        log.clear()
+        assertTrue(log.expandedSnapshot().isEmpty())
+    }
+
+    // A replaced (pending -> terminal) entry keeps whatever expand state it
+    // already had — a user who opened an in-progress entry to watch it is
+    // not collapsed out from under them when it resolves (design decision,
+    // see ReportLog's expandedFlags doc).
+    @Test
+    fun `a terminal outcome replacing a pending entry preserves its expanded state`() {
+        val log = ReportLog()
+        log.append(
+            "mode: B\nmint_gate: MET",
+            summary(result = "In progress — waiting for you to authorize with biometrics or a device PIN", shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing yet")),
+            attemptId = "a1",
+            pending = true,
+            nowMillis = 0L,
+        )
+        log.toggleExpandedAtDisplayIndex(0)
+        log.append("mode: B\nmint: OK", summary(), attemptId = "a1", nowMillis = 5000L)
+        assertEquals(listOf(true), log.expandedSnapshot())
+    }
+
+    @Test
+    fun `eviction shifts expanded flags in lockstep with entries`() {
+        val log = ReportLog()
+        log.append("first", summary(site = "site-0.test"), nowMillis = 0L)
+        log.toggleExpandedAtDisplayIndex(0) // expand the soon-to-be-evicted entry
+        repeat(ReportLog.MAX_ENTRIES) { i ->
+            log.append("filler $i", summary(site = "filler-$i.test"), nowMillis = (i + 1).toLong())
+        }
+        assertEquals(ReportLog.MAX_ENTRIES, log.entriesSnapshot().size)
+        assertEquals(ReportLog.MAX_ENTRIES, log.expandedSnapshot().size)
+        // the survivor (oldest remaining, "filler 0") was never expanded
+        assertFalse(log.expandedSnapshot()[0])
+    }
 }
