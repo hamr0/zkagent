@@ -20,7 +20,6 @@ package com.tananaev.passportreader
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.net.Uri
 import android.nfc.NfcAdapter
 import android.nfc.Tag
@@ -764,10 +763,9 @@ abstract class MainActivity : AppCompatActivity() {
         // parallel MainActivity field — see ReportLog.lastText's doc.
         reportLog.lastText?.let { outState.putString(STATE_LAST_REPORT, it) }
         outState.putStringArrayList(STATE_LOG_ENTRIES, ArrayList(reportLog.entriesSnapshot()))
-        // §6.2 items 18/19 (D67): the sibling per-entry display state — see
-        // [ReportLog.expandedSnapshot]/[terminalSnapshot]'s doc.
+        // §6.2 item 18 (D67): the sibling per-entry display state — see
+        // [ReportLog.expandedSnapshot]'s doc.
         outState.putBooleanArray(STATE_LOG_EXPANDED, reportLog.expandedSnapshot().toBooleanArray())
-        outState.putBooleanArray(STATE_LOG_TERMINAL, reportLog.terminalSnapshot().toBooleanArray())
         // §6.2 item 22 (D70(a)): the sibling per-entry glyph state — see
         // [ReportLog.outcomesSnapshot]'s doc.
         outState.putStringArrayList(STATE_LOG_OUTCOMES, ArrayList(reportLog.outcomesSnapshot().map { it.name }))
@@ -1187,17 +1185,16 @@ abstract class MainActivity : AppCompatActivity() {
         Log.i(TAG, "\n===== M2 REPORT (value-free) =====\n$text\n===== END =====")
     }
 
-    /** §6.2 items 18/19 (D67, Q43/Q44): the single place [logView.text] is
-     * ever set FROM [reportLog] — [emitReport], [restoreReport], and the
-     * per-entry tap handler ([onLogEntryTapped]) all call this rather than
-     * each computing [ReportLog.rendered]'s parameters independently, so
-     * item 18's toggle and item 19's dimming stay wired the same way
-     * everywhere `logView.text` changes. */
+    /** §6.2 item 18 (D67, Q43): the single place [logView.text] is ever set
+     * FROM [reportLog] — [emitReport], [restoreReport], and the per-entry
+     * tap handler ([onLogEntryTapped]) all call this rather than each
+     * computing [ReportLog.rendered]'s parameters independently, so item
+     * 18's toggle stays wired the same way everywhere `logView.text`
+     * changes. */
     private fun refreshLogView() {
         logView.text = reportLog.rendered(
             titleSizePx = logTitleSizePx(),
             onEntryTap = ::onLogEntryTapped,
-            dimmedTextColor = dimmedLogEntryColor(),
         )
     }
 
@@ -1212,19 +1209,6 @@ abstract class MainActivity : AppCompatActivity() {
         // §6.2 item 23 (D70(b)): the expand/collapse toggle is one of the
         // three mutation events (append/replace/toggle) that must persist.
         persistLog()
-    }
-
-    /** §6.2 item 19 (D67, Q44) — the ARGB color [ReportLog.rendered] dims a
-     * terminal-outcome entry to: [logView]'s OWN currently-configured text
-     * color, alpha reduced to roughly 60%, never a hardcoded color — same
-     * "derive from the view's own configured property" discipline as
-     * [logTitleSizePx]. Using [Color.alpha] composition rather than a fixed
-     * gray keeps the dim legible against both light and dark themes,
-     * whatever [logView]'s base color actually is on this device/theme. */
-    private fun dimmedLogEntryColor(): Int {
-        val base = logView.currentTextColor
-        val dimmedAlpha = (Color.alpha(base) * DIM_ALPHA_FRACTION).roundToInt()
-        return Color.argb(dimmedAlpha, Color.red(base), Color.green(base), Color.blue(base))
     }
 
     /** §6.2 item 16 (D44/D35) — D58 step 1: the NAMED sibling of
@@ -1246,16 +1230,15 @@ abstract class MainActivity : AppCompatActivity() {
         val text = savedInstanceState.getString(STATE_LAST_REPORT)
         val entries = savedInstanceState.getStringArrayList(STATE_LOG_ENTRIES)
         if (text == null && entries == null) return
-        // §6.2 items 18/19 (D67): restored alongside entries — see
+        // §6.2 item 18 (D67): restored alongside entries — see
         // [ReportLog.restore]'s doc for the mismatched-size/absent-key
-        // fallback (all-collapsed, all-terminal) this passes through to.
+        // fallback (all-collapsed) this passes through to.
         val expanded = savedInstanceState.getBooleanArray(STATE_LOG_EXPANDED)?.toList()
-        val terminal = savedInstanceState.getBooleanArray(STATE_LOG_TERMINAL)?.toList()
         // §6.2 item 22 (D70(a)): the sibling per-entry glyph state — same
-        // Bundle fast path as expanded/terminal.
+        // Bundle fast path as expanded.
         val outcomes = savedInstanceState.getStringArrayList(STATE_LOG_OUTCOMES)
             ?.map { runCatching { ReportLog.Outcome.valueOf(it) }.getOrDefault(ReportLog.Outcome.FAIL) }
-        reportLog.restore(entries ?: emptyList(), lastText = text, expanded = expanded, terminal = terminal, outcomes = outcomes)
+        reportLog.restore(entries ?: emptyList(), lastText = text, expanded = expanded, outcomes = outcomes)
         if (text != null) reportView.text = reportLog.lastText
         if (entries != null) refreshLogView()
         Log.i(TAG, "M2 stage: restored report/log across Activity recreation (text=${text != null}, log_entries=${entries?.size ?: 0})")
@@ -1283,7 +1266,7 @@ abstract class MainActivity : AppCompatActivity() {
         }
         val snapshot = ReportLogStore.fromJson(json)
         if (snapshot.entries.isEmpty() && snapshot.lastText == null) return
-        reportLog.restore(snapshot.entries, lastText = snapshot.lastText, expanded = snapshot.expanded, terminal = snapshot.terminal, outcomes = snapshot.outcomes)
+        reportLog.restore(snapshot.entries, lastText = snapshot.lastText, expanded = snapshot.expanded, outcomes = snapshot.outcomes)
         reportView.text = reportLog.lastText
         refreshLogView()
         Log.i(TAG, "M2 stage: loaded persisted log from disk (entries=${snapshot.entries.size})")
@@ -1306,8 +1289,8 @@ abstract class MainActivity : AppCompatActivity() {
      * Value-free by construction (item 5/D46, item 6 unchanged): the
      * [ReportLogStore.Snapshot] this builds is exactly
      * [reportLog]'s own [ReportLog.entriesSnapshot]/[ReportLog.expandedSnapshot]/
-     * [ReportLog.terminalSnapshot]/[ReportLog.outcomesSnapshot]/[ReportLog.lastText]
-     * — the SAME four lists/value [onSaveInstanceState] already puts in the
+     * [ReportLog.outcomesSnapshot]/[ReportLog.lastText]
+     * — the SAME lists/value [onSaveInstanceState] already puts in the
      * Bundle, nothing more. No MRZ, zktag, nonce, or key material is ever
      * threaded through this function; item 6 (session state wiped in
      * `onStop`) is untouched — `wipeSession` never calls this. */
@@ -1315,7 +1298,6 @@ abstract class MainActivity : AppCompatActivity() {
         val snapshot = ReportLogStore.Snapshot(
             entries = reportLog.entriesSnapshot(),
             expanded = reportLog.expandedSnapshot(),
-            terminal = reportLog.terminalSnapshot(),
             outcomes = reportLog.outcomesSnapshot(),
             lastText = reportLog.lastText,
         )
@@ -3105,14 +3087,10 @@ abstract class MainActivity : AppCompatActivity() {
         private val TAG = MainActivity::class.java.simpleName
         private const val STATE_LAST_REPORT = "m2_last_report"
         private const val STATE_LOG_ENTRIES = "m2_log_entries"
-        // §6.2 items 18/19 (D67, Q43/Q44): the sibling per-entry display
+        // §6.2 item 18 (D67, Q43): the sibling per-entry display
         // state ReportLog now also owns — same index space/order as
-        // STATE_LOG_ENTRIES, see [ReportLog.expandedSnapshot]/
-        // [ReportLog.terminalSnapshot].
+        // STATE_LOG_ENTRIES, see [ReportLog.expandedSnapshot].
         private const val STATE_LOG_EXPANDED = "m2_log_expanded"
-        // §6.2 item 19 (D67, Q44): the sibling per-entry terminal state —
-        // see [ReportLog.terminalSnapshot]'s doc.
-        private const val STATE_LOG_TERMINAL = "m2_log_terminal"
         // §6.2 item 22 (D70(a)): the sibling per-entry glyph state — stored
         // as enum NAMEs (StringArrayList; Bundle has no native enum-array
         // type), see [ReportLog.outcomesSnapshot]'s doc.
@@ -3121,11 +3099,6 @@ abstract class MainActivity : AppCompatActivity() {
         // durable log — see [persistLog]'s doc. Not a shared-prefs key: a
         // single JSON file, per that function's own storage-choice note.
         private const val LOG_STORE_FILENAME = "m2_report_log.json"
-        // §6.2 item 19 (D67, Q44): fraction of [logView]'s own configured
-        // text alpha a terminal entry is dimmed to — see
-        // [dimmedLogEntryColor]'s doc for why this is a fraction of the
-        // view's own color, never a hardcoded absolute color.
-        private const val DIM_ALPHA_FRACTION = 0.6
         // D58 step 2 (finding #1): the app's own tab index — see
         // [PaneState]'s class doc for why this is the fix.
         private const val STATE_TAB_INDEX = "m2_tab_index"

@@ -4,7 +4,6 @@ import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.ClickableSpan
-import android.text.style.ForegroundColorSpan
 import android.view.View
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -69,27 +68,28 @@ import java.util.Locale
  * attempt never leaves more than one entry — see [append]'s doc.
  *
  * **§6.2 item 22 (D70(a), 2026-09-03):** each entry now also carries an
- * [Outcome] — see that enum's doc for the PASS/FAIL/PENDING rule and why it
- * is NOT derivable from [terminalFlags] alone (a boolean cannot distinguish
- * three states). [MainActivity] is the ONLY place [Outcome] is ever
- * computed, from types that already exist there (`DeliveryResult`,
- * `M0Probe.Verdict.ok`, the diagnostic probes' own `failed` boolean) —
- * [ReportLog] never parses a report/summary string to guess it.
+ * [Outcome] — see that enum's doc for the PASS/FAIL/PENDING rule, set
+ * directly from [append]'s own `pending`/`outcome` parameters (a pending
+ * entry is always [Outcome.PENDING]). [MainActivity] is the ONLY place
+ * [Outcome] is ever computed, from types that already exist there
+ * (`DeliveryResult`, `M0Probe.Verdict.ok`, the diagnostic probes' own
+ * `failed` boolean) — [ReportLog] never parses a report/summary string to
+ * guess it.
  *
  * **§6.2 item 23 (D70(b), 2026-09-03):** this class remains in-memory-only
  * and Android-free, unchanged — [MainActivity] is the sole owner of making
- * [entriesSnapshot]/[expandedSnapshot]/[terminalSnapshot]/[outcomesSnapshot]
- * durable (via `ReportLogStore`, app-private disk storage), the same
- * "read-only owner, write-only caller" split [restore] already established
- * for `onSaveInstanceState`.
+ * [entriesSnapshot]/[expandedSnapshot]/[outcomesSnapshot] durable (via
+ * `ReportLogStore`, app-private disk storage), the same "read-only owner,
+ * write-only caller" split [restore] already established for
+ * `onSaveInstanceState`.
  */
 class ReportLog {
 
     /** §6.2 item 22 (D70(a)) — the three states a collapsed log entry's
      * quick-review glyph distinguishes. Set ONCE per entry, at the exact
-     * call site that already decides [terminalFlags] ([append]'s `pending`
-     * branch) — never re-derived, never guessed from [DisclosureSummary]'s
-     * plain-language text.
+     * call site that already decides pending-vs-terminal ([append]'s
+     * `pending` branch) — never re-derived, never guessed from
+     * [DisclosureSummary]'s plain-language text.
      *
      * **The PASS/FAIL rule (owner-overturnable):** PASS means the run
      * reached a positive, delivered/verified terminal outcome for the
@@ -222,25 +222,10 @@ class ReportLog {
     // entry's full block or just its title line.
     private val expandedFlags = mutableListOf<Boolean>()
 
-    // §6.2 item 19 (D67, Q44) — PARALLEL to [entries]/[expandedFlags], same
-    // index space, kept in lockstep the same way. Derived from the SAME
-    // pending/terminal model [append]'s `attemptId`/`pending` already
-    // tracks (never a new flag guessed from string content): an entry is
-    // terminal (dimmed) whenever it is NOT the currently-open "In
-    // progress" entry for some attempt. `pending = true` -> not terminal;
-    // every other append/replace -> terminal. This reuses the existing,
-    // already-correct pending model rather than re-deriving "done vs. in
-    // progress" from FailureTransition/MintConfirmation's enums directly —
-    // those enums decide WHICH terminal outcome a report describes, never
-    // WHETHER one has been reached yet; [pending] at this class's own call
-    // site is the exact fact item 19 needs, already threaded through
-    // unchanged.
-    private val terminalFlags = mutableListOf<Boolean>()
-
-    // §6.2 item 22 (D70(a)) — PARALLEL to [entries]/[expandedFlags]/
-    // [terminalFlags], same index space, kept in lockstep by every mutation
-    // site below (append/replace/evict/clear/restore). See [Outcome]'s own
-    // doc for what each value means and the exact PASS/FAIL rule.
+    // §6.2 item 22 (D70(a)) — PARALLEL to [entries]/[expandedFlags], same
+    // index space, kept in lockstep by every mutation site below
+    // (append/replace/evict/clear/restore). See [Outcome]'s own doc for
+    // what each value means and the exact PASS/FAIL rule.
     private val outcomes = mutableListOf<Outcome>()
 
     /** D58 step 1 (Report/Log cluster, finding #7): the exact text of the
@@ -317,12 +302,10 @@ class ReportLog {
             // item 18: a replaced entry keeps its OWN prior [expandedFlags]
             // state (a user who opened an "In progress" entry to watch it
             // is not collapsed out from under them when it resolves — see
-            // class doc); [terminalFlags] is recomputed below from THIS
-            // call's [pending], same as the append branch.
+            // class doc).
         } else {
             entries.add(rendered)
             expandedFlags.add(false) // item 18: collapsed by default
-            terminalFlags.add(false) // placeholder — the one true value is set below, in one place
             outcomes.add(effectiveOutcome)
             // D58 step 1 (finding #13): a genuinely NEW entry (never a
             // pending-replace, which never grows the list) can push
@@ -340,7 +323,6 @@ class ReportLog {
             if (entries.size > MAX_ENTRIES) {
                 entries.removeAt(0)
                 expandedFlags.removeAt(0)
-                terminalFlags.removeAt(0)
                 outcomes.removeAt(0)
                 val iterator = pendingIndexByAttempt.entries.iterator()
                 while (iterator.hasNext()) {
@@ -350,9 +332,6 @@ class ReportLog {
             }
         }
         val finalIndex = existingIndex ?: entries.lastIndex
-        // item 19: terminal iff this entry is NOT the currently-open
-        // "In progress" entry — the exact fact [pending] already carries.
-        terminalFlags[finalIndex] = !pending
         if (pending && attemptId != null) {
             pendingIndexByAttempt[attemptId] = finalIndex
         }
@@ -369,7 +348,6 @@ class ReportLog {
         entries.clear()
         pendingIndexByAttempt.clear()
         expandedFlags.clear()
-        terminalFlags.clear()
         outcomes.clear()
     }
 
@@ -384,17 +362,11 @@ class ReportLog {
      * Activity recreation exactly like [entriesSnapshot] already does. */
     fun expandedSnapshot(): List<Boolean> = expandedFlags.toList()
 
-    /** §6.2 item 19 (D67, Q44): OLDEST-first, same index space as
-     * [entriesSnapshot] — persisted the same way, though in practice every
-     * RESTORED entry is terminal (see [restore]'s doc: no in-progress
-     * attempt-id state survives recreation either). */
-    fun terminalSnapshot(): List<Boolean> = terminalFlags.toList()
-
     /** §6.2 item 22 (D70(a)): OLDEST-first, same index space as
      * [entriesSnapshot] — the sibling persistence for the per-entry
      * PASS/FAIL/PENDING glyph, saved/restored the same way
-     * [expandedSnapshot]/[terminalSnapshot] already are (Bundle AND, since
-     * item 23, app-private disk via `ReportLogStore`). */
+     * [expandedSnapshot] already is (Bundle AND, since item 23, app-private
+     * disk via `ReportLogStore`). */
     fun outcomesSnapshot(): List<Outcome> = outcomes.toList()
 
     /** §6.2 item 18 (D67, Q43) — the per-entry tap-to-expand toggle.
@@ -433,30 +405,20 @@ class ReportLog {
      *   A caller supplying a non-null list MUST size it to match [saved];
      *   a mismatched size falls back to the same all-collapsed default
      *   rather than indexing out of bounds.
-     * @param terminal (item 19) per-entry terminal/in-progress state, SAME
-     *   order as [saved]. Defaults to null, meaning "everything terminal" —
-     *   `List(saved.size) { true }` — since no in-progress attempt-id state
-     *   survives Activity recreation (see this function's own doc on
-     *   [pendingIndexByAttempt] being dropped): a restored entry can never
-     *   correctly be "still in progress" from a NEW instance's point of
-     *   view, even if it was mid-flight in the dying one. Same mismatched-
-     *   size fallback as [expanded].
      * @param outcomes (item 22, D70(a)) per-entry PASS/FAIL/PENDING state,
      *   SAME order as [saved]. Defaults to null, meaning "every entry
      *   FAIL" — `List(saved.size) { Outcome.FAIL }` — the same conservative
      *   "unclassified never guesses PASS" fallback [append]'s own default
      *   uses, for a caller (or an old persisted file predating this field)
      *   that restores entries with no outcome data at all. Same mismatched-
-     *   size fallback as [expanded]/[terminal]. */
-    fun restore(saved: List<String>, lastText: String? = null, expanded: List<Boolean>? = null, terminal: List<Boolean>? = null, outcomes: List<Outcome>? = null) {
+     *   size fallback as [expanded]. */
+    fun restore(saved: List<String>, lastText: String? = null, expanded: List<Boolean>? = null, outcomes: List<Outcome>? = null) {
         entries.clear()
         entries.addAll(saved)
         pendingIndexByAttempt.clear()
         this.lastText = lastText
         expandedFlags.clear()
         expandedFlags.addAll(expanded?.takeIf { it.size == saved.size } ?: List(saved.size) { false })
-        terminalFlags.clear()
-        terminalFlags.addAll(terminal?.takeIf { it.size == saved.size } ?: List(saved.size) { true })
         this.outcomes.clear()
         this.outcomes.addAll(outcomes?.takeIf { it.size == saved.size } ?: List(saved.size) { Outcome.FAIL })
     }
@@ -494,20 +456,12 @@ class ReportLog {
      *   [toggleExpandedAtDisplayIndex] plus a re-render, never mutating
      *   state here. Requires the caller's `TextView.movementMethod` be set
      *   to a link-aware one for the span to actually receive taps — this
-     *   function only places the span, it does not configure the View.
-     * @param dimmedTextColor (item 19, D67/Q44) when non-null, every entry
-     *   whose [terminalFlags] is true is styled in this exact ARGB color
-     *   via [ForegroundColorSpan] over its WHOLE displayed range (title
-     *   line included, whether collapsed or expanded) — [MainActivity]
-     *   computes it from the log view's OWN currently-configured text
-     *   color, alpha-reduced, never a hardcoded color, the same discipline
-     *   [titleSizePx] already follows for size. An entry still open as
-     *   "In progress" for some attempt is never dimmed. */
-    fun rendered(titleSizePx: Int? = null, onEntryTap: ((Int) -> Unit)? = null, dimmedTextColor: Int? = null): CharSequence {
+     *   function only places the span, it does not configure the View. */
+    fun rendered(titleSizePx: Int? = null, onEntryTap: ((Int) -> Unit)? = null): CharSequence {
         val storageIndicesNewestFirst = entries.indices.reversed().toList()
         val displayTexts = storageIndicesNewestFirst.map { displayText(it) }
         val joined = displayTexts.joinToString("\n\n")
-        if (titleSizePx == null && onEntryTap == null && dimmedTextColor == null) return joined
+        if (titleSizePx == null && onEntryTap == null) return joined
         val builder = SpannableStringBuilder(joined)
         val titleRanges = titleLineRanges(displayTexts)
         if (titleSizePx != null) {
@@ -526,17 +480,6 @@ class ReportLog {
                         }
                     }, range.first, range.last + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
-            }
-        }
-        if (dimmedTextColor != null) {
-            var offset = 0
-            displayTexts.forEachIndexed { displayIndex, text ->
-                if (displayIndex > 0) offset += 2 // the "\n\n" separator
-                val storageIndex = storageIndicesNewestFirst[displayIndex]
-                if (terminalFlags.getOrElse(storageIndex) { true } && text.isNotEmpty()) {
-                    builder.setSpan(ForegroundColorSpan(dimmedTextColor), offset, offset + text.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-                }
-                offset += text.length
             }
         }
         return builder
