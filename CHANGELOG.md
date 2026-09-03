@@ -25,6 +25,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   test-verified only; device confirmation still pending. Implements Option A
   of the coder's Q48 proposal (owner-approved 2026-09-03). See Q48;
   decisions.md D67; milestones.md §6.2 item 21.
+- **Feature (§6.2 item 17, D67/Q39): incoming handoff intent switches to the
+  Scan pane.** `PaneState.onIncomingHandoffIntent(admitted: Boolean)` is a
+  new writer on the same single owner of the tab index (finding #1, D58 step
+  2 — not a second owner); `MainActivity.handleIncomingIntent`'s already-
+  admitted `av://` branch calls it, then `showPane()`, before
+  `beginHandoffVerification`, so the switch lands before the read begins. A
+  refused (`HandoffAdmission`) intent never reaches the call — leaves the
+  tab untouched, per the MUST NOT. Not fenced via `LifecycleFence`: the
+  write is synchronous inside `onNewIntent`, never the late-async-landing
+  shape that class guards against — flagged for owner review. 5 new
+  `PaneStateTest` cases. Built, device verification pending. Commit
+  `ee45300`.
 - **Docs (D66/D67): Q36 resolved (real in-app age answer); Q39/Q40/Q43/Q44/Q45/Q48
   ruled; exit-criteria row 1 corrected.** D66 resolves Q36 — the scanner will
   compute a real over/under answer in-app, in a pure class, at mint time, from

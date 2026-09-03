@@ -198,6 +198,13 @@ this is flagged in the report back to the caller.
   the visible tab. Status: APPROVED into §6.2 item 17 (D67) — distinct from the
   already-rejected D55 (auto-switch on read completion); the tab-state ownership
   seam (`.claude/remember/findings.md` #1) that previously blocked this is closed.
+  **BUILT-IN-`ee45300`, device verification pending.** `PaneState.
+  onIncomingHandoffIntent(admitted: Boolean)` is a new writer on the SAME
+  owner (not a second owner of the tab index); `MainActivity.
+  handleIncomingIntent`'s already-admitted `av://` branch calls it before
+  `beginHandoffVerification`. Unit-tested (`PaneStateTest`): admitted
+  switches Log -> Scan, is a no-op already on Scan, and — the MUST NOT half
+  — a refused (`HandoffAdmission`) intent leaves the tab untouched.
   (zkagent-prd.md:2099-2111)
 - **Q40 (opened 2026-09-02)** — The disabled Lock button after an
   access-establishment failure reads as "stuck"; owner wants copy closer to
