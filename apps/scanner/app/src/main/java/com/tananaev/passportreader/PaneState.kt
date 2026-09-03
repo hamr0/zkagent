@@ -10,8 +10,19 @@ package com.tananaev.passportreader
  * `onPostCreate` override exists in `MainActivity.kt` — confirmed by grep
  * before this step; there is nothing to make a no-op or remove) — so
  * reading it as the source of truth from `onCreate` raced that restore on
- * every device rotation (`fullSensor` orientation recreates the Activity
- * on every physical rotation, not only rare config changes).
+ * every Activity recreation. At the time this step was written the manifest
+ * declared `fullSensor` orientation, so a physical rotation was the common
+ * trigger; D63 (`d406f4b`) later locked
+ * `apps/scanner/app/src/regular/AndroidManifest.xml`'s `screenOrientation`
+ * to `portrait`, so rotation no longer recreates the Activity — recreation
+ * now comes only from other config changes (font-scale, locale, a
+ * low-memory kill, etc.; the 2026-09-03 device session drove one via
+ * `settings put system font_scale`). The race this step fixed is
+ * unaffected either way: any recreation still restores
+ * `TabLayout.selectedTabPosition` asynchronously in the same
+ * `onPostCreate` path, after `onCreate` — this class's ownership of
+ * [selectedTab] and [readInProgress] stands regardless of which config
+ * change triggers the recreation.
  * `readInProgress` (audit row 11) moves in alongside it: its own two
  * writers ([MainActivity.startSession], [MainActivity.ReadTask
  * .onPostExecute]) are both already in this exact read-lifecycle path, per
