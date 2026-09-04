@@ -24,7 +24,8 @@ next integrates. (zkagent-prd.md:855-865)
 | **M1** — Verifier SDK core | `chiproof` verifier core: never-throw verdict; challenge nonce + signed challenges; tier negotiation; FR10 trust list; evidence slot with bare mode, `zk-passport/1`, `signed-receipt/1` plugs; masterlist stays on the phone. Spec: `docs/product/m1-verifier-core-spec.md` (zkagent-prd.md:856) | Full negative matrix (replay, expired/unsigned tier-C challenge, tier mismatch, untrusted client, missing/misbound evidence, plug-throws ⇒ `ok:false`) each paired with a non-vacuity pass; zero runtime deps; zk plug verifies real proofs and rejects planted negatives (zkagent-prd.md:856) | Done |
 | **M1b** — Mode-A unlinkability probe | Black-box byte comparison of N mode-A presentations, same device/holder/service, including a planted positive control (zkagent-prd.md:857) | No field differs across presentations except those proven independent of holder/device; a planted stable field must fail the check. Blocks M3. Answers a linkability question. Evidence: `docs/logs/M1B-EVIDENCE.md` (zkagent-prd.md:857) | Ran 2026-08-30; passes with one disclosed leak bucket; block on M3 lifted (zkagent-prd.md:857) |
 | **M2** — Scanner app (rewrite, not graduate) | Real app: Keystore/StrongBox, biometric gate, QR/app-link handoff; ships BARE (`evidence: []`) as its fixed evidence set — no on-device ZK prover; `zk-passport/1` stays verifier-side; mode-B roundtrip exercises the attester-key evidence plug end to end against the M1 core. Opens with a riskiest-assumption POC: capture real-world age-verification request flows, build a test verifier to the observed shape, and run the web→app→web handoff over the mechanism the captures show is real (zkagent-prd.md:858) | End-to-end on real device against local verifier; zktag stability across reinstall+re-scan; mode A emits no zktag even after a mode-B presentation. Half-loaded masterlist ⇒ read refused (`ok:false`), never a pass. Two-bucket rule for the masterlist checkpoint (integrity failure ⇒ `ok:false`; well-formed list lacking the issuing CSCA ⇒ `ok:true, allowed:false`). Build scope for the rewrite itself: §6.2 below (zkagent-prd.md:858) | **Closed/complete, 2026-09-03, v0.5.0.** §6.2 items 1–25 all built and device-confirmed (item 19 WITHDRAWN by D71a, number reserved); findings #18–#21 closed; every row in the Exit criteria table below is device-confirmed or FIXED-IN-<sha> device-confirmed. D66–D71 recorded. First release under D72's lockstep versioning rule. |
-| **M3** — Demo | Web page: "prove you're over 18" (mode A) and "prove you're a unique adult human" (mode B); responsive (mandatory) (zkagent-prd.md:859) | Live flow. Mode B: second scan from same passport rejected as duplicate zktag. Mode A: two presentations indistinguishable. Demo site is its own adopter with its own store — the SDK still stores nothing (zkagent-prd.md:859) | Not started |
+| **M3** — Demo (tier A/B only, vanilla) | Web page: "prove you're over 18" (tier A) and "prove you're a unique adult human" (tier B); responsive (mandatory); no tier C (zkagent-prd.md:859) | Live flow. Tier B: second scan from same document rejected as duplicate zktag. Tier A: two presentations indistinguishable. Demo site is its own adopter with its own store — the SDK still stores nothing (zkagent-prd.md:859) | Scope gate CLOSED — §6.3 owner-approved 2026-09-03 (D73–D75); not started |
+| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), pinned-issuer gated (D20); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points | Not started — PRD-gated (D73); blocked on Q34 (verb vocabulary); Q11 CLOSED by D74; scanner follow-ups §6.5 (S1–S3) precede it; §6.6 Play track also precedes it |
 | **M4** — Agent layer (rung 2) | Delegation certs, RFC 9421 middleware (FR8), per-serial revocation, phone→agent cert handoff (zkagent-prd.md:860) | Agent request accepted with valid chain; killed by zktag-block; single-use serial burns once; signature verifies against an off-the-shelf RFC 9421 verifier with no zkagent patches; cert reaches a headless agent host with no zkagent-run server in the path (zkagent-prd.md:860) | Frozen until rung 1 ships |
 | **M5** — Blocklist/appeal (rung 2) | Signed blocklist format, adopter store interface, prove-control-of-zktag appeal (zkagent-prd.md:861) | Store pattern fails closed, never silently falls back to in-memory (zkagent-prd.md:861) | Frozen until rung 1 ships |
 
@@ -114,6 +115,274 @@ before build started on it (scope gate, NO-GO #10).
 | Mode sentence in the terminal outcome dialog (item 25, D71b) | A mode-A outcome dialog and a mode-B outcome dialog each show their respective sentence ("Mode A, anonymous" / "Mode B, recognisable to this site"); a bare local scan's dialog shows the mode-A sentence | BUILT-IN-`a61bcc8` (`OutcomeText.withModeSentence`, `SessionDisplay.modeLabel`), device-confirmed 2026-09-03 PM: a bare local scan on the NL ID card produced an outcome dialog reading "This scan was Mode A, anonymous.", matching the mode A shown on the scan-pane status line and the log entry — see PM evidence page section 14. |
 
 (zkagent-prd.md:1637-1646)
+
+## 6.3 M3 build scope (owner-approved 2026-09-03, D73–D75)
+
+Scope gate for M3 (NO-GO #10) — nothing here is built until the owner approves it. Written
+2026-09-03 per D73: the owner split M3 into a vanilla A/B-only demo (this section) and a
+separate future mode-C build, M3b (§6.4), rather than building both in one pass. Owner intent,
+verbatim: "keep m3 a/b vanilla, mode c as m3b, write prd first" — M3 is meant as "a mockup run
+for any operator to test the app rightaway, needs to be clean and precise." All decision points DP1–DP7 raised during drafting on 2026-09-03 were resolved by the owner the
+same day and are recorded inline with their attributions (D73/D74); DP7 (§6.5 S3's scan-pane
+relocation) and the Play Store listing question (§6.6) were both resolved same-day by D75. No item
+here may be built ahead of owner sign-off (D73 is a record of the split, not an approval of
+§6.3's content) — but per D75, §6.3/§6.5/§6.6 are now owner-approved as of 2026-09-03.
+
+1. **Two flows, one page.** MUST present exactly two actions on one responsive page: "prove
+   you're over 18" (tier A) and "prove you're a unique adult human" (tier B). Each MUST be a
+   single clean tap/click with no multi-step wizard. MUST NOT offer a tier-C action or any
+   control implying one exists (see item 9, MUST NOT).
+2. **Vanilla stack.** MUST ship with no frontend framework and no build step — plain HTML/CSS/JS
+   served by a plain Node process, matching the throwaway spike's shape (`spikes/m2-handoff`)
+   but as real, kept code, not a spike. M3 keeps BOTH handoff paths the M2 spike already proved —
+   the same-device app link and the cross-device QR — so "no deps beyond `chiproof`" becomes "no
+   deps beyond `chiproof` and the QR image encoder already in use" (the `qrcode` npm dep is
+   permitted for that image, exactly as in `spikes/m2-handoff`). The local node (item 7/DP5) is
+   the ONLY thing that runs the page. (owner, 2026-09-03: "same qr used in local
+   127.0.0.1:8788 and same device, both")
+3. **Demo is its own adopter, its own store.** The demo page MUST run its own persistent store
+   for nonces, the attester-key binding, and zktags-seen (dedupe/blocklist state) — `chiproof`
+   itself stores nothing (D3, FR3). `InMemoryNonceStore`/`InMemoryAttesterStore` are
+   test-only (chiproof README) and MUST NOT be used once M3 is reachable from a real phone in a
+   persistent operator-facing run. Store technology is a flat JSON file with atomic
+   temp+rename write. ADDITIONALLY the page MUST display what the app sent back (the
+   verdict/presentation payload the verifier received, as returned by `chiproof` — never PII,
+   there is none in tier A/B) and the store's relevant state for this transaction (e.g. "zktag
+   already seen at this site: yes/no" for tier B); this display requirement is also its own row
+   in the exit-criteria table below. (owner, 2026-09-03: "yes, it should display on screen,
+   part of display what gets sent back")
+4. **Tier-B duplicate rejection.** A second tier-B scan of the same document at this site MUST
+   surface an "already registered" outcome on the page (not a silent no-op, not a generic
+   error). "Same document" is already settled by existing decisions, not new to M3: the zktag
+   is `HMAC(secret, verified domain)` where `secret` derives from the document number (D9,
+   FR11) — two presentations of the same document at this site always produce the same zktag,
+   which is what the demo's store keys duplicate-detection on. MUST disclose the chip_auth
+   caveat (D29) on the page or in its README: a document without chip authentication
+   (`chip_auth: false`, e.g. the US passport) is clone-replayable — a cloned document mints the
+   identical zktag as the genuine holder's, so "unique adult human" is only as strong as
+   `chip_auth` allows.
+5. **Tier-A indistinguishability shown (DP3 resolved).** The page MUST render a per-field table
+   comparing two consecutive tier-A presentations: one row per field, two value columns (scan 1,
+   scan 2), and a third column reading "same" or "differs" per row. Only the fresh nonce and its
+   signature may ever land in the "differs" column — the page MUST say so in words next to the
+   table (e.g. "only the nonce and signature differ between scans; every other field matches").
+   A simple header above the table drives a two-state machine: "Scan 1 done — waiting for scan 2"
+   until the second presentation arrives, then "Both scans received." (owner, 2026-09-03: "field
+   table, and be clear scan 1 done, waiting scan 2 on the page simple header")
+6. **Fixed threshold: 18 only (DP4 resolved by D74).** M3 MUST hardcode/request threshold 18
+   only. The demo runs against the already-released scanner APK as-is (item 13) — the preset
+   threshold list, per-origin threshold lock, and the exact-hostname exception allowlist are
+   scanner-side items and are NOT M3 scope; see §6.5 items S1–S2. Q11 is CLOSED by D74. (owner,
+   2026-09-03: "agreed" to the threshold-policy proposal recorded in full at D74)
+7. **Hosting.** The demo is a local Node process an operator runs on their own machine (the
+   spike's `127.0.0.1:8788` / LAN-IP pattern) — reachable from the phone via the LAN exactly as
+   the spike already does. NO online hosting is in scope for M3; the "public host" option is
+   removed entirely. D38's per-origin key binding still applies: the origin MUST be stable
+   across the operator's session — a changing origin resets every bound key. (owner, 2026-09-03:
+   "this a node you run locally for testing, no online hosting, it's for anyone to download the
+   app from playstore and run it")
+8. **Trust list (FR10).** The demo's verifier config MUST pin the M2 scanner's package name and
+   signing-cert digest as its one accepted client identity — no other client is accepted.
+9. **MUST NOT.** No tier C (M3b only); no ZK-marketing language (NO-GO #7, D1); no PII
+   displayed, ever, on any screen; no zkagent-run server anywhere in the path — the demo's
+   server is the ADOPTER's server, run by whoever operates M3, never a service zkagent itself
+   hosts on the operator's behalf (NO-GO #3); no threshold picker (item 6); no store fallback to
+   an in-memory store once the demo is running in a persistent/operator-facing mode — fail
+   closed, not silently in-memory (M5's fail-closed rule, D3, applied early).
+10. **Opening riskiest-assumption POC.** Before any of the easy parts (page styling, README) are
+    built: duplicate-zktag rejection against the persistent store (item 3) survives a server
+    restart, on both real documents (US passport, NL ID card), plus one handoff exercised from a
+    hosted, non-localhost origin (item 7) reached from the phone's own browser. Pass = both
+    documents mint on first scan, both are refused as "already registered" on a second scan, the
+    refusal still holds after the server process is killed and restarted, and the hosted-origin
+    handoff completes end-to-end exactly like the existing localhost spike does.
+11. **Exit criteria.** See the table below this list; mirrors §6.2's Exit criteria shape (one row
+    per checkpoint, device-confirmed column).
+12. **Versioning and location.** M3 ships under D72's lockstep versioning (one repo version,
+    bumped alongside `chiproof` and the scanner at every release). The demo lives at
+    `apps/demo/`, created by moving `spikes/m2-handoff` there (`git mv`, preserving history) and
+    then evolving it; the spike README's THROWAWAY label MUST be removed on the move. (owner,
+    2026-09-03: "apps/demo")
+13. **"Test right away" means concretely.** A README with a run recipe of 10 lines or fewer
+    (install, configure origin, start, done); the page MUST work against the already-released
+    scanner APK as-is — no scanner-side (`apps/scanner`) changes required for M3. If any item
+    above is found to need a scanner change while building, that need MUST be flagged back to
+    the owner before work continues (scope-gate escalation, not a silent scanner edit).
+
+Play Store listing: NOT an M3 item — see §6.6 (owner, 2026-09-03).
+
+### Exit criteria (M3, draft)
+
+| Check | Pass | Status |
+|---|---|---|
+| Opening POC (item 10) | Duplicate-zktag rejection survives a server restart, both documents; hosted-origin handoff completes | Not run |
+| Tier-B duplicate rejection (item 4) | Second scan of the same document at this site shows "already registered"; chip_auth caveat disclosed | Not run |
+| Payload/store display (item 3) | Page displays what the app sent back (verdict/presentation payload from `chiproof`) and the store's relevant state for the transaction (e.g. zktag-already-seen yes/no) | Not run |
+| Tier-A indistinguishability (item 5) | Page-visible comparison of two tier-A presentations shows no distinguishing field | Not run |
+| Fixed threshold (item 6) | No threshold picker present; threshold 18 enforced | Not run |
+| Hosting (item 7) | Demo reachable from the phone's own browser at a stable, non-localhost origin | Not run |
+| Trust list (item 8) | Demo verifier rejects a client identity other than the pinned scanner package+cert digest | Not run |
+| No scanner changes (item 13) | Demo works against the released scanner APK unmodified | Not run |
+
+## 6.4 M3b scope — placeholder (D73)
+
+Not a build scope list — a list of what must be decided before any M3b item can be written into
+this PRD (NO-GO #10 applies to M3b exactly as it does to M3). M3b is rung 1 (disclosure, not
+delegation) — it does not touch the frozen rung-2 agent layer.
+
+Must be decided before M3b is scoped:
+
+1. **Verb vocabulary (Q34).** Which tier-C fields/predicates are offered — candidates named by
+   the owner: name-match (true/false against a holder-supplied name), expiry-bucket booleans
+   (`expiry > 3mo` / `> 6mo` / `> 1yr`), and open candidates raised but not committed:
+   nationality, DOB-range. No similarity scores, ever (Q22's standing rule carries over).
+2. **Per-tier limits and cumulative-disclosure cost (Q34).** How many tier-C predicates one
+   presentation may carry, and whether/how repeated presentations across sites compound
+   disclosure risk.
+3. **Pinning UX (D20).** How an operator's issuer key actually gets pinned into a real
+   deployment — D20 settles the mechanism at the protocol level
+   (`trustedChallengeIssuers: [{pubkey, maxTier}]`) but not the UX of getting a key into that
+   list for a live operator. Not currently covered by any open question — tracked as new **Q49**
+   (questions.md).
+4. **Q11 for tier C.** The binary-search date-of-birth risk (Q11) is scoped to M3/mode B today;
+   it must be re-evaluated for tier C's expiry-bucket predicates before M3b is written, since
+   multiple boolean buckets over one date field raise the same probing risk in a different shape.
+5. **Scanner tier-C support.** §6.2 item 13 currently REFUSES any tier other than A/B outright.
+   M3b requires lifting that refusal for tier C specifically — a scanner-side change, which is
+   itself a §6.2-scope decision the owner has not yet made.
+6. **"Preapproved list" meaning.** The owner described "user can also choose different things on
+   a, b or kyc from preapproved list" — this needs to be resolved as either a HOLDER-side consent
+   list (what the holder is willing to disclose, matching D19's framing that tiers are defined by
+   what the holder is told) or a VERIFIER-side request list (what the site is allowed to ask
+   for, matching D20's issuer pinning) — these are different UX and different trust boundaries,
+   not interchangeable.
+
+**M3b's opening riskiest-assumption POC candidate (not yet owner-approved):** a live tier-C
+presentation carrying exactly one verb from item 1's eventual vocabulary, refused end-to-end when
+the requesting site's issuer key is unpinned (D20's "refused, not downgraded, if unpinned" rule),
+and accepted end-to-end when it is pinned — on both real documents.
+
+## 6.5 Scanner follow-ups (post-M2, owner-approved 2026-09-03, D74) — not in M3, built before/alongside M3b
+
+Scanner-side (`apps/scanner`) items resolved same-day as §6.3's DP4 and by separate owner UI
+feedback. None of these are M3 scope (§6.3 item 13 — M3 runs against the released scanner APK
+as-is); all are scope-gated (NO-GO #10) into the PRD here so they may be built ahead of or
+alongside M3b without a further gate check.
+
+1. **S1 (ENHANCEMENT, D74) — preset threshold list, per-origin lock, named exceptions.** The app
+   MUST carry a fixed, published preset threshold list — `{15, 16, 18, 21, 60, 65}` — living in
+   the app/spec, never chosen by the verifier. A verifier's requested threshold MUST be one of
+   this list; any other value MUST fail loudly (no mint), extending §6.2 item 13's fail-loudly
+   rule from "tier absent/invalid" to "threshold not on the list." The app MUST lock the FIRST
+   threshold it sees from a given origin and MUST refuse (loudly, in-app; the site learns nothing)
+   any later request from that SAME origin for a DIFFERENT threshold — the same per-origin binding
+   shape as D38's key binding. The app MUST also carry an exact-hostname exception allowlist (no
+   wildcards) of sites permitted to ask more than one threshold; membership is an app-side
+   decision, never the verifier's own choice (a rogue verifier could otherwise just ask for
+   whatever it wants — an unrestricted "over 43" request). Touches `RequestTrust.thresholdOf`
+   (Q35's parse path) and needs a small per-origin persisted record — same persistence class
+   already built for item 23's log store (D70(b)), not a new storage mechanism. Riskiest
+   assumption to POC first: does the per-origin lock need to survive reinstall? Answer: NO — the
+   lock is per-install state, like every other on-device record in this app, and this MUST be
+   disclosed rather than treated as a gap to close (reinstalling the app resets the lock, exactly
+   as it resets the log and any bound key). Limitation to state alongside this item, not hidden: a
+   site that legitimately needs two thresholds must run two separate origins; a single owner
+   operating many origins to route around the lock is not covered by this item, the same
+   disclosed-not-mitigated shape every other mode-A limitation in this PRD already takes. Applies
+   in mode A too — the per-origin memory is on-device state, never anything that crosses the wire.
+2. **S2 (ENHANCEMENT, D74) — the question shown before the tap.** The app MUST show the exact
+   question being asked — e.g. "This website asks if you are over 18" — above the Verify button,
+   before the user taps it. The question text MUST be sourced from the signed request object
+   (Q35's parse path — the same threshold/tier fields item 1 above locks against), never a fixed
+   hardcoded string, so the shown question always matches what is actually about to be sent. A
+   bare local scan with no pending verified request MUST show "Local scan (no site)" instead, per
+   D46's existing wording for that case. This extends D47's disclosure requirement to the
+   pre-action moment, not just the post-outcome dialog.
+3. **S3 (ENHANCEMENT, owner UI feedback 2026-09-03) — scan-pane cleanup.** Owner, verbatim: "big
+   blob of text top screen, and below a place for manual av:// paste and it still reads the result
+   below it, clean all that up." Read against the actual layout
+   (`apps/scanner/app/src/main/res/layout/activity_main.xml`,
+   `apps/scanner/app/src/main/java/com/tananaev/passportreader/MainActivity.kt`) this identifies
+   three concrete elements: (a) the "blob of text" is `@+id/description`
+   (`@string/info_scan_passport`), a five-sentence paragraph combining form instructions with
+   §6.2 item 5's no-document-field-storage disclosure — it renders at full length on every screen
+   view, not just first run; (b) the manual paste field is `@+id/handoff_manual_input` inside the
+   `handoff_container` block (`@string/handoff_manual_hint`, "…or paste an av:// link /
+   request_uri") — per the layout's own comment this is the documented fallback-of-the-fallback
+   for the cross-device QR path (D69), not a dev/debug-only affordance, which matters for where it
+   may be relocated to; (c) `@+id/report_view` (the value-free verdict/report, §6.2 item 5) sits
+   directly below `handoff_container` in the same vertical `ScrollView`, so its screen position
+   shifts whenever the handoff block's height changes (e.g. `handoff_status` text growing) —
+   this is the "reads the result below it" complaint. **DP7 resolved** (owner, 2026-09-03: "ok,
+   make it cleaner then, move it up above scan/verify and above it what this website is asking to
+   verify and then once pasted, wthout active av it shows verify button replacing scan, or easier,
+   it always overrides whatever is there"). Scan-pane order, top to bottom: (1) the S2 question
+   line (item 2 above) — "This website asks if you are over 18," sourced from the signed request,
+   or "Local scan (no site)" (D46) when nothing is pending; (2) the manual `av://` / request_uri
+   paste field, kept — per (b) it is D69's documented fallback-of-the-fallback, not disposable —
+   moved UP to sit directly under the question line; (3) the single Scan/Verify button (item 20's
+   verb rule unchanged: "Tap and verify" when a request is pending, "Tap and scan" bare); (4) the
+   report/result view (`report_view`, §6.2 item 5) in a FIXED position below the button,
+   independent of the handoff block's height, resolving (c) above. The old `description` text
+   block (a) is gone from the pane entirely; the item 5 no-storage disclosure it carried moves to
+   a persistent but non-primary location (an info/About affordance), not deleted, since D1/NO-GO
+   #7's disclosure obligations don't lapse.
+
+   Paste semantics — history (owner, 2026-09-03, superseded same day by the rule below): "it always
+   overrides whatever is there"; "once pasted it nullify whatever is there"; "if that would cause a
+   loop hole to your no link mid-read then we can ask user to close the app and reopen it for a
+   fresh paste." These quotes described the earlier always-replaces-on-paste design (bare field,
+   refused-mid-read via a D43 dialog, close-and-reopen). They are kept here as history only — the
+   rule actually approved is the one below, from owner question 2026-09-03 ("what's the final
+   sane/safe choice of link pasting that is deliberate? i see few solutions, one is a button paste
+   link that changes into text and paste then press verify, that's a deliberate clear/reset, or
+   paste itself is an active reset, or restart app if an active link paste would be dimmed...") and
+   approval "yes both, write them in" (D75).
+
+   Paste semantics (final, D75): the pane carries a **"Paste link" button**, not a bare text field.
+   Idle or pending state: tapping it reveals the paste field; the pasted `av://`/request_uri is
+   applied deliberately — the S2 question line (item 2 above) updates from the pasted request, any
+   previously pending request is discarded, and the Scan/Verify button becomes "Tap and verify"
+   (item 20's verb rule). This is the deliberate clear/reset; a bare always-visible field is
+   rejected because an accidental clipboard paste could silently replace a real pending request
+   from the site the user is on. Locked / read-in-progress state: the "Paste link" button is
+   **dimmed/disabled** with a one-line non-interactive hint: "Finish this scan, or close and reopen
+   the app to paste." No dialog, no abort control; in-flight work is never cancelled (item 13's
+   admission guard, finding #10's mitigation, `HandoffAdmission`, unchanged). Dimming replaces the
+   earlier D43-dialog wording because nothing happened that needs acknowledging. "Paste itself
+   resets" (a bare field acting on paste) is explicitly rejected: it is the only variant where the
+   app changes state without a deliberate press.
+
+   References so nothing already decided is silently undone: §6.2 item 4 (mode capture, no
+   re-added control), item 13 (admission guard / `HandoffAdmission`, the LOCKED-paste refusal
+   above), item 17 (switch to scan pane on handoff intent), item 20 (verify-vs-local control and
+   button verb), item 25 (mode sentence in the outcome dialog); decisions.md D43 (blocking
+   dialogs), D46 ("Local scan (no site)" wording), D47 (disclosure), D52 (dialog strings); finding
+   #10 (the mint-path race this reuses the admission guard against) — none of those mechanisms are
+   altered by this cleanup beyond what is stated above.
+
+Play Store listing: see §6.6.
+
+## 6.6 Play Store closed-testing track (owner-approved 2026-09-03, D75) — its own item, not M3/M3b; opens after §6.3 item 10's POC passes
+
+1. First upload goes to a **closed testing track**, never production, using the current release
+   line (v0.5.0 or later under D72 lockstep). Production is a separate, later owner decision.
+2. Deliverable 1: the **Play App Signing certificate digest**. Rationale: FR10 makes the scanner's
+   signing-cert digest its identity in every verifier's trust list (D17); Play App Signing
+   re-signs the APK, so the Play-distributed build has a DIFFERENT digest from local builds —
+   every verifier config, including the M3 demo (§6.3 item 8), MUST pin the Play digest (alongside
+   or instead of the local one, owner to decide when known). Record the digest in the evidence
+   log, never assume.
+3. Deliverable 2: the **list of review objections/requirements** Google raises (data safety form,
+   NFC permission, identity/sensitive-data scrutiny, target API level), recorded as evidence and
+   fed into the PRD before M3b.
+4. Note: new personal developer accounts must run a closed test with a minimum tester count over a
+   fixed period before production access is granted — starting early costs nothing; the exact
+   numbers are Google's current policy and MUST be checked at the time, not copied from this doc.
+5. MUST NOT: no production release from this item; no store listing text that markets v1 as
+   zero-knowledge (NO-GO #7, D1); no PII in screenshots (use the demo's value-free report view).
+6. Riskiest assumption to test first: that a passport-NFC-reading app with no backend passes
+   closed-track review at all.
 
 ## 7. Riskiest-assumption register (what M0 must answer)
 

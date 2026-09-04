@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — open questions Q1–Q48
+title: zkagent — open questions Q1–Q49
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# zkagent — open questions Q1–Q48
+# zkagent — open questions Q1–Q49
 
 Deduped index of PRD §11 (Open questions). Every Qn from Q1–Q48 is listed in order;
 narrative status-update chains, commit/test-count histories, and line anchors from
@@ -48,7 +48,14 @@ this is flagged in the report back to the caller.
 - **Q11 (M3, mode B only)** — Whether an adopter-chosen age threshold enables
   binary-search probing of a holder's exact date of birth. Status: OPEN — D13
   shrinks the risk in mode A; decide before M3 whether a fixed threshold set is
-  still needed in mode A vs. mode B only. (zkagent-prd.md:1806-1806)
+  still needed in mode A vs. mode B only. **Must close before M3 build — see
+  milestones.md §6.3 item 6 / DP4 (D73, 2026-09-03): M3 ships threshold 18 only,
+  no picker, pending this question's resolution.** **CLOSED by D74 (2026-09-03).**
+  Summary: preset published threshold list `{15,16,18,21,60,65}`, first-seen
+  threshold locked per origin, exact-hostname exception allowlist, question shown
+  above the Verify button before the tap — removes the binary-search space rather
+  than rate-limiting it; scanner build tracked as milestones.md §6.5 S1/S2.
+  (zkagent-prd.md:1806-1806)
 - **Q12 (M0/M3)** — Which ICAO documents (beyond passports) are actually readable
   by the JMRTD path used. Status: OPEN, empirical — do not state coverage numbers
   in any pitch until M0 reports per-country results. (zkagent-prd.md:1807-1807)
@@ -144,7 +151,9 @@ this is flagged in the report back to the caller.
   vocabulary beyond age (e.g. document-expiry buckets). Status: OPEN — D49 settled
   only the rendering SHAPE (a list of predicate→boolean pairs); which claims exist,
   their per-tier limits, and cumulative-disclosure cost remain undecided and need
-  their own design pass and riskiest-assumption POC. (zkagent-prd.md:2034-2060)
+  their own design pass and riskiest-assumption POC. **Cross-referenced 2026-09-03
+  (D73): this is M3b's problem, not M3's — see milestones.md §6.4 (M3b scope
+  placeholder) item 1.** (zkagent-prd.md:2034-2060)
 - **Q35 (descendant of Q33 part a)** — The scanner must read the already-signed,
   nonce-bound `zkagent.challenge.threshold` field instead of its hardcoded `18`.
   Status: FIXED-IN-this commit — `RequestTrust.thresholdOf` (pure extractor,
@@ -396,3 +405,12 @@ this is flagged in the report back to the caller.
   `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md` check 11 (FAIL)
   and section 13.2 (fix confirmed); see milestones.md §6.2 item 24,
   decisions.md D70(c).
+- **Q49 (opened 2026-09-03, M3b-shaped)** — How an operator's issuer key actually
+  gets pinned into a real tier-C deployment. Status: OPEN — D20 settles the
+  protocol-level mechanism (`trustedChallengeIssuers: [{pubkey, maxTier}]`,
+  unsigned challenges refused at tier C) but not the UX of getting a specific
+  key into that list for a live operator, nor whether "preapproved list" (the
+  owner's phrase, D73) means a HOLDER-side consent list or a VERIFIER-side
+  request list — these differ in trust boundary and are not interchangeable.
+  Must be resolved before M3b is written into the PRD. See milestones.md §6.4
+  item 3; decisions.md D20, D73.
