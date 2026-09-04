@@ -170,17 +170,23 @@ here may be built ahead of owner sign-off (D73 is a record of the split, not an 
    until the second presentation arrives, then "Both scans received." (owner, 2026-09-03: "field
    table, and be clear scan 1 done, waiting scan 2 on the page simple header")
 6. **Fixed threshold: 18 only (DP4 resolved by D74).** M3 MUST hardcode/request threshold 18
-   only. The demo runs against the already-released scanner APK as-is (item 13) — the preset
+   only. The demo runs against the released scanner source unmodified, sideloaded as the debug
+   variant (`app-regular-debug.apk`, D76) (item 13) — the preset
    threshold list, per-origin threshold lock, and the exact-hostname exception allowlist are
    scanner-side items and are NOT M3 scope; see §6.5 items S1–S2. Q11 is CLOSED by D74. (owner,
    2026-09-03: "agreed" to the threshold-policy proposal recorded in full at D74)
-7. **Hosting.** The demo is a local Node process an operator runs on their own machine (the
-   spike's `127.0.0.1:8788` / LAN-IP pattern) — reachable from the phone via the LAN exactly as
-   the spike already does. NO online hosting is in scope for M3; the "public host" option is
-   removed entirely. D38's per-origin key binding still applies: the origin MUST be stable
-   across the operator's session — a changing origin resets every bound key. (owner, 2026-09-03:
-   "this a node you run locally for testing, no online hosting, it's for anyone to download the
-   app from playstore and run it")
+7. **Hosting.** The demo is a local Node process an operator runs on their own machine, reached
+   from the phone at `http://127.0.0.1:8787` via USB `adb reverse tcp:8787 tcp:8787` against the
+   sideloaded debug build (`app-regular-debug.apk`), both handoff paths kept (same-device `av://`
+   link and QR) — no LAN-IP reachability is required or in scope (D76 supersedes the earlier
+   LAN-IP pattern). NO online hosting is in scope for M3; the "public host" option is removed
+   entirely. D38's per-origin key binding still applies: the origin MUST be stable across the
+   operator's session — a changing origin resets every bound key. Why: the scanner's network
+   security config trusts only `system` CAs in both debug and release builds, so a plain
+   LAN-IP `http://` origin and a self-signed HTTPS cert are both refused by the released APK —
+   `adb reverse` onto the debug build's own localhost cleartext allowance is what actually works
+   without a scanner change (D76). (owner, 2026-09-03: "this a node you run locally for testing,
+   no online hosting, it's for anyone to download the app from playstore and run it")
 8. **Trust list (FR10).** The demo's verifier config MUST pin the M2 scanner's package name and
    signing-cert digest as its one accepted client identity — no other client is accepted.
 9. **MUST NOT.** No tier C (M3b only); no ZK-marketing language (NO-GO #7, D1); no PII
@@ -191,11 +197,11 @@ here may be built ahead of owner sign-off (D73 is a record of the split, not an 
    closed, not silently in-memory (M5's fail-closed rule, D3, applied early).
 10. **Opening riskiest-assumption POC.** Before any of the easy parts (page styling, README) are
     built: duplicate-zktag rejection against the persistent store (item 3) survives a server
-    restart, on both real documents (US passport, NL ID card), plus one handoff exercised from a
-    hosted, non-localhost origin (item 7) reached from the phone's own browser. Pass = both
-    documents mint on first scan, both are refused as "already registered" on a second scan, the
-    refusal still holds after the server process is killed and restarted, and the hosted-origin
-    handoff completes end-to-end exactly like the existing localhost spike does.
+    restart, on both real documents (US passport, NL ID card), plus one handoff exercised the way
+    item 7 specifies (D76). Pass = both documents mint on first scan, both are refused as "already
+    registered" on a second scan, the refusal still holds after the server process is killed and
+    restarted, and the handoff completes end-to-end from the phone's own browser at
+    `http://127.0.0.1:8787` over `adb reverse`, against the sideloaded debug build.
 11. **Exit criteria.** See the table below this list; mirrors §6.2's Exit criteria shape (one row
     per checkpoint, device-confirmed column).
 12. **Versioning and location.** M3 ships under D72's lockstep versioning (one repo version,
@@ -203,11 +209,14 @@ here may be built ahead of owner sign-off (D73 is a record of the split, not an 
     `apps/demo/`, created by moving `spikes/m2-handoff` there (`git mv`, preserving history) and
     then evolving it; the spike README's THROWAWAY label MUST be removed on the move. (owner,
     2026-09-03: "apps/demo")
-13. **"Test right away" means concretely.** A README with a run recipe of 10 lines or fewer
-    (install, configure origin, start, done); the page MUST work against the already-released
-    scanner APK as-is — no scanner-side (`apps/scanner`) changes required for M3. If any item
-    above is found to need a scanner change while building, that need MUST be flagged back to
-    the owner before work continues (scope-gate escalation, not a silent scanner edit).
+13. **"Test right away" means concretely.** A README with a run recipe of 10 lines or fewer:
+    install adb, enable USB debugging, install the APK, `adb reverse tcp:8787 tcp:8787`,
+    `npm install`, `npm start`, open `http://127.0.0.1:8787` in the phone's browser (D76); the
+    page MUST work against the released scanner source unmodified, sideloaded as the debug
+    variant (`app-regular-debug.apk`, D76) — no scanner-side
+    (`apps/scanner`) changes required for M3. If any item above is found to need a scanner
+    change while building, that need MUST be flagged back to the owner before work continues
+    (scope-gate escalation, not a silent scanner edit).
 
 Play Store listing: NOT an M3 item — see §6.6 (owner, 2026-09-03).
 
@@ -215,12 +224,12 @@ Play Store listing: NOT an M3 item — see §6.6 (owner, 2026-09-03).
 
 | Check | Pass | Status |
 |---|---|---|
-| Opening POC (item 10) | Duplicate-zktag rejection survives a server restart, both documents; hosted-origin handoff completes | Not run |
-| Tier-B duplicate rejection (item 4) | Second scan of the same document at this site shows "already registered"; chip_auth caveat disclosed | Not run |
+| Opening POC (item 10) | Duplicate-zktag rejection survives a server restart, both documents; handoff completes end-to-end from the phone's own browser at `http://127.0.0.1:8787` over `adb reverse`, against the sideloaded debug build | Passed, device-confirmed 2026-09-04 — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
+| Tier-B duplicate rejection (item 4) | Second scan of the same document at this site shows "already registered"; chip_auth caveat disclosed | POC pass post-restart; pre-restart same-document repeat and page string not yet device-verified — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
 | Payload/store display (item 3) | Page displays what the app sent back (verdict/presentation payload from `chiproof`) and the store's relevant state for the transaction (e.g. zktag-already-seen yes/no) | Not run |
 | Tier-A indistinguishability (item 5) | Page-visible comparison of two tier-A presentations shows no distinguishing field | Not run |
 | Fixed threshold (item 6) | No threshold picker present; threshold 18 enforced | Not run |
-| Hosting (item 7) | Demo reachable from the phone's own browser at a stable, non-localhost origin | Not run |
+| Hosting (item 7) | Demo reachable from the phone's own browser at `http://127.0.0.1:8787` via `adb reverse`, against the sideloaded debug build (D76) | Passed, device-confirmed 2026-09-04 — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
 | Trust list (item 8) | Demo verifier rejects a client identity other than the pinned scanner package+cert digest | Not run |
 | No scanner changes (item 13) | Demo works against the released scanner APK unmodified | Not run |
 
@@ -364,6 +373,13 @@ alongside M3b without a further gate check.
 Play Store listing: see §6.6.
 
 ## 6.6 Play Store closed-testing track (owner-approved 2026-09-03, D75) — its own item, not M3/M3b; opens after §6.3 item 10's POC passes
+
+This track remains **showcase-only** (not M3's reachability answer): M3 reaches the scanner via
+`adb reverse` against a sideloaded debug build (D76), and nothing here changes that. How a
+Play-installed (non-sideloaded) user would reach a verifier over HTTPS at all — the demo's plain
+Node process has no public HTTPS origin, and D76 rejected zkagent hosting one itself (NO-GO #3)
+— is not solved by M3 and is parked as **Q50** (questions.md), open. Owner, 2026-09-04:
+"playstore will be clearer when we get to it."
 
 1. First upload goes to a **closed testing track**, never production, using the current release
    line (v0.5.0 or later under D72 lockstep). Production is a separate, later owner decision.

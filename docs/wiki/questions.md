@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — open questions Q1–Q49
+title: zkagent — open questions Q1–Q50
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# zkagent — open questions Q1–Q49
+# zkagent — open questions Q1–Q50
 
 Deduped index of PRD §11 (Open questions). Every Qn from Q1–Q48 is listed in order;
 narrative status-update chains, commit/test-count histories, and line anchors from
@@ -414,3 +414,12 @@ this is flagged in the report back to the caller.
   request list — these differ in trust boundary and are not interchangeable.
   Must be resolved before M3b is written into the PRD. See milestones.md §6.4
   item 3; decisions.md D20, D73.
+- **Q50 (opened 2026-09-04, parked by D76)** — How does a Play-installed (non-sideloaded) user
+  reach a verifier over HTTPS at all? M3's origin is fixed to `http://127.0.0.1:8787` via
+  `adb reverse` against a sideloaded debug build (D76) precisely because the scanner's network
+  security config refuses both plain LAN-IP `http://` and self-signed HTTPS, and zkagent hosting
+  a real verifier itself was rejected (NO-GO #3/D3, one global zktag registry across testers).
+  None of that gives a Play-distributed (non-debug, non-sideloaded) install any route to a
+  verifier over HTTPS — that gap is not addressed by M3 at all. Status: OPEN, explicitly NOT
+  solved in M3. Owner, 2026-09-04: "playstore will be clearer when we get to it." See
+  milestones.md §6.3 item 7, §6.6; decisions.md D76.
