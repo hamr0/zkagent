@@ -1,278 +1,219 @@
-# apps/demo — M3 demo verifier website (moved from spikes/m2-handoff, D73)
+# apps/demo — M3 age-gate demo (PRD §6.3, D73–D76)
 
-Not published to npm (`private: true`), no PII, rung-1 / mode A+B / age-verification
-only. Moved from `spikes/m2-handoff` to `apps/demo` per PRD §6.3 item 12 (`git mv`,
-history preserved) — no longer a throwaway spike, now real kept code evolving under
-M3's scope gate (§6.3). Layout, README, and field-display polish are POST-POC work;
-this file still describes the pre-move spike shape until that pass lands.
+The M3 vanilla demo: a plain HTML/CSS/JS website (no framework, no build step) that plays the
+role of an adopter's OWN verifier around `chiproof` (the M1 verdict core). It is meant as a
+mockup any operator can run and test the M2 scanner app against right away — "clean and
+precise," owner's words (D73). No PII is ever shown or sent: tier A and tier B (D19) carry
+none.
 
-A zero-dependency (beyond `chiproof`, consumed as-is via `file:../../packages/chiproof`)
-Node verifier website implementing the EU-Blueprint-shaped same-device flow recorded in
-`docs/logs/M2-CAPTURE.md` Finding 1 (reference verifier `av-web-verifier-ui`):
+Two buttons on one page:
+- **"Prove you're over 18"** (tier A) — bare evidence, captcha-grade (D27).
+- **"Prove you're a unique adult human"** (tier B) — requires `sig-ed25519/1` or `sig-p256/1`
+  evidence (D31) and rejects a second scan of the same document at this site as
+  "already registered" (§6.3 item 4).
+
+## Run (≤10 lines, D76)
+
+```
+adb --version                                # 1. confirm adb is installed
+adb devices                                  # 2. enable USB debugging, confirm the phone shows up
+adb install app-regular-debug.apk            # 3. sideload the M2 scanner debug build, unmodified
+adb reverse tcp:8787 tcp:8787                # 4. forward the phone's localhost:8787 to this machine
+cd apps/demo && npm install                  # 5. install deps (chiproof + qrcode)
+LINK_SCHEME=av npm start                     # 6. start the verifier on http://127.0.0.1:8787
+```
+Then open `http://127.0.0.1:8787` in the phone's own browser (Chrome) — 7. This is the ONLY
+supported origin for M3 (D76): the scanner's network security config trusts cleartext HTTP
+only to `127.0.0.1`/`localhost`/`10.0.2.2` in debug builds and to nothing at all in release, so
+a LAN-IP origin or a self-signed HTTPS cert is refused by the released APK. No scanner-side
+change is required or in scope (§6.3 item 13).
+
+## Wire steps
 
 | Wire step | Endpoint here | Capture source |
 |---|---|---|
-| page creates transaction | `POST /ui/presentations` | Finding 1, website/backend side |
+| page creates transaction | `POST /ui/presentations` | `docs/logs/M2-CAPTURE.md` Finding 1, website/backend side |
 | app fetches request by reference | `GET /wallet/request.jwt/{requestId}` — **ES256-signed request object** (compact JWS, JAR/RFC 9101, `typ: oauth-authz-req+jwt`, content-type `application/oauth-authz-req+jwt`) | Finding 1, wallet/app side; reference verifier signs ES256 by default |
 | app POSTs response (browser never sees it) | `POST /wallet/direct_post` (form-encoded) | Finding 1, `response_mode` MUST be `direct_post` |
 | page polls for verdict | `GET /ui/presentations/{transactionId}` | Finding 1, website/backend side |
 
-`chiproof` is the verdict core: the presentation request carries a chiproof challenge
-(tier A, bare evidence set `evidence: []` per D27); `direct_post`'s payload is verified
-with `verify()`; the poll endpoint returns the chiproof verdict shape unmodified
-(never throw; `ok:false` ⇒ `allowed:null`).
+`chiproof` is the verdict core: the presentation request carries a chiproof challenge; the
+`direct_post` payload is verified with `verify()`; the poll endpoint returns the chiproof
+verdict shape unmodified (never throw; `ok:false` ⇒ `allowed:null`), plus two sibling fields
+this demo itself adds — `presentation` (the received presentation payload, for the tier-A
+comparison table below) and `zktag_seen_before`/`already_registered` (this demo's own
+dedupe state — chiproof stores nothing, D3/FR3).
 
-## Run
+## Both handoff paths (§6.3 item 2)
 
-```
-cd spikes/m2-handoff
-npm install          # installs only chiproof from ../../packages/chiproof
-npm test             # node --test — roundtrip + negatives against a real HTTP server
-npm start            # http://127.0.0.1:8787 — age-gate demo page
-node scripts/fake-wallet.mjs --base http://127.0.0.1:8787 [--mode valid|tamper|expired]
-```
+- **Same-device app link** — tap the link shown on the page (`av://` custom scheme, or an
+  `https` app link; `LINK_SCHEME` selects which — see Config below). The POC evidence in
+  `docs/logs/M3-POC-EVIDENCE-2026-09-04.md` used `av://` in-page taps against `LINK_SCHEME=av`.
+- **Cross-device QR** — the page also renders a scannable QR image (`qrcode` npm package,
+  D68 part b) of the same `av://` link, for a second phone's camera app (D69: the scanner
+  carries no in-app QR/camera-scanning dependency itself — the QR is scanned by whatever
+  camera app the person already has, which lands on the scanner's existing `av://` intent
+  filter, the identical code path a same-device tap uses).
 
-`scripts/fake-wallet.mjs` plays the phone's role headlessly (fetch request.jwt → build
-tier-A presentation → direct_post → poll), so the whole roundtrip is provable without
-the Pixel. `--mode tamper` edits `challenge.expires_at` after minting (breaks the D20
-HMAC seal → `nonce_forged`); `--mode expired` waits out a short-TTL challenge.
+## Tier-A comparison table (§6.3 item 5, DP3)
 
-Config (env): `PORT`, `LINK_SCHEME` (`https` app link primary, `av` custom-scheme
-variant per the Blueprint AV Profile), `APP_LINK_BASE`, `SCOPE_DOMAIN`,
-`CHALLENGE_SECRET` (dev default baked in — spike only), `REQUEST_SIGNER_KID`/`REQUEST_SIGNER_PRIVKEY_PEM`.
+The page keeps the last two tier-A presentations in browser-tab memory (a reload resets this —
+the page says so) and renders a per-field diff, computed by `compare.mjs`. That file is served
+as-is at `GET /compare.mjs` and imported unmodified by the page (`<script type="module">`) —
+the SAME file `tests/compare.test.mjs` exercises with `node --test`, so there is exactly one
+copy of the diff logic, not a page-script reimplementation.
+
+**Fields actually shown** (enumerated by inspecting what `direct_post` receives for tier A —
+none of them PII): `spec`, `tier`, `claim.over_threshold`, `claim.threshold`,
+`challenge.tier`, `challenge.verbs`, `challenge.threshold`, `challenge.max_scan_age`,
+`challenge.issued_at`, `challenge.expires_at`, `challenge.nonce`, `evidence`.
+
+**Correction to §6.3 item 5's wording, device-verified 2026-09-04**: the PRD text says "only
+the fresh nonce and its signature may ever land in the differs column." On a real two-scan run
+this demo's own tier-A challenge is UNSIGNED (D20: unsigned challenges are accepted at tiers
+A/B) — there is no `signature` field at all — and `challenge.issued_at`/`challenge.expires_at`
+differ too, every time, because each challenge is minted fresh (`Date.now()`) at the moment the
+button is tapped, not at page load. The page's caption states this honestly and computes the
+differing-fields list live from the real diff rather than asserting the PRD's literal sentence,
+which would be untrue for this build's actual payload shape. Flagged for the owner; not decided
+here — see the "Open questions" section below.
+
+## Tier-B "already registered" (§6.3 item 3/4)
+
+A second tier-B scan of the same document at this site renders a distinct "Already registered
+at this site" block (not a prefix on the allowed line), plus "zktag already seen at this site:
+yes/no" and the raw verdict JSON, all above the fold.
+
+**Chip-authentication caveat (D29), disclosed on every load** (collapsible "About this demo"):
+a document without chip authentication (`chip_auth: false` — e.g. some passports) is
+clone-replayable: a cloned document mints the identical zktag as the genuine holder's, so
+"unique adult human" is only as strong as chip authentication allows. This is an accepted,
+stated limitation, not something this demo (or M3) mitigates.
+
+## Store: location and reset
+
+One flat JSON file (`store.mjs`, `JsonFileStore`) backs nonces, both attester-key bindings, and
+the zktags-seen dedupe state — persistent across restarts, no in-memory fallback (fail closed,
+§6.3 item 9). Default path: `apps/demo/data/store.json` (override with `DEMO_STORE_PATH`).
+
+**To reset the demo** (forget every zktag/device-key binding and start fresh): stop the server
+and delete the store file (`rm apps/demo/data/store.json`, or whatever `DEMO_STORE_PATH`
+points at) — the next start recreates an empty one. There is no in-app reset control by design
+(§6.3 item 9: no store fallback to in-memory once the demo is running in a persistent/
+operator-facing mode).
+
+## Config (env)
+
+| Var | Default | Meaning |
+|---|---|---|
+| `PORT` | `8787` | listen port |
+| `BIND_HOST` | `127.0.0.1` | listen address |
+| `LINK_SCHEME` | `https` | `av` for the custom-scheme app link (used in the M3 POC evidence run); `https` for the app-link variant |
+| `APP_LINK_BASE` | `https://wallet.example.invalid/authorize` | where the `https` app link points (no online hosting is in scope for M3, D76 — this stays a non-resolving placeholder unless an operator has a real wallet app-link host) |
+| `SCOPE_DOMAIN` | `127.0.0.1` | must match the HOST the phone's request actually arrives on (D37) — stays `127.0.0.1` for the `adb reverse` recipe above |
+| `CHALLENGE_SECRET` | dev-only baked-in default | HMAC key sealing the challenge nonce — a real deployment supplies its own (≥16 bytes) |
+| `DEMO_STORE_PATH` | `apps/demo/data/store.json` | the persistent store file (see above) |
+| `ATTESTER_KEY_ID` / `ATTESTER_PUBKEY_PEM` | DEV_ATTESTER (Ed25519) | pinned mode-B attester key, Ed25519 alternative |
+| `ATTESTER_P256_KEY_ID` / `ATTESTER_P256_PUBKEY_PEM` | DEV_ATTESTER_P256 | pinned mode-B attester key, P-256 alternative |
+| `REQUEST_SIGNER_KID` / `REQUEST_SIGNER_PRIVKEY_PEM` | DEV_REQUEST_SIGNER | request-object (JAR) signing key |
+
+Threshold is **hardcoded to 18** (§6.3 item 6, DP4/D74) — there is no `THRESHOLD` env override
+and no picker on the page; the preset-bracket / per-origin-lock / named-exception policy D74
+actually specifies is scanner-side work (§6.5 S1/S2), not M3 scope.
+
+## Trust list (FR10) — finding, not implemented
+
+§6.3 item 8 requires the verifier to pin the M2 scanner's package name and signing-cert digest
+as its one accepted client identity. **This does not exist anywhere in this demo or in
+`chiproof` today**, and it is NOT added by this change — see "Open questions" below. Nothing
+in the current OpenID4VP-shaped wire contract (`POST /wallet/direct_post`) carries a package
+name or signing-cert digest at all; the scanner's HTTP client is indistinguishable from any
+other HTTP client at this layer. Building this would mean adding a new field to what the
+scanner sends (a wire-contract change) and/or a device-attestation channel (e.g. Play
+Integrity, gated behind Track Z per D23) — both out of M3 scope (item 13: no scanner-side
+changes) and escalated to the owner rather than invented here.
+
+## Open questions (escalated, not decided in this change)
+
+1. **§6.3 item 5's "only nonce+signature differ" wording** — see the tier-A comparison section
+   above. The real diff also flags `challenge.issued_at`/`challenge.expires_at` because tier-A
+   challenges here are unsigned (no `signature` field exists at all) and are freshly
+   timestamped every scan. The page's caption lists the actual differing fields rather than
+   asserting the PRD's literal sentence. Needs owner sign-off: is this acceptable as-is, or
+   should chiproof's challenge shape change to make issued_at/expires_at derivable rather than
+   stored per-challenge (a chiproof-level change, out of scope here)?
+2. **Trust list / FR10 (item 8)** — see above. No implementation exists; needs an owner
+   decision on whether/how to add a client-identity channel to the wire contract, and (once a
+   real APK is signed) the actual package name + signing-cert digest, which can only come from
+   `apksigner`/`keytool` run against the installed APK — not invented here.
 
 ## Deliberate simplifications (recorded, not hidden)
 
-- **RESOLVED (owner decision 2026-08-31): `request.jwt` is now ES256-signed.**
-  `jws.mjs` (stdlib-only compact JWS: ECDSA P-256/SHA-256, ieee-p1363 signatures)
-  signs the exact request-object JSON as claims, matching the reference verifier's
-  default; the fake wallet verifies against the pinned dev signer pubkey and
-  REFUSES (exit 3, before any `direct_post`) on a bad signature — covered by a
-  rogue-relay negative test. Dev keypair in `dev-request-signer-key.mjs`
-  (dev-only, like the attester key); env overrides `REQUEST_SIGNER_KID`,
-  `REQUEST_SIGNER_PRIVKEY_PEM` (server) / `REQUEST_SIGNER_PUBKEY_PEM` (wallet).
-- **The DCQL block is shape-only.** It matches the captured query (`mso_mdoc`,
-  doctype `eu.europa.ec.av.1`, claim `age_over_18`) but the credential actually
-  verified is chiproof's `zkagent/1` presentation riding in the request's `zkagent`
-  member — this spike is not an mdoc verifier and makes no interop claim (PRD §5).
-- **QR is rendered as an image (D68 part b, 2026-09-03).** `POST
-  /ui/presentations` returns `qr`, a `data:image/png;base64,...` QR code of
-  `app_link_av`, via the `qrcode` npm package (pinned exact version,
-  spike-only — never added to `packages/chiproof`). The text link is still
-  shown alongside it.
-- **Cross-device route is a camera app, not an in-app scanner (D69,
-  2026-09-03, supersedes D68 part b).** `apps/scanner` carries no QR/camera
-  scanning dependency at all — the Google Code Scanner API tried under
-  D68(b) was removed the same day after a device test showed it still runs
-  in a Play services process and pulls Google's telemetry into the merged
-  manifest. This page's rendered QR image (above) is the whole cross-device
-  contract: the person scans it with whatever camera app they already have,
-  and that app's own `av://` VIEW intent lands directly on the scanner's
-  existing intent filter — the identical code path a same-device link uses.
-  Device-proven twice (12:19:28, 12:19:38) —
-  `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 7.
-- **`ttlMs` in `POST /ui/presentations`** is a spike-only affordance so the expiry
-  negative is testable; not part of the captured shape.
-- **`InMemoryNonceStore` with `allowInMemoryStore: true`** — single-process demo, the
-  documented demo carve-out; a real deployment needs an atomic store.
+- **The DCQL block is shape-only.** It matches the captured query (`mso_mdoc`, doctype
+  `eu.europa.ec.av.1`, claim `age_over_18`) but the credential actually verified is chiproof's
+  `zkagent/1` presentation riding in the request's `zkagent` member — this demo is not an mdoc
+  verifier and makes no interop claim (PRD §5).
+- **`ttlMs` in `POST /ui/presentations`** is a testing affordance so the expiry negative is
+  exercisable without waiting out the real TTL; not part of the captured wire shape.
 - **Verdict semantics note:** a tampered/expired challenge is a *real no* in chiproof
-  (`{ok:true, allowed:false, reason:'nonce_forged'|'challenge_expired'}`), not
-  `ok:false` — `ok:false` is reserved for "could not check" and always carries
-  `allowed:null`. The load-bearing negative invariant is that the poll never says
-  `allowed:true`; the tests assert exactly that plus the §3 invariant.
-- **D28**: `current_date`/`max_scan_age` coarsening is client-side; the only trace here
-  is a comment in `fake-wallet.mjs` at the point a real client would coarsen (this bare
-  tier-A flow carries no scan evidence, so it is a no-op).
+  (`{ok:true, allowed:false, reason:'nonce_forged'|'challenge_expired'}`), not `ok:false` —
+  `ok:false` is reserved for "could not check" and always carries `allowed:null`.
+- **D28**: `current_date`/`max_scan_age` coarsening is client-side; this bare tier-A/B flow
+  carries no scan-dated evidence, so there is nothing to coarsen here.
 
-## Pending / flagged elsewhere
+## Mode B: `sig-ed25519/1` OR `sig-p256/1` (D30/D31)
 
-- `docs/index.md` row for this spike — not edited here by rule.
-- Step (c): the Pixel 6a plays `fake-wallet.mjs`'s role over the same wire.
+`POST /ui/presentations` with `{"mode":"B"}` mints a tier-B challenge; the request's `zkagent`
+member carries `evidence_required: [["sig-ed25519/1", "sig-p256/1"]]` — an any-of alternatives
+group (D31), not one fixed required plug. The device picks whichever its Keystore actually
+produced; the verifier accepts either, pinning both attester pubkeys by default
+(`ATTESTER_*`/`ATTESTER_P256_*` env vars above, both DEV-ONLY unless overridden).
 
-### Android app: cleartext scoped to the dev host (review finding fix)
+### Per-origin device keys, trust-on-first-sight (D38)
 
-`android/app/src/main/AndroidManifest.xml` no longer sets app-wide
-`android:usesCleartextTraffic="true"` (that permitted plaintext HTTP to ANY
-host). It now points `android:networkSecurityConfig` at
-`android/app/src/main/res/xml/network_security_config.xml`, which permits
-cleartext ONLY for `127.0.0.1` — the `adb reverse` dev host the server
-listens on — and denies it everywhere else via `base-config`.
-**UNBUILT / UNVERIFIED ON DEVICE**: this is a config-only change; the APK was
-not rebuilt and this was not re-run on the Pixel 6a as part of this fix.
+A presentation may carry the device key's own `pubkey` (SubjectPublicKeyInfo DER, base64)
+alongside `key_id`; the verifier recomputes `key_id` from `pubkey` and refuses a mismatch. An
+unpinned `pubkey` is trust-on-first-sight: the first presentation for a given
+`(scopeDomain, zktag)` binds its key in the store above; a later presentation for that same
+pair must carry the identical key or is refused (`attester_key_mismatch`) — never silently
+re-bound.
 
-## Mode B (D30/D31, PRD v1.19): `sig-ed25519/1` OR `sig-p256/1` roundtrip
-
-`POST /ui/presentations` with `{"mode":"B"}` mints a **tier-B** challenge; the
-request's `zkagent` member carries `evidence_required: [["sig-ed25519/1",
-"sig-p256/1"]]` — an any-of ALTERNATIVES GROUP (D31, chiproof 0.4.0's
-`evidence.require` extension), not a single required plug. The device picks
-whichever its Keystore actually produced (D36: never a chosen downgrade,
-only a fallthrough on failure of the preferred algorithm) and the verifier
-accepts either. The verifier pins BOTH attester pubkeys
-(`ATTESTER_PUBKEY_PEM`/`ATTESTER_KEY_ID` for Ed25519, `ATTESTER_P256_PUBKEY_PEM`/
-`ATTESTER_P256_KEY_ID` for P-256; both default to the DEV-ONLY keypairs in
-`dev-attester-key.mjs`/`dev-attester-key-p256.mjs` — labeled like
-`CHALLENGE_SECRET`, never for real use). Both plugs are chiproof's own
-(`sigEd25519`/`sigP256`, `packages/chiproof/src/plugs/attester-sig.js`) —
-this spike's former local `sig-ed25519-plug.mjs` is retired: chiproof 0.4.0's
-plug is byte-identical to it (same preimage, same item shape), so carrying a
-second copy here bought nothing once the package shipped both algorithms.
-Registered through chiproof's **existing** evidence-slot extension contract —
-chiproof is consumed as-is, zero edits to the library itself.
+### Testing without a phone
 
 ```
-node scripts/fake-wallet.mjs --base http://127.0.0.1:8787 --tier B [--mode valid|wrongkey|missing|firstsight]
+node scripts/fake-wallet.mjs --base http://127.0.0.1:8787 [--tier A|B] [--mode valid|tamper|expired|wrongkey|missing|firstsight]
 ```
 
-(`fake-wallet.mjs`'s `valid` mode exercises the `sig-ed25519/1` alternative
-under the pinned DEV_ATTESTER key; the `sig-p256/1` alternative under the
-pinned P-256 key is exercised by `tests/tier-b.test.mjs`'s "D31 alternative"
-test; `firstsight` — see below — exercises an UNPINNED `sig-p256/1` device
-key instead.)
+Plays the phone's role headlessly (fetch `request.jwt` → verify its JWS → build a presentation →
+`direct_post` → poll), so the roundtrip is provable without a device. See the script's own
+header comment for what each `--mode` exercises.
 
-### Per-origin device keys, trust-on-first-sight (D38, 2026-09-01)
+## Byte layout, scope-domain history, and other implementation notes
 
-The mode-B key is no longer expected to be one fixed, operator-pinned
-constant — the scanner generates it **per origin** (per site). A
-presentation MAY now carry the key's own `pubkey` (SubjectPublicKeyInfo DER,
-base64) alongside `key_id`; the verifier always recomputes `key_id` from
-`pubkey` (chiproof's `keyIdFor`, byte-identical to the scanner's Kotlin
-`EvidenceSigner.keyIdFor`) and refuses a mismatch. An unpinned `pubkey` is
-trust-on-first-sight: `makeVerifier()` wires an `InMemoryAttesterStore` per
-algorithm (chiproof 0.4.0, `src/stores/attester.js`) into each plug, and the
-first presentation for a given `(scopeDomain, zktag)` binds its key; a later
-presentation for that same pair must carry the identical key or it's
-refused (`attester_key_mismatch`) — never silently re-bound.
+Kept from the pre-M3 spike history (not re-derived here — no behavior in this section changed
+by the M3 build pass):
 
-The `ATTESTER_KEY_ID`/`ATTESTER_PUBKEY_PEM` and
-`ATTESTER_P256_KEY_ID`/`ATTESTER_P256_PUBKEY_PEM` pinned-key env overrides
-keep working exactly as before D38 — a pinned `key_id` is resolved before
-the store is ever consulted. This is what lets the owner keep pinning a real
-Pixel key today, ahead of the scanner actually sending `pubkey`.
+- **Byte layout (v2, owner-confirmed 2026-08-31):**
+  ```
+  message = sha256( utf8("sig-ed25519/1\n")        // domain separation
+                    || sha256(canonicalize(claim)) // claim binding
+                    || base64urlDecode(nonce)      // challenge binding
+                    || utf8(scopeDomain)           // scope binding
+                    || utf8(zktag) )               // zktag binding
+  evidence item = { "type": "sig-ed25519", "version": 1, "data": { "key_id", "sig" } }
+  sig = base64( Ed25519(attesterPrivateKey, message) )
+  ```
+  The plug declares `binds: { nonce: true, claim: true, scope: true, zktag: true }`.
+- **Scope domain (D37):** the scanner signs mode-B evidence with `scope` = the HOST of its
+  verified request origin (never a port or scheme) — `SCOPE_DOMAIN` here MUST match that host
+  exactly, which for the `adb reverse` recipe above is always `127.0.0.1`.
+- The zktag in `fake-wallet.mjs`'s tier-B runs is SYNTHETIC
+  (`SYNTHETIC-DEV-ZKTAG-no-chip-in-this-spike`) — no chip involved; a real mode-B client
+  derives the zktag from the document number (D9).
 
-`node scripts/fake-wallet.mjs --tier B --mode firstsight` demonstrates the
-new path end-to-end: it generates a fresh, UNPINNED P-256 device keypair,
-derives its `key_id` the same way a real device would, and sends `pubkey` —
-expects `allowed:true` with `verdict.warnings` carrying
-`attester_bound_first_sight`. `tests/tier-b.test.mjs`'s D38 section covers
-first-sight bind-then-match, a different key for an already-bound
-`(scope, zktag)` (`attester_key_mismatch`), and a `pubkey`/`key_id`
-inconsistency (`sig_key_id_mismatch`), all against the real HTTP server.
+### Android app: cleartext scoped to the dev host
 
-**Server-side logging (owner request, 2026-09-01):** `POST
-/ui/presentations` logs one value-free line on transaction creation
-(`transactionId`, `mode`, `ttlMs`); `POST /wallet/direct_post` logs one
-value-free line once the verdict is computed (`transactionId`, `tier`,
-`ok`, `allowed`, `reason`, `evidence`, and `attester` —
-`bound_first_sight`/`matched`/`n/a`, read off the verdict's own
-`warnings`/`evidence` fields, no new field added). Never logged: `zktag`,
-`nonce`, `pubkey`, `sig`, or `state` — this is a server-side echo of what
-the verdict already is, not a new source of device-linkable material.
-
-### Scope domain: real-device bug found and fixed (D37, 2026-09-01)
-
-A live Pixel 6a mode-B run against this spike returned `NOT ALLOWED /
-sig_invalid` — the pinned key resolved fine (never `sig_unknown_key`), so
-the cause was scope, not the key. Scope is bound into the signature
-preimage (see byte layout below): the scanner signs with scope = the HOST
-of its verified request origin (D37, `MainActivity.kt:876`) — e.g.
-`127.0.0.1` — while this server's `SCOPE_DOMAIN` was hardcoded to an
-unrelated fixed string (`'m2-handoff.test'`). One string differs, every
-real-device signature fails.
-
-**Fixed**: `SCOPE_DOMAIN` now defaults to `BIND_HOST` (`'127.0.0.1'`, the
-address this server always binds — `server.mjs`), not an arbitrary literal;
-still overridable (`SCOPE_DOMAIN=...`, exactly the stopgap already applied
-to the owner's running instance). **Decision (a) over (b)**: derived ONCE
-at startup from the bind address, not per-transaction from each request's
-origin — chiproof's `createVerifier` takes `scopeDomain` as fixed, boot-time
-config (no per-call override in `verify()`), so per-transaction derivation
-(b) would need one verifier instance per origin, not a per-call scope
-parameter; fine for this single-origin spike, flagged as awkward for a
-genuinely multi-origin deployment under chiproof's current API.
-
-**Escalated for the PRD, not decided here**: scope is **host only** here,
-matching the scanner — but D37's origin-*consistency* check (verifying the
-request object's own origin before trusting it, D34) uses the **full
-scheme+host+port** origin. That is a deliberate difference in granularity
-for two different jobs (a stable per-site pseudonym scope vs. an exact
-same-request-object check), not an oversight — recommendation (orchestrator,
-not owner-decided): keep scope host-only, keep the consistency check on the
-full origin. Needs owner confirmation; the PRD file itself was not edited
-by this session.
-
-**The suite's own blind spot, and the fix**: `tests/tier-b.test.mjs` and
-`scripts/fake-wallet.mjs` each carried their OWN hardcoded `SCOPE_DOMAIN`
-literal, which happened to equal the server's old literal — proving nothing
-about a real client's derivation, exactly why this suite passed 17/17 while
-a real device failed. Neither file may hardcode a scope or import the
-server's constant anymore:
-- `scripts/fake-wallet.mjs` derives `SCOPE_DOMAIN` from
-  `requestObject.response_uri`'s host, AFTER verifying that request
-  object's JWS — the same verified-origin mechanism D37 specifies for the
-  real scanner.
-- `tests/tier-b.test.mjs` derives it from `new URL(srv.url).hostname` once
-  the ephemeral test server is up.
-
-Either derivation disagreeing with the server's actual configured
-`scopeDomain` now fails the same way the real device did (`sig_invalid`),
-for the right reason, instead of silently agreeing with a copied literal.
-
-### SETTLED byte layout — v2, owner-confirmed 2026-08-31
-
-**v1 (no zktag) is SUPERSEDED.** A code review flagged v1 as vulnerable to a
-zktag-swap: v1 signed only claim+nonce+scope and the plug registered without
-`binds.zktag`, so a relay could rewrite `presentation.zktag` after the
-attester signed and the vouch still verified under chiproof's contract
-(evidence didn't tie to the presented zktag at all). chiproof 0.3.0 closed the
-gap that made this fixable — `PlugCtx` now exposes `ctx.zktag` and a plug may
-declare `binds.zktag: true` — and the owner confirmed the fix below.
-
-```
-message = sha256( utf8("sig-ed25519/1\n")        // domain separation
-                  || sha256(canonicalize(claim)) // claim binding
-                  || base64urlDecode(nonce)      // challenge binding
-                  || utf8(scopeDomain)           // scope binding
-                  || utf8(zktag) )               // zktag binding (NEW, v2)
-evidence item = { "type": "sig-ed25519", "version": 1, "data": { "key_id", "sig" } }
-sig = base64( Ed25519(attesterPrivateKey, message) )
-```
-
-The plug now declares `binds: { nonce: true, claim: true, scope: true, zktag: true }`
-and `verify()` refuses (`ok:false, valid:null, reason:'zktag_unavailable_to_plug'`)
-if chiproof's router ever calls it without a presented zktag string (defence
-in depth only — tier A is refused upstream as `evidence_zktag_unavailable`).
-
-The nonce stays **base64url-DECODED** (raw bytes), matching chiproof's shipped
-`signed-receipt/1` plug (`packages/chiproof/src/plugs/signed-receipt.js`) and
-the owner's 2026-08-30 ruling recorded there. NOTE: chiproof's own 0.3.0
-test-only reference fixture
-(`packages/chiproof/tests/fixtures/sig-ed25519-zktag-plug.js`) instead treats
-the nonce as a plain UTF-8 string (`utf8(nonce)`) — that fixture is
-inconsistent with the shipped plug's convention. Flagged for a later chiproof
-cleanup; not changed here, chiproof is out of scope for this spike.
-
-Deviation from D30's literal wording ("nonce + scope"): the **claim hash is also
-bound**, because chiproof's plug contract refuses at registration any plug not
-declaring `binds.claim === true` (evidence untied to the claim is replayable
-across claims). Still flagged for owner confirmation (open, unlike the layout
-itself which is now settled).
-
-### Mode-B spike caveats (recorded, not hidden)
-
-- **RESOLVED (chiproof 0.3.0): one verifier instance, both modes.** chiproof's
-  `evidence.require` now accepts a per-tier `{A?, B?, C?}` object
-  (`require: { A: [], B: ['sig-ed25519/1'] }`), so `server.mjs` runs a single
-  `createVerifier()` for both modes — tier A stays bare (D27) while tier B
-  requires `sig-ed25519/1` (D30), sharing one nonce store. The former
-  two-chiproof-instances workaround (one per mode, routed by `tx.mode`) is
-  gone.
-- **The zktag is SYNTHETIC** (`SYNTHETIC-DEV-ZKTAG-…`): this spike has no chip
-  and no scanner app. A real mode-B client derives the zktag from the document
-  number (D9). chiproof checks presence/shape per D21, never derivation (FR11).
-- Observed chiproof contract, asserted in tests: wrong-key signature ⇒ plug
-  `valid:false` ⇒ `{ok:true, allowed:false, reason:'sig_invalid'}`; missing
-  evidence on a tier-B challenge ⇒ `{ok:true, allowed:false,
-  reason:'evidence_required_missing'}`; missing zktag ⇒ `zktag_required`;
-  zktag-swapped evidence (valid signature over a different zktag than the one
-  presented) ⇒ `{ok:true, allowed:false, reason:'sig_invalid'}` (a real no).
+`android/app/src/main/AndroidManifest.xml` (an old dev-side test rig in this directory, not the
+M2 scanner) no longer sets app-wide `android:usesCleartextTraffic="true"`; it points
+`android:networkSecurityConfig` at a config permitting cleartext only for `127.0.0.1`.
+**UNBUILT / UNVERIFIED ON DEVICE** — config-only, not re-run on a Pixel as part of this change.

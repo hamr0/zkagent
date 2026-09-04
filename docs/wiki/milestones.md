@@ -225,13 +225,13 @@ Play Store listing: NOT an M3 item — see §6.6 (owner, 2026-09-03).
 | Check | Pass | Status |
 |---|---|---|
 | Opening POC (item 10) | Duplicate-zktag rejection survives a server restart, both documents; handoff completes end-to-end from the phone's own browser at `http://127.0.0.1:8787` over `adb reverse`, against the sideloaded debug build | Passed, device-confirmed 2026-09-04 — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
-| Tier-B duplicate rejection (item 4) | Second scan of the same document at this site shows "already registered"; chip_auth caveat disclosed | POC pass post-restart; pre-restart same-document repeat and page string not yet device-verified — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
-| Payload/store display (item 3) | Page displays what the app sent back (verdict/presentation payload from `chiproof`) and the store's relevant state for the transaction (e.g. zktag-already-seen yes/no) | Not run |
-| Tier-A indistinguishability (item 5) | Page-visible comparison of two tier-A presentations shows no distinguishing field | Not run |
-| Fixed threshold (item 6) | No threshold picker present; threshold 18 enforced | Not run |
+| Tier-B duplicate rejection (item 4) | Second scan of the same document at this site shows "already registered"; chip_auth caveat disclosed | Passed, device-confirmed 2026-09-04 — page string owner-confirmed ("Already registered at this site" block shown); the pre-restart same-document repeat (no server restart in between) remains node-test-only, not device-run — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
+| Payload/store display (item 3) | Page displays what the app sent back (verdict/presentation payload from `chiproof`) and the store's relevant state for the transaction (e.g. zktag-already-seen yes/no) | Passed, device-confirmed 2026-09-04 — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
+| Tier-A indistinguishability (item 5) | Page-visible comparison of two tier-A presentations shows no distinguishing field | Device-run 2026-09-04: 3 fields differ (`challenge.nonce`, `challenge.issued_at`, `challenge.expires_at`), not just nonce+signature as item 5's text states (no signature field exists in this build) — wording escalation open, item 5 text not yet changed — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
+| Fixed threshold (item 6) | No threshold picker present; threshold 18 enforced | Passed — `THRESHOLD` env removed, hardcoded 18; device runs 2026-09-04 show `threshold=18` on every transaction — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
 | Hosting (item 7) | Demo reachable from the phone's own browser at `http://127.0.0.1:8787` via `adb reverse`, against the sideloaded debug build (D76) | Passed, device-confirmed 2026-09-04 — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
-| Trust list (item 8) | Demo verifier rejects a client identity other than the pinned scanner package+cert digest | Not run |
-| No scanner changes (item 13) | Demo works against the released scanner APK unmodified | Not run |
+| Trust list (item 8) | Demo verifier rejects a client identity other than the pinned scanner package+cert digest | BLOCKED — no package-name/cert-digest check exists in `apps/demo` or `chiproof`, and the OpenID4VP wire carries no such field; building it is a scanner wire-contract change, conflicting with item 13. Escalation open, owner decision pending — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
+| No scanner changes (item 13) | Demo works against the released scanner APK unmodified | Passed so far — `apps/scanner` untouched through both sessions — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
 
 ## 6.4 M3b scope — placeholder (D73)
 

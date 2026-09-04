@@ -29,6 +29,7 @@
 import { createServer } from 'node:http';
 import { networkInterfaces } from 'node:os';
 import { randomBytes, createPublicKey, createPrivateKey } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 // NEW DEPENDENCY, spike-only — never added to packages/chiproof (D68 part b,
 // decisions.md; finding #18). Pure-JS QR encoder; renders app_link_av as a
 // scannable image instead of text-only. Pinned exact version in package.json.
@@ -128,22 +129,14 @@ const ATTESTER_P256_PUBKEY_PEM = process.env.ATTESTER_P256_PUBKEY_PEM ?? DEV_ATT
 // fake wallet pins the public half of.
 const REQUEST_SIGNER_KID = process.env.REQUEST_SIGNER_KID ?? DEV_REQUEST_SIGNER.kid;
 const REQUEST_SIGNER_PRIVKEY_PEM = process.env.REQUEST_SIGNER_PRIVKEY_PEM ?? DEV_REQUEST_SIGNER.privateKeyPem;
-// Q33 (2026-09-01): the verifier's configured age threshold is now settable
-// from the environment, so an operator can ask for something other than 18
-// and observe the scanner ignore it (it hardcodes threshold = 18,
-// apps/scanner/.../MainActivity.kt:1181 -- Q33a, not yet owner-decided,
-// whether the app should read this back). This is the ONLY source of the
-// value: it flows into issueChallenge() below and out to the device inside
-// the signed, nonce-bound `zkagent.challenge.threshold` -- do NOT add a
-// sibling `zkagent.threshold` field (tried before, reverted: not
-// nonce-bound). chiproof's createVerifier throws a TypeError on a
-// non-integer threshold (src/index.js), so validate here and fail fast
-// with a clear message rather than passing a bad env value through.
-const THRESHOLD_RAW = process.env.THRESHOLD ?? '18';
-const THRESHOLD = Number(THRESHOLD_RAW);
-if (!Number.isInteger(THRESHOLD)) {
-  throw new Error(`invalid THRESHOLD env var: ${JSON.stringify(THRESHOLD_RAW)} -- must be an integer`);
-}
+// §6.3 item 6 (DP4 resolved by D74): M3 hardcodes threshold 18 -- no picker,
+// no env override. The Q33 THRESHOLD env var this used to read (added to let
+// an operator ask for something other than 18 and observe the scanner
+// ignore it, since it hardcodes 18 itself) is REMOVED per item 6's explicit
+// instruction ("remove the THRESHOLD env override or make any value other
+// than 18 fatal"); the preset-bracket / per-origin-lock / named-exception
+// policy D74 actually specifies is scanner-side (§6.5 S1/S2), not M3 scope.
+const THRESHOLD = 18;
 const DEFAULT_TTL_MS = 120_000;
 const MAX_TTL_MS = 600_000;
 const MAX_BODY_BYTES = 64 * 1024;
@@ -222,72 +215,204 @@ export function buildAppLinks(requestUri, clientId) {
 }
 
 // ------------------------------------------------------------ HTML page ----
+// §6.3 item 5: the browser page imports the SAME compare.mjs node --test
+// exercises, via GET /compare.mjs (route above) -- read once at module load,
+// not per-request (the file never changes while the process runs).
+const COMPARE_JS = readFileSync(new URL('./compare.mjs', import.meta.url), 'utf8');
+
+// §6.3 items 1-9: real, kept M3 demo page (moved off the throwaway spike
+// shape, item 12) -- mobile-first, no horizontal scroll at 360px, outcome
+// block ABOVE the handoff block so it's on-screen without scrolling when the
+// browser regains focus after the app returns (owner device nit,
+// docs/logs/M3-POC-EVIDENCE-2026-09-04.md), tier A/B vocabulary only (D19,
+// never "mode A/B" on the page), no tier C control, no threshold picker, no
+// ZK language, no PII (tier A/B carry none; the zktag pseudonym MAY be shown).
 const PAGE = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>m2-handoff spike — age gate demo</title>
+<title>zkagent age gate demo</title>
 <style>
-  body { font: 15px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 3rem auto; padding: 0 1rem; }
-  button { font: inherit; padding: .6rem 1.2rem; cursor: pointer; margin-right: .5rem; }
-  code, pre { background: #f2f2f2; padding: .1rem .3rem; border-radius: 3px; overflow-x: auto; }
-  pre { padding: .6rem; white-space: pre-wrap; word-break: break-all; }
+  * { box-sizing: border-box; }
+  html, body { max-width: 100%; overflow-x: hidden; }
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0 auto; padding: 1rem; max-width: 32rem; color: #1a1a1a; background: #fff; }
+  h1 { font-size: 1.3rem; margin: 0 0 .3rem; }
+  h2 { font-size: 1.05rem; margin: 1.4rem 0 .4rem; }
+  p.lead { color: #444; margin: 0 0 1rem; }
+  .buttons { display: flex; flex-direction: column; gap: .6rem; margin-bottom: 1rem; }
+  button { font: inherit; font-weight: 600; padding: .8rem 1rem; cursor: pointer; border: 1px solid #333; border-radius: 8px; background: #f7f7f7; width: 100%; }
+  button:active { background: #eee; }
+  section { border-top: 1px solid #ddd; padding-top: .8rem; margin-top: .8rem; }
+  code, pre { background: #f2f2f2; border-radius: 3px; }
+  code { padding: .1rem .3rem; overflow-wrap: anywhere; }
+  pre.scrollpre { padding: .6rem; margin: .3rem 0; overflow-x: auto; max-width: 100%; white-space: pre; }
+  a { overflow-wrap: anywhere; word-break: break-all; }
   .muted { color: #666; font-size: .85em; }
-  #verdict { font-weight: bold; }
+  #outcomeHeading { font-weight: bold; }
+  #outcomeHeading.allowed { color: #0a7a2f; }
+  #outcomeHeading.notAllowed { color: #a10000; }
+  #outcomeHeading.noAnswer { color: #8a5400; }
+  #alreadyRegistered { font-weight: bold; color: #a15a00; border: 1px solid #e0b060; background: #fff6e8; padding: .5rem .7rem; border-radius: 6px; margin: .4rem 0; }
+  #qrimg { max-width: 240px; width: 100%; height: auto; display: block; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ddd; padding: .3rem .5rem; text-align: left; font-size: .85em; overflow-wrap: anywhere; }
+  th { background: #f2f2f2; }
+  td.differs { background: #fff6e8; }
+  .tablewrap { overflow-x: auto; max-width: 100%; }
+  details summary { cursor: pointer; font-weight: 600; margin-top: 1.2rem; }
+  details p { color: #444; }
 </style>
-<h1>Age gate demo (m2-handoff spike)</h1>
-<p>Throwaway M2 POC verifier. Mode A: tier A, bare evidence (D27) — captcha-grade.
-Mode B: tier B, either <code>sig-ed25519/1</code> or <code>sig-p256/1</code> accepted (D31). The device's key is per-origin and bound to this site on first sight (D38) — a returning device must keep presenting the SAME key it bound the first time.</p>
-<button id="go" data-mode="A">Verify your age (mode A)</button>
-<button id="goB" data-mode="B">Verify your age (mode B)</button>
-<div id="out" hidden>
-  <h2>Same-device app link</h2>
-  <p><a id="applink" href="#"></a></p>
-  <p class="muted">custom-scheme variant: <code id="avlink"></code></p>
-  <h2>Cross-device</h2>
-  <img id="qrimg" width="240" height="240" alt="QR code encoding the av:// handoff link">
-  <pre id="qrtext"></pre>
-  <p class="muted">Scan the QR with the phone's camera app and tap the link it offers
-  (D68 part b); on the same phone, tap the link text instead.</p>
-  <h2>Status</h2>
-  <p id="status">waiting for the app…</p>
-  <p id="verdict"></p>
-  <pre id="raw"></pre>
+<div>
+<h1>zkagent age gate demo</h1>
+<p class="lead">Two things a website can ask this app to prove — no name, date of birth, or any other personal field is ever sent.</p>
+<div class="buttons">
+  <button id="goA">Prove you're over 18</button>
+  <button id="goB">Prove you're a unique adult human</button>
 </div>
-<script>
+
+<section id="outcome" hidden>
+  <h2 id="outcomeHeading"></h2>
+  <div id="alreadyRegistered" hidden>Already registered at this site</div>
+  <p id="outcomeLine"></p>
+  <p class="muted">What the app sent back:</p>
+  <pre id="verdictJson" class="scrollpre"></pre>
+  <p id="storeState" class="muted"></p>
+</section>
+
+<section id="handoff" hidden>
+  <h2>Continue on your phone</h2>
+  <p><a id="applink" href="#"></a></p>
+  <img id="qrimg" width="240" height="240" alt="QR code encoding the av:// handoff link">
+  <p class="muted">Tap the link on this phone, or scan the QR with another phone's camera app.</p>
+</section>
+
+<section id="compareSection" hidden>
+  <h2 id="compareHeader">Scan 1 done — waiting for scan 2</h2>
+  <div class="tablewrap">
+    <table id="compareTable">
+      <thead><tr><th>Field</th><th>Scan 1</th><th>Scan 2</th><th>Same or differs</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="muted" id="compareCaption"></p>
+  <p class="muted">Kept in this browser tab's memory only — reloading the page resets it.</p>
+</section>
+
+<details>
+  <summary>About this demo</summary>
+  <p>The device's key is per-origin and bound to this site the first time it's seen (D38) —
+  a returning device must keep presenting the same key it bound the first time, or the site
+  refuses it.</p>
+  <p><strong>Chip-authentication caveat:</strong> a document without chip authentication
+  (<code>chip_auth: false</code>, e.g. some passports) is clone-replayable — a cloned document
+  mints the identical zktag as the genuine holder's. "Unique adult human" is only as strong
+  as chip authentication allows.</p>
+</details>
+</div>
+<script type="module">
+import { diffPresentations } from '/compare.mjs';
+
 let pollTimer = null;
-async function start(mode) {
+let lastTierAPresentation = null; // §6.3 item 5: last of the two kept tier-A presentations
+const outcomeSection = document.getElementById('outcome');
+const handoffSection = document.getElementById('handoff');
+const outcomeHeading = document.getElementById('outcomeHeading');
+const alreadyRegistered = document.getElementById('alreadyRegistered');
+const outcomeLine = document.getElementById('outcomeLine');
+const verdictJson = document.getElementById('verdictJson');
+const storeState = document.getElementById('storeState');
+const compareSection = document.getElementById('compareSection');
+const compareHeader = document.getElementById('compareHeader');
+const compareCaption = document.getElementById('compareCaption');
+const compareTbody = document.querySelector('#compareTable tbody');
+
+function log(...args) { console.log('[zkagent-demo]', ...args); }
+
+function renderOutcome(tier, s) {
+  outcomeSection.hidden = false;
+  const v = s.verdict;
+  let headingClass = 'noAnswer';
+  let headingText = 'No answer';
+  let line = 'The verifier could not check (' + v.reason + ').';
+  if (v.allowed === true) {
+    headingClass = 'allowed';
+    headingText = tier === 'B' ? 'Registered as a unique adult human' : 'Proved: over 18';
+    line = tier === 'B'
+      ? 'This document is now registered as a unique adult human at this site.'
+      : 'You proved you are over 18.';
+  } else if (v.allowed === false) {
+    headingClass = 'notAllowed';
+    headingText = 'Not proved';
+    line = 'Not proved (' + v.reason + ').';
+  }
+  outcomeHeading.textContent = headingText;
+  outcomeHeading.className = headingClass;
+  outcomeLine.textContent = line;
+  // §6.3 item 4: "already registered" is its own distinct heading/block, not
+  // a prefix on the allowed line -- true whenever this tier-B zktag was
+  // already registered here, independent of whether this presentation's own
+  // evidence also happened to check out.
+  alreadyRegistered.hidden = !(tier === 'B' && s.already_registered);
+  verdictJson.textContent = JSON.stringify(v, null, 2);
+  storeState.textContent = tier === 'B'
+    ? 'zktag already seen at this site: ' + (s.zktag_seen_before ? 'yes' : 'no')
+    : '';
+  log('outcome', { tier, allowed: v.allowed, reason: v.reason, already_registered: s.already_registered });
+}
+
+function renderCompare(tier, presentation) {
+  if (tier !== 'A' || !presentation) return;
+  const prev = lastTierAPresentation;
+  lastTierAPresentation = presentation;
+  if (!prev) {
+    compareSection.hidden = false;
+    compareHeader.textContent = 'Scan 1 done — waiting for scan 2';
+    compareTbody.innerHTML = '';
+    compareCaption.textContent = '';
+    return;
+  }
+  compareHeader.textContent = 'Both scans received';
+  const rows = diffPresentations(prev, presentation);
+  compareTbody.innerHTML = '';
+  const differingFields = [];
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const fmt = (v) => (v === undefined ? '(absent)' : JSON.stringify(v));
+    tr.innerHTML = '<td>' + r.field + '</td><td>' + fmt(r.a) + '</td><td>' + fmt(r.b) + '</td>'
+      + '<td class="' + (r.same ? '' : 'differs') + '">' + (r.same ? 'same' : 'differs') + '</td>';
+    compareTbody.appendChild(tr);
+    if (!r.same) differingFields.push(r.field);
+  }
+  compareCaption.textContent = 'Fields that differ between the two scans: ' + differingFields.join(', ')
+    + ' — every other field matches. The nonce is a fresh, single-use value every scan; the '
+    + 'timestamp fields differ because each challenge is minted at the moment you tap the button, '
+    + 'not because anything about you differs.';
+  log('tier-A compare', { differingFields });
+}
+
+async function start(tier) {
   if (pollTimer) clearInterval(pollTimer);
+  const mode = tier; // wire-level field is still named "mode" (server.mjs contract, unchanged)
   const res = await fetch('/ui/presentations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode }) });
   const tx = await res.json();
-  document.getElementById('out').hidden = false;
-  document.getElementById('status').textContent = 'waiting for the app… (mode ' + mode + ')';
-  document.getElementById('verdict').textContent = '';
-  document.getElementById('raw').textContent = '';
+  outcomeSection.hidden = true;
+  handoffSection.hidden = false;
+  log('transaction created', { transactionId: tx.transactionId, tier });
   const a = document.getElementById('applink');
   a.href = tx.app_link; a.textContent = tx.app_link;
-  document.getElementById('avlink').textContent = tx.app_link_av;
   document.getElementById('qrimg').src = tx.qr;
-  document.getElementById('qrtext').textContent = tx.app_link_av;
   pollTimer = setInterval(async () => {
     const r = await fetch('/ui/presentations/' + tx.transactionId);
     if (!r.ok) return;
     const s = await r.json();
     if (s.status === 'done') {
       clearInterval(pollTimer); pollTimer = null;
-      document.getElementById('status').textContent = 'response received';
-      document.getElementById('verdict').textContent =
-        (s.already_registered ? 'ALREADY REGISTERED at this site — ' : '') +
-        (s.verdict.allowed === true ? 'ALLOWED (over threshold)'
-        : s.verdict.allowed === false ? 'NOT ALLOWED (' + s.verdict.reason + ')'
-        : 'NO ANSWER — verifier could not check (' + s.verdict.reason + ')');
-      document.getElementById('raw').textContent = JSON.stringify(
-        { verdict: s.verdict, zktag_seen_before: s.zktag_seen_before, already_registered: s.already_registered },
-        null, 2,
-      );
+      log('poll done', { transactionId: tx.transactionId });
+      renderOutcome(tier, s);
+      renderCompare(tier, s.presentation);
     }
   }, 1000);
 }
-document.getElementById('go').addEventListener('click', () => start('A'));
+document.getElementById('goA').addEventListener('click', () => start('A'));
 document.getElementById('goB').addEventListener('click', () => start('B'));
 </script>`;
 
@@ -336,6 +461,15 @@ export function createApp() {
     if (req.method === 'GET' && path === '/') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(PAGE);
+      return;
+    }
+
+    // GET /compare.mjs — the pure tier-A diff module (§6.3 item 5), served
+    // as-is so the SAME file node --test imports is what the browser page
+    // imports as a native ES module -- one source of truth, no bundler.
+    if (req.method === 'GET' && path === '/compare.mjs') {
+      res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' });
+      res.end(COMPARE_JS);
       return;
     }
 
@@ -481,6 +615,14 @@ export function createApp() {
       }
       tx.status = 'done';
       tx.verdict = verdict;
+      // §6.3 item 5: the page's tier-A comparison table needs the RECEIVED
+      // presentation payload's own fields (spec/tier/claim/challenge/evidence
+      // — none of them PII for tier A/B, per §6.3 item 9's MUST NOT), not
+      // just chiproof's verdict. `presentation` is a sibling field alongside
+      // `verdict` in the poll response below, exactly as it arrived
+      // (b64urlToJson's decode of vp_token) — chiproof's verdict itself
+      // stays completely untouched by this addition.
+      tx.presentation = presentation === undefined ? null : presentation;
       // §6.3 item 3/4: tier-B duplicate rejection. This is the DEMO's own
       // dedupe state -- chiproof stores nothing (D3, FR3) and its verdict
       // is never rewritten here (the wire contract with the scanner stays
@@ -537,6 +679,7 @@ export function createApp() {
       sendJson(res, 200, {
         status: 'done',
         verdict: tx.verdict,
+        presentation: tx.presentation,
         zktag_seen_before: tx.zktagSeenBefore,
         already_registered: tx.alreadyRegistered,
       });
