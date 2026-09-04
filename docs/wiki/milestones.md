@@ -163,12 +163,14 @@ here may be built ahead of owner sign-off (D73 is a record of the split, not an 
    `chip_auth` allows.
 5. **Tier-A indistinguishability shown (DP3 resolved).** The page MUST render a per-field table
    comparing two consecutive tier-A presentations: one row per field, two value columns (scan 1,
-   scan 2), and a third column reading "same" or "differs" per row. Only the fresh nonce and its
-   signature may ever land in the "differs" column — the page MUST say so in words next to the
-   table (e.g. "only the nonce and signature differ between scans; every other field matches").
-   A simple header above the table drives a two-state machine: "Scan 1 done — waiting for scan 2"
-   until the second presentation arrives, then "Both scans received." (owner, 2026-09-03: "field
-   table, and be clear scan 1 done, waiting scan 2 on the page simple header")
+   scan 2), and a third column reading "same" or "differs" per row. Only the fresh nonce and the
+   challenge's issued-at and expires-at timestamps may ever land in the "differs" column — the
+   page MUST say so in words next to the table (e.g. "only the nonce and the challenge timestamps
+   differ between scans; every other field matches"). Tier-A presentations carry no signature by
+   design (D27, unlinkable), so no signature row exists. A simple header above the table drives a
+   two-state machine: "Scan 1 done — waiting for scan 2" until the second presentation arrives,
+   then "Both scans received." (owner, 2026-09-03: "field table, and be clear scan 1 done, waiting
+   scan 2 on the page simple header"; D77, 2026-09-04)
 6. **Fixed threshold: 18 only (DP4 resolved by D74).** M3 MUST hardcode/request threshold 18
    only. The demo runs against the released scanner source unmodified, sideloaded as the debug
    variant (`app-regular-debug.apk`, D76) (item 13) — the preset
@@ -187,8 +189,7 @@ here may be built ahead of owner sign-off (D73 is a record of the split, not an 
    `adb reverse` onto the debug build's own localhost cleartext allowance is what actually works
    without a scanner change (D76). (owner, 2026-09-03: "this a node you run locally for testing,
    no online hosting, it's for anyone to download the app from playstore and run it")
-8. **Trust list (FR10).** The demo's verifier config MUST pin the M2 scanner's package name and
-   signing-cert digest as its one accepted client identity — no other client is accepted.
+8. **Trust list (FR10) — moved to §6.5 by D78; M3 relies on attester-key binding, see D78.**
 9. **MUST NOT.** No tier C (M3b only); no ZK-marketing language (NO-GO #7, D1); no PII
    displayed, ever, on any screen; no zkagent-run server anywhere in the path — the demo's
    server is the ADOPTER's server, run by whoever operates M3, never a service zkagent itself
@@ -227,10 +228,10 @@ Play Store listing: NOT an M3 item — see §6.6 (owner, 2026-09-03).
 | Opening POC (item 10) | Duplicate-zktag rejection survives a server restart, both documents; handoff completes end-to-end from the phone's own browser at `http://127.0.0.1:8787` over `adb reverse`, against the sideloaded debug build | Passed, device-confirmed 2026-09-04 — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
 | Tier-B duplicate rejection (item 4) | Second scan of the same document at this site shows "already registered"; chip_auth caveat disclosed | Passed, device-confirmed 2026-09-04 — page string owner-confirmed ("Already registered at this site" block shown); the pre-restart same-document repeat (no server restart in between) remains node-test-only, not device-run — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
 | Payload/store display (item 3) | Page displays what the app sent back (verdict/presentation payload from `chiproof`) and the store's relevant state for the transaction (e.g. zktag-already-seen yes/no) | Passed, device-confirmed 2026-09-04 — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
-| Tier-A indistinguishability (item 5) | Page-visible comparison of two tier-A presentations shows no distinguishing field | Device-run 2026-09-04: 3 fields differ (`challenge.nonce`, `challenge.issued_at`, `challenge.expires_at`), not just nonce+signature as item 5's text states (no signature field exists in this build) — wording escalation open, item 5 text not yet changed — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
+| Tier-A indistinguishability (item 5) | Page-visible comparison of two tier-A presentations shows no distinguishing field | Passed, device-confirmed 2026-09-04 (3 fields differ as specified by D77: `challenge.nonce`, `challenge.issued_at`, `challenge.expires_at` — no signature field exists in this build, by design, D27) — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
 | Fixed threshold (item 6) | No threshold picker present; threshold 18 enforced | Passed — `THRESHOLD` env removed, hardcoded 18; device runs 2026-09-04 show `threshold=18` on every transaction — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
 | Hosting (item 7) | Demo reachable from the phone's own browser at `http://127.0.0.1:8787` via `adb reverse`, against the sideloaded debug build (D76) | Passed, device-confirmed 2026-09-04 — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
-| Trust list (item 8) | Demo verifier rejects a client identity other than the pinned scanner package+cert digest | BLOCKED — no package-name/cert-digest check exists in `apps/demo` or `chiproof`, and the OpenID4VP wire carries no such field; building it is a scanner wire-contract change, conflicting with item 13. Escalation open, owner decision pending — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
+| Trust list (item 8) | Demo verifier rejects a client identity other than the pinned scanner package+cert digest | Moved to §6.5 S4 by D78 (not an M3 criterion) — no package-name/cert-digest check exists in `apps/demo` or `chiproof`, and the OpenID4VP wire carries no such field; enforceable only through a device-attestation evidence plug (Play Integrity / Key Attestation), built alongside S4; M3 relies on attester-key binding (D38/D39) instead, a disclosed limit — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
 | No scanner changes (item 13) | Demo works against the released scanner APK unmodified | Passed so far — `apps/scanner` untouched through both sessions — [M3-POC-EVIDENCE-2026-09-04.md](../logs/M3-POC-EVIDENCE-2026-09-04.md) |
 
 ## 6.4 M3b scope — placeholder (D73)
@@ -369,6 +370,19 @@ alongside M3b without a further gate check.
    dialogs), D46 ("Local scan (no site)" wording), D47 (disclosure), D52 (dialog strings); finding
    #10 (the mint-path race this reuses the admission guard against) — none of those mechanisms are
    altered by this cleanup beyond what is stated above.
+
+4. **S4 (ENHANCEMENT, D78) — client trust list (FR10) via attestation plug.** Moved here from
+   §6.3 item 8 by D78: a package name + signing-cert digest is not carried by the OpenID4VP wire,
+   so the only source of both is a device-attestation token (Play Integrity / Key Attestation) —
+   the client-identity trust list is enforceable only through an attestation evidence plug, not
+   as a wire-contract change to the existing scanner/verifier exchange. The verifier pins the
+   package name and signing-cert digest as read FROM that attestation token; this item is built
+   together with the first attestation plug, not before it. Play App Signing re-signs the APK
+   (D75, §6.6 deliverable 2), so the Play-distributed build's digest differs from local builds —
+   any verifier config built under this item MUST account for both once the Play digest is known.
+   Until an attestation plug exists, M3's client identity is the attester key bound on first sight
+   (D38/D39) — a per-device, per-site identity, weaker than FR10's per-app one; this is M3's
+   disclosed limit, not a defect to silently work around.
 
 Play Store listing: see §6.6.
 

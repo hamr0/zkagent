@@ -53,7 +53,7 @@ anyone's behalf, and does not keep any list of users anywhere.
 | Can two sites link you | No | No — zktags differ per site by design | Not built |
 | Works with a cloned chip | N/A (no chip check in tier A) | Yes, if `chip_auth` is false — a clone mints the identical zktag as the real holder | Not built |
 | Threshold | 18 (fixed) | 18 (fixed) | Not built |
-| Status | POC passed, build in progress; trust-list (FR10, §6.3 item 8) exit criterion BLOCKED, owner decision pending | POC passed, build in progress; trust-list (FR10, §6.3 item 8) exit criterion BLOCKED, owner decision pending | M3b — not started, PRD-gated |
+| Status | POC passed, build in progress; trust-list (FR10, §6.3 item 8) moved to §6.5 S4, D78 — not an M3 criterion, needs a future attestation plug | POC passed, build in progress; trust-list (FR10, §6.3 item 8) moved to §6.5 S4, D78 — not an M3 criterion, needs a future attestation plug | M3b — not started, PRD-gated |
 
 ## 4. Tier rules — what each may and may never ask
 
@@ -200,7 +200,7 @@ What's actually checked, and what isn't yet:
 | Request objects | Signed (ES256) by the site's own verifier before the phone will trust anything inside them; the app verifies this signature and refuses outright on any failure, never warns-and-continues |
 | Which sites are trusted | The trust anchor is the requesting site's own web address itself (fetched from a well-known path over HTTPS in a real deployment); the current local demo/spike, running over plain HTTP, uses one built-in development-only key instead |
 | Client identity today | Only the attester-key binding (tier B) proves "this same phone came back" — there is no check of the app's own package name or signing certificate on the wire yet |
-| Client identity, planned | Pinning the scanner app's package name and signing certificate as the one accepted client identity is designed but **not implemented** — flagged as an open item, not silently added |
+| Client identity, planned | Pinning the scanner app's package name and signing certificate as the one accepted client identity needs a device-attestation token (Play Integrity / Key Attestation) — the OpenID4VP wire itself carries no such field. Moved out of the current demo to a future attestation-plug item (D78) — flagged as a disclosed limit, not silently added |
 | Play Store complication | If/when this app is distributed through the Play Store, Google re-signs it, so the Play-distributed build's certificate is different from a locally-built one — any future pinning has to account for both |
 | Masterlist | The full government certificate list is bundled in the app and its own signature chain is checked before it is trusted; a corrupt or unparseable list means the app refuses to give any answer at all (not a "no"); a well-formed list that's simply missing one issuer's certificate is a real "no," not an error |
 
@@ -219,6 +219,8 @@ What's actually checked, and what isn't yet:
 | Scan log | Persists across app close, capped at 20 entries, clearable | Past scans reviewable later on this phone only, in plain language | D59, D70(b) |
 | Fixed threshold | 18 only, no picker, in the current demo | Nobody can probe your exact birthdate by asking a changing set of ages | D74 |
 | Demo hosting | Fixed to `127.0.0.1` over USB (`adb reverse`), not LAN/HTTPS | The "test right away" recipe is USB-only for now, not Wi-Fi | D76 |
+| Tier-A "differs" column, final wording | Only the nonce and the challenge's issued-at/expires-at timestamps may ever differ; no signature row exists | Confirms tier A stays unsigned and indistinguishable, on purpose | D77 |
+| Client trust list (FR10) | Moved out of the current demo to a future attestation-plug item, not built with a scanner wire change | Today's demo recognises a returning phone only via its tier-B attester key, not its app identity | D78 |
 | Storage ownership | The demo runs its own store; zkagent code stores nothing | Even the demo you're testing keeps its own separate records — zkagent hosts nothing anywhere | D3 |
 
 ## 10. Limits and non-goals
