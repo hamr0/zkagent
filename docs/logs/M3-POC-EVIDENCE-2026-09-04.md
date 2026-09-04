@@ -194,7 +194,118 @@ changed by this session)
 
 ---
 
-**No PII values appear anywhere above, in either session.** All quoted log lines, transaction
+---
+
+## Session 3 — on-device negatives (2026-09-04 evening)
+
+**Setup**: same as Session 2 — scanner v0.5.0 debug build (`app-regular-debug.apk`, `c4fc43e`)
+sideloaded, unmodified; `apps/demo` working tree now committed at `aec100e`/`1bb86c8`; server on
+port 8787 via `adb reverse tcp:8787 tcp:8787`; US passport used throughout; page reloaded before
+each case. Four cases run, all deliberate negative/edge paths rather than the happy path Sessions 1
+and 2 covered.
+
+Server log excerpt (transaction IDs truncated to 4 characters), verbatim:
+
+```
+[apps/demo] tx created npzv mode=A ttlMs=120000 threshold=18
+[apps/demo] tx created lF0p mode=A ttlMs=120000 threshold=18
+[apps/demo] verdict lF0p tier=A threshold=18 ok=true allowed=true reason=no-evidence-required evidence=[] attester=n/a
+[apps/demo] tx created BVHa mode=A ttlMs=120000 threshold=18
+```
+
+### Case 1 — wrong details (one digit of the document number changed in the scanner)
+
+Tier A, tap link, hold passport. Scanner dialog: owner reported "Couldn't read — check your
+details". Server: tx `npzv` created, no verdict logged.
+
+Checked against source: this is the access-establishment branch of the read-failure classifier
+(`FailureTransition.classify` → `Classification.ACCESS_ESTABLISHMENT`) in
+`apps/scanner/app/src/main/java/com/tananaev/passportreader/MainActivity.kt`. Two distinct strings
+exist for this branch, and the owner's paraphrase matches one but not the other exactly:
+- The blocking dialog itself renders `getString(R.string.error_read)` (`MainActivity.kt:1718`),
+  whose resource text in `apps/scanner/app/src/main/res/values/strings.xml` is **"Couldn't read —
+  check your details and try again."** — the owner's paraphrase drops the trailing "and try again."
+- A second, shorter copy of the same string, **"Couldn't read — check your details"** (no res-file
+  entry — a literal at `MainActivity.kt:1730`), is what's written into the `ReportLog.DisclosureSummary`
+  shown in the app's own Log tab, not the dialog. The owner's report exactly matches this second
+  string, not the dialog's `error_read` resource — most likely what was actually read/remembered
+  came from the Log tab entry rather than the dialog text itself, but both strings correspond to the
+  same classification and the same PASS.
+
+**PASS** — access-establishment failure classified correctly; nothing reached the verifier (no `tx`
+line at all for this case, consistent with the scanner never starting a handoff on a read failure
+before lock).
+
+### Case 2 — card lifted after ~1 s
+
+Tier A. Scanner dialog: owner reported "Couldn't read — keep the card at the top of your phone"
+(transient classification, not check-details — the `FailureTransition` ordering fix from M2 holds).
+
+Checked against source: this is `Classification.TRANSIENT_CHIP_COMMUNICATION`, whose dialog text is
+`TRANSIENT_READ_FAILURE_MESSAGE`, a private companion-object constant in `MainActivity.kt:3132` (not
+a string resource — no `res/values` entry) — **"Couldn't read — keep the card at the top of your
+phone."** — an exact match to the owner's report (modulo the trailing period).
+
+Owner then re-tapped the SAME link and completed the scan. Server: tx `lF0p` created, then `verdict
+lF0p tier=A threshold=18 ok=true allowed=true reason=no-evidence-required evidence=[] attester=n/a`.
+
+**PASS** — retry on the same (still-live) transaction works; the transient dialog did not force the
+user to re-check details or restart from a fresh link.
+
+### Case 3 — stale link (re-tapping the link of an already-completed transaction, no new button tap)
+
+Scanner dialog: owner reported "Verification session expired — reopen the link from the site".
+Server: no new `tx created` line for this re-tap.
+
+Checked against source: this is `SESSION_EXPIRED_MESSAGE`, a private companion-object constant in
+`MainActivity.kt:3127` (again no `res/values` entry) — **"Verification session expired — reopen
+the link from the site."** — an exact match. This is the up-front check in `lockModeAndArm`, one of
+the two call sites sharing this single constant (the other is the belt-and-suspenders re-check in
+`continueAfterRead`), per the constant's own comment (`MainActivity.kt:3121-3127`).
+
+Server-side: the `GET /wallet/request.jwt/{requestId}` handler (`apps/demo/server.mjs:564-578`,
+which a link re-tap fetches) has no logging call in it at all — confirmed by reading the handler —
+so a stale-link re-fetch produces **no server log line either way** (whether the fetch 404s or
+succeeds). This case is therefore evidenced by the *absence* of a new `tx created` line plus the
+scanner's own dialog, not by any positive server-side signal — there is nothing for the server to
+log here even in principle.
+
+**PASS** — resolves the earlier Session 2 "second scan no popup" observation (see the correction
+block above, "Standing status: tier-A popup — confirmed, every scan"): a used/stale link produces a
+clear dialog, not silence.
+
+### Case 4 — expired request (button tapped, link opened after >3 min, `ttlMs=120000`)
+
+Scanner dialog: owner reported "Verification session expired — reopen the link from the site" — the
+same `SESSION_EXPIRED_MESSAGE` constant as Case 3, confirmed by source (`MainActivity.kt:3127`).
+Server: tx `BVHa` created, no verdict logged.
+
+**PASS** — expired request refused app-side (the up-front `lockModeAndArm` check, ttl already past
+`expires_at`) before any `direct_post` was attempted; the transaction record exists (the link was
+fetched and a tx object exists server-side) but nothing after it.
+
+### Not run on device
+
+Second device presenting a different key for an already-bound zktag (only one physical device
+available this session) — covered instead by the node test `apps/demo/tests/tier-b.test.mjs`: "D38:
+a DIFFERENT unpinned device key presented for an ALREADY-BOUND zktag => attester_key_mismatch".
+Not a device-confirmed case; recorded here as a gap, not a pass, for that specific sub-case.
+
+### Session 3 summary
+
+| Case | Dialog (as reported) | Exact source string | Resource / constant | Server evidence | Result |
+|---|---|---|---|---|---|
+| 1 wrong details | "Couldn't read — check your details" | dialog: "...and try again."; log entry: exact match | `R.string.error_read` (dialog) / literal at `MainActivity.kt:1730` (log entry) | tx `npzv`, no verdict | PASS |
+| 2 card lifted | "Couldn't read — keep the card at the top of your phone" | exact match | `TRANSIENT_READ_FAILURE_MESSAGE`, `MainActivity.kt:3132` | tx `lF0p`, verdict `allowed=true` on retry | PASS |
+| 3 stale link | "Verification session expired — reopen the link from the site" | exact match | `SESSION_EXPIRED_MESSAGE`, `MainActivity.kt:3127` | no new tx (handler is unlogged either way) | PASS |
+| 4 expired request | "Verification session expired — reopen the link from the site" | exact match | `SESSION_EXPIRED_MESSAGE`, `MainActivity.kt:3127` | tx `BVHa`, no verdict | PASS |
+
+All four on-device cases PASS. One sub-case (Tier B, second device / different key on an
+already-bound zktag) remains node-test-only, not device-confirmed.
+
+---
+
+**No PII values appear anywhere above, in any session.** All quoted log lines, transaction
 identifiers, and store states are value-free by construction — stage names, boolean/status fields,
 truncated transaction IDs, 12-char zktag prefixes, and timings only — checked against this file's
 own rule and the project standard it inherits from `M0-EVIDENCE.md` through
