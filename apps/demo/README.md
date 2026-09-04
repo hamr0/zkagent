@@ -1,7 +1,10 @@
-# spikes/m2-handoff — M2 POC step (b): test verifier website
+# apps/demo — M3 demo verifier website (moved from spikes/m2-handoff, D73)
 
-**THROWAWAY SPIKE** (convention: `spikes/m0`, `spikes/m1-*`). Not shipped code, not
-published, no PII, rung-1 / mode A / age-verification only. It does actually run.
+Not published to npm (`private: true`), no PII, rung-1 / mode A+B / age-verification
+only. Moved from `spikes/m2-handoff` to `apps/demo` per PRD §6.3 item 12 (`git mv`,
+history preserved) — no longer a throwaway spike, now real kept code evolving under
+M3's scope gate (§6.3). Layout, README, and field-display polish are POST-POC work;
+this file still describes the pre-move spike shape until that pass lands.
 
 A zero-dependency (beyond `chiproof`, consumed as-is via `file:../../packages/chiproof`)
 Node verifier website implementing the EU-Blueprint-shaped same-device flow recorded in

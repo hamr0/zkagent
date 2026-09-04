@@ -1,9 +1,9 @@
 {
-  "name": "m2-handoff-spike",
+  "name": "zkagent-demo",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "M2 POC step (b): throwaway EU-Blueprint-shaped test verifier website around chiproof. Spike code — not shipped, not published.",
+  "description": "M3 demo (§6.3): EU-Blueprint-shaped operator-run test verifier website around chiproof. Moved from spikes/m2-handoff (D73, git mv, history preserved).",
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test tests/*.test.mjs"
