@@ -1,5 +1,4 @@
-// spikes/m2-handoff/server.mjs — M2 POC step (b): test verifier website.
-// THROWAWAY SPIKE (convention: spikes/m0, m1-*). Runs for real; never shipped.
+// apps/demo/server.mjs — M3 demo verifier website (moved from spikes/m2-handoff, D73).
 //
 // Implements the EU-Blueprint-shaped same-device flow recorded in
 // docs/logs/M2-CAPTURE.md, Finding 1 (reference verifier `av-web-verifier-ui`):
@@ -28,18 +27,26 @@
 //    tier B. The former two-instance workaround is gone; see README.md.
 
 import { createServer } from 'node:http';
+import { networkInterfaces } from 'node:os';
 import { randomBytes, createPublicKey, createPrivateKey } from 'node:crypto';
 // NEW DEPENDENCY, spike-only — never added to packages/chiproof (D68 part b,
 // decisions.md; finding #18). Pure-JS QR encoder; renders app_link_av as a
 // scannable image instead of text-only. Pinned exact version in package.json.
 import QRCode from 'qrcode';
 import {
-  createVerifier, InMemoryNonceStore, InMemoryAttesterStore, realNo, sigEd25519, sigP256,
+  createVerifier, realNo, sigEd25519, sigP256,
 } from 'chiproof';
 import { DEV_ATTESTER } from './dev-attester-key.mjs';
 import { DEV_ATTESTER_P256 } from './dev-attester-key-p256.mjs';
 import { signJws } from './jws.mjs';
 import { DEV_REQUEST_SIGNER } from './dev-request-signer-key.mjs';
+// §6.3 item 2/3/9: the demo is its own adopter, its own persistent store —
+// chiproof's InMemoryNonceStore/InMemoryAttesterStore are test-only and MUST
+// NOT be used once this is a persistent operator-facing run. No in-memory
+// fallback exists anywhere below; JsonFileStore's constructor throws
+// synchronously on any I/O/parse failure and that is left to propagate to
+// process top-level (fail closed, item 9 — see the bottom of this file).
+import { JsonFileStore, defaultStorePath } from './store.mjs';
 
 // D31 (2026-09-01): the verifier accepts EITHER attester-sig plug, not one
 // fixed one — the device picks whichever its Keystore actually produced (F2:
@@ -51,9 +58,21 @@ const SIG_ED25519_KEY = 'sig-ed25519/1';
 const SIG_P256_KEY = 'sig-p256/1';
 
 // ---------------------------------------------------------------- config ----
-// This server always binds here (see startServer below) -- the ONE source
-// of truth for "what host does a real request actually arrive on."
-const BIND_HOST = '127.0.0.1';
+// §6.3 item 7/10: the demo must be reachable from the phone's own browser at
+// a stable, non-localhost LAN origin, not just 127.0.0.1 -- BIND_HOST is now
+// configurable (default unchanged: loopback-only, matching every prior
+// spike run) so an operator can bind 0.0.0.0 (or a specific LAN interface
+// address) for a real device run. See startServer below -- this is the ONE
+// source of truth for "what host does the listen socket actually bind."
+const BIND_HOST = process.env.BIND_HOST ?? '127.0.0.1';
+// SCOPE_DOMAIN's default is deliberately a SEPARATE constant, not derived
+// from BIND_HOST: BIND_HOST may now be a listen address like `0.0.0.0` that
+// no client ever actually connects to, but the scanner signs mode-B
+// evidence with scope = the HOST the PHONE'S REQUEST actually arrived on
+// (D37) -- for a LAN run that is the operator's LAN IP, which only the
+// operator knows and MUST set via SCOPE_DOMAIN explicitly (see README "LAN
+// run" section). Unset, this preserves every prior loopback-only default.
+const DEFAULT_SCOPE_HOST = '127.0.0.1';
 // Real-device finding (2026-09-01): the scanner signs mode-B evidence with
 // scope = the HOST of its verified request origin (D37,
 // apps/scanner/.../MainActivity.kt:876) -- e.g. `127.0.0.1`, never a port
@@ -61,18 +80,21 @@ const BIND_HOST = '127.0.0.1';
 // string ('m2-handoff.test'), so every real-device P-256 signature failed
 // (`sig_invalid`, not `sig_unknown_key` -- the pinned key resolved fine,
 // the scope byte in the signed preimage just didn't match). SCOPE_DOMAIN
-// now derives from BIND_HOST by default -- decision (a): derived ONCE at
-// startup from the bind address, not per-transaction from the request
-// origin, because chiproof's `createVerifier` takes `scopeDomain` as
-// fixed, boot-time config (`src/index.js`: `typeof config.scopeDomain !==
-// 'string'` throws) -- there is no per-call override in `verify()`, so a
-// literal per-transaction derivation (b) would mean re-`createVerifier`ing
+// is set ONCE at startup (decision (a)), not per-transaction from the
+// request origin, because chiproof's `createVerifier` takes `scopeDomain`
+// as fixed, boot-time config (`src/index.js`: `typeof config.scopeDomain
+// !== 'string'` throws) -- there is no per-call override in `verify()`, so
+// a literal per-transaction derivation (b) would mean re-`createVerifier`ing
 // per request, which is not what a spike (or fixed-origin deployment)
 // needs. Good enough for this single-origin spike; a multi-origin
 // deployment would need one verifier instance PER origin, not a per-call
-// scope. SCOPE_DOMAIN stays a full override (e.g. `SCOPE_DOMAIN=127.0.0.1`,
-// the exact stopgap the owner already applied to the running instance) for
-// anyone running this behind a real hostname or TLS terminator.
+// scope. §6.3 item 7/10 (LAN run): SCOPE_DOMAIN no longer defaults to
+// BIND_HOST (BIND_HOST may now be a non-routable listen address like
+// `0.0.0.0`) -- an operator running on the LAN MUST set SCOPE_DOMAIN to
+// their own machine's actual LAN IP explicitly (see README "LAN run"
+// section), the same way `SCOPE_DOMAIN=127.0.0.1` was already the
+// documented override for anyone running this behind a real hostname or
+// TLS terminator.
 //
 // Escalated, not decided (PRD-level, D37): scope is HOST ONLY here, same as
 // the scanner -- but D37's origin-CONSISTENCY check (verifying the request
@@ -84,7 +106,7 @@ const BIND_HOST = '127.0.0.1';
 // one. Recommendation (orchestrator, not owner-decided): keep scope
 // host-only, keep the consistency check on the full origin. Flagging for
 // owner confirmation; did not edit the PRD file myself.
-const SCOPE_DOMAIN = process.env.SCOPE_DOMAIN ?? BIND_HOST;
+const SCOPE_DOMAIN = process.env.SCOPE_DOMAIN ?? DEFAULT_SCOPE_HOST;
 // Spike-only dev secret. A real deployment supplies its own (>=16 bytes).
 const CHALLENGE_SECRET =
   process.env.CHALLENGE_SECRET ?? 'm2-handoff-spike-dev-secret-not-for-production';
@@ -126,6 +148,10 @@ const DEFAULT_TTL_MS = 120_000;
 const MAX_TTL_MS = 600_000;
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_TRANSACTIONS = 1000; // spike-grade memory cap
+// §6.3 item 2/9: path to the ONE flat JSON file backing every persistent
+// store (nonces, attester bindings, zktags-seen). Read at call time (inside
+// makeVerifier, not here at module top level) so a test file can set this
+// per-file in its own before() hook, ahead of importing/calling startServer.
 
 // -------------------------------------------------------------- verifier ----
 // ONE chiproof instance for both modes (chiproof 0.3.0: `evidence.require`
@@ -134,30 +160,38 @@ const MAX_TRANSACTIONS = 1000; // spike-grade memory cap
 // any-of `require` groups), on the same instance/nonce store. Resolves the
 // former two-instance workaround; see README.md.
 export function makeVerifier() {
+  // §6.3 item 2/3/9: ONE flat JSON file (JsonFileStore) backs the nonce
+  // store, BOTH attester-key stores, and the demo's own zktags-seen dedupe
+  // state — persistent across restarts, no in-memory fallback anywhere.
+  // Constructed fresh per `makeVerifier()` call (not a module-level
+  // singleton) so separate server instances — e.g. one per test file that
+  // sets its own DEMO_STORE_PATH — never share state through a shared
+  // module import. The constructor is synchronous and throws immediately on
+  // any I/O/parse failure (fail closed, item 9) — never caught here.
+  const store = new JsonFileStore(process.env.DEMO_STORE_PATH ?? defaultStorePath());
   // D38 (2026-09-01): per-origin device keys, trust-on-first-sight. A real
   // device's mode-B key is no longer expected to be one operator-pinned
   // constant — it now carries its own `pubkey` and gets bound to
-  // (scopeDomain, zktag) the first time it's seen. ONE store per algorithm,
-  // fresh per `makeVerifier()` call (not a module-level singleton) so
-  // separate server/verifier instances — e.g. one per test file — never
-  // share bindings; and not shared BETWEEN the two algorithms either: a
+  // (scopeDomain, zktag) the first time it's seen. ONE namespaced view per
+  // algorithm, backed by the SAME file, so separate server/verifier
+  // instances — e.g. one per test file — never share bindings via a shared
+  // module import; and not shared BETWEEN the two algorithms either: a
   // device that verified once under sig-p256/1 for a given zktag and later
   // (e.g. across a fallback) presented sig-ed25519/1 for the SAME zktag must
   // not collide with an unrelated algorithm's binding — each plug's key
-  // space is independent. The pinned ATTESTER_*_KEY_ID/PUBKEY_PEM env
-  // override still works unchanged (D31 predates D38): a pinned key_id is
-  // resolved before the store is ever consulted, letting the owner keep
-  // pinning a real Pixel key today, ahead of the scanner sending `pubkey`.
-  const attesterStoreEd25519 = new InMemoryAttesterStore({ quiet: true });
-  const attesterStoreP256 = new InMemoryAttesterStore({ quiet: true });
-  return createVerifier({
+  // space is independent (JsonFileStore#attesterView namespaces by
+  // algoLabel for exactly this reason). The pinned
+  // ATTESTER_*_KEY_ID/PUBKEY_PEM env override still works unchanged (D31
+  // predates D38): a pinned key_id is resolved before the store is ever
+  // consulted, letting the owner keep pinning a real Pixel key today, ahead
+  // of the scanner sending `pubkey`.
+  const attesterStoreEd25519 = store.attesterView('ed25519');
+  const attesterStoreP256 = store.attesterView('p256');
+  const verifier = createVerifier({
     scopeDomain: SCOPE_DOMAIN,
     challengeSecret: CHALLENGE_SECRET,
     threshold: THRESHOLD,
-    // InMemoryNonceStore is test-only; this is a single-process demo/spike,
-    // the exact case the explicit override exists for (chiproof.context.md).
-    allowInMemoryStore: true,
-    stores: { nonce: new InMemoryNonceStore({ quiet: true }) },
+    stores: { nonce: store },
     tiers: { max: 'B' },
     evidence: {
       plugs: {
@@ -175,6 +209,7 @@ export function makeVerifier() {
       require: { A: [], B: [[SIG_ED25519_KEY, SIG_P256_KEY]] },
     },
   });
+  return { verifier, store };
 }
 
 // ------------------------------------------------------------ app links ----
@@ -241,10 +276,14 @@ async function start(mode) {
       clearInterval(pollTimer); pollTimer = null;
       document.getElementById('status').textContent = 'response received';
       document.getElementById('verdict').textContent =
-        s.verdict.allowed === true ? 'ALLOWED (over threshold)'
+        (s.already_registered ? 'ALREADY REGISTERED at this site — ' : '') +
+        (s.verdict.allowed === true ? 'ALLOWED (over threshold)'
         : s.verdict.allowed === false ? 'NOT ALLOWED (' + s.verdict.reason + ')'
-        : 'NO ANSWER — verifier could not check (' + s.verdict.reason + ')';
-      document.getElementById('raw').textContent = JSON.stringify(s.verdict, null, 2);
+        : 'NO ANSWER — verifier could not check (' + s.verdict.reason + ')');
+      document.getElementById('raw').textContent = JSON.stringify(
+        { verdict: s.verdict, zktag_seen_before: s.zktag_seen_before, already_registered: s.already_registered },
+        null, 2,
+      );
     }
   }, 1000);
 }
@@ -280,7 +319,7 @@ function b64urlToJson(s) {
 
 // ------------------------------------------------------------------ app ----
 export function createApp() {
-  const verifier = makeVerifier();
+  const { verifier, store } = makeVerifier();
   const requestSignerKey = createPrivateKey(REQUEST_SIGNER_PRIVKEY_PEM);
   const byTransactionId = new Map(); // transactionId -> tx
   const byRequestId = new Map();     // requestId -> tx
@@ -372,7 +411,7 @@ export function createApp() {
       // operator can see what was asked for next to the verdict that comes
       // back below.
       // eslint-disable-next-line no-console
-      console.log(`[m2-handoff] tx created transactionId=${transactionId} mode=${mode} ttlMs=${ttlMs} threshold=${THRESHOLD}`);
+      console.log(`[apps/demo] tx created transactionId=${transactionId} mode=${mode} ttlMs=${ttlMs} threshold=${THRESHOLD}`);
 
       sendJson(res, 201, {
         transactionId,
@@ -442,6 +481,26 @@ export function createApp() {
       }
       tx.status = 'done';
       tx.verdict = verdict;
+      // §6.3 item 3/4: tier-B duplicate rejection. This is the DEMO's own
+      // dedupe state -- chiproof stores nothing (D3, FR3) and its verdict
+      // is never rewritten here (the wire contract with the scanner stays
+      // exactly what chiproof produced); `zktagSeenBefore`/`alreadyRegistered`
+      // are sibling fields the poll response adds alongside `verdict`.
+      // `zktagSeenBefore` reflects the store's state BEFORE this
+      // presentation touches it; `alreadyRegistered` is true whenever this
+      // tier-B zktag was already registered here, regardless of whether
+      // THIS presentation's own evidence also happened to check out (a
+      // stale/mismatched replay of an already-registered document is still
+      // "already registered", not "unregistered").
+      tx.zktagSeenBefore = false;
+      tx.alreadyRegistered = false;
+      if (tx.mode === 'B' && typeof verdict.zktag === 'string' && verdict.zktag.length > 0) {
+        tx.zktagSeenBefore = await store.hasZktagBeenSeen(SCOPE_DOMAIN, verdict.zktag);
+        tx.alreadyRegistered = tx.zktagSeenBefore;
+        if (verdict.ok === true && verdict.allowed === true) {
+          await store.markZktagSeen(SCOPE_DOMAIN, verdict.zktag);
+        }
+      }
       // Value-free: no zktag, nonce, pubkey, sig, or state -- transactionId,
       // tier, and the verdict's own ok/allowed/reason/evidence are the whole
       // point (the owner's side can't see any of this otherwise, since only
@@ -457,7 +516,7 @@ export function createApp() {
           : (Array.isArray(verdict.evidence) && verdict.evidence.length > 0 ? 'matched' : 'n/a');
         // eslint-disable-next-line no-console
         console.log(
-          `[m2-handoff] verdict transactionId=${tx.transactionId} tier=${verdict.tier ?? tx.mode} `
+          `[apps/demo] verdict transactionId=${tx.transactionId} tier=${verdict.tier ?? tx.mode} `
           + `threshold=${THRESHOLD} ok=${verdict.ok} allowed=${verdict.allowed} reason=${verdict.reason} `
           + `evidence=${JSON.stringify(verdict.evidence ?? [])} attester=${attesterStatus}`,
         );
@@ -472,7 +531,15 @@ export function createApp() {
       const tx = byTransactionId.get(transactionId);
       if (!tx) { sendJson(res, 404, { error: 'unknown_transaction' }); return; }
       if (tx.status !== 'done') { sendJson(res, 200, { status: 'pending' }); return; }
-      sendJson(res, 200, { status: 'done', verdict: tx.verdict });
+      // §6.3 item 3/4: zktag_seen_before/already_registered are sibling
+      // fields alongside chiproof's own, untouched verdict -- see the
+      // direct_post handler above for why they are computed there.
+      sendJson(res, 200, {
+        status: 'done',
+        verdict: tx.verdict,
+        zktag_seen_before: tx.zktagSeenBefore,
+        already_registered: tx.alreadyRegistered,
+      });
       return;
     }
 
@@ -489,7 +556,24 @@ export function createApp() {
   });
 }
 
+// §6.3 item 7/10: every non-internal IPv4 address on this machine, so an
+// operator running BIND_HOST=0.0.0.0 sees the actual LAN URL(s) to open on
+// the phone -- printed at startup, never guessed at or hardcoded.
+function lanUrls(port) {
+  const nets = networkInterfaces();
+  const urls = [];
+  for (const addrs of Object.values(nets)) {
+    for (const addr of addrs ?? []) {
+      if (addr.family === 'IPv4' && !addr.internal) urls.push(`http://${addr.address}:${port}`);
+    }
+  }
+  return urls;
+}
+
 export function startServer(port = 0) {
+  // createApp() runs makeVerifier() synchronously, which constructs the
+  // JsonFileStore synchronously -- a bad DEMO_STORE_PATH throws HERE,
+  // before any socket is opened (fail closed, item 9).
   const server = createApp();
   return new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -499,6 +583,7 @@ export function startServer(port = 0) {
         server,
         port: actual,
         url: `http://${BIND_HOST}:${actual}`,
+        lanUrls: lanUrls(actual),
         close: () => new Promise((r) => server.close(r)),
       });
     });
@@ -506,6 +591,25 @@ export function startServer(port = 0) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { url } = await startServer(Number(process.env.PORT ?? 8787));
-  console.log(`m2-handoff spike verifier listening on ${url} (link scheme: ${LINK_SCHEME})`);
+  let started;
+  try {
+    started = await startServer(Number(process.env.PORT ?? 8787));
+  } catch (err) {
+    // Fail closed (item 9): a bad/unwritable DEMO_STORE_PATH, or any other
+    // startup-time failure, exits non-zero with a clear message -- never a
+    // silent in-memory fallback, never a bare stack trace.
+    // eslint-disable-next-line no-console
+    console.error(`[apps/demo] FATAL: could not start: ${err?.message ?? err}`);
+    process.exit(1);
+  }
+  const { url, lanUrls: urls } = started;
+  // eslint-disable-next-line no-console
+  console.log(`apps/demo verifier listening on ${url} (link scheme: ${LINK_SCHEME}, bind host: ${BIND_HOST})`);
+  if (urls.length > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`  LAN: ${urls.join(', ')}`);
+  } else if (BIND_HOST !== '127.0.0.1') {
+    // eslint-disable-next-line no-console
+    console.log('  (no non-internal IPv4 interface found -- only loopback is reachable)');
+  }
 }

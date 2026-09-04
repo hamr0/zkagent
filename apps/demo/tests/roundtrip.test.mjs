@@ -6,6 +6,9 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { createPublicKey } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { startServer } from '../server.mjs';
 import { verifyJws } from '../jws.mjs';
 import { DEV_REQUEST_SIGNER } from '../dev-request-signer-key.mjs';
@@ -14,9 +17,23 @@ const pExecFile = promisify(execFile);
 const walletScript = fileURLToPath(new URL('../scripts/fake-wallet.mjs', import.meta.url));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// §6.3 item 2/9: server.mjs reads DEMO_STORE_PATH at call time (inside
+// makeVerifier), not at module-import time -- setting it here, before
+// startServer() is called, gives this file its OWN persistent store,
+// isolated from tier-b.test.mjs and from any real demo run using the
+// default path (apps/demo/data/store.json).
+let storeDir;
 let srv;
-before(async () => { srv = await startServer(0); });
-after(async () => { await srv.close(); });
+before(async () => {
+  storeDir = mkdtempSync(join(tmpdir(), 'zkagent-demo-roundtrip-'));
+  process.env.DEMO_STORE_PATH = join(storeDir, 'store.json');
+  srv = await startServer(0);
+});
+after(async () => {
+  await srv.close();
+  delete process.env.DEMO_STORE_PATH;
+  rmSync(storeDir, { recursive: true, force: true });
+});
 
 function assertVerdictInvariant(verdict) {
   // M1 spec §3: ok:false forces allowed:null — {ok:false, allowed:false} must never exist.

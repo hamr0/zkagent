@@ -9,6 +9,9 @@ import { fileURLToPath } from 'node:url';
 import {
   createPrivateKey, createPublicKey, generateKeyPairSync, sign as edSign, sign as ecSign,
 } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { sigEd25519Message, sigP256Message, keyIdFor } from 'chiproof';
 import { startServer } from '../server.mjs';
 import { DEV_ATTESTER } from '../dev-attester-key.mjs';
@@ -33,11 +36,19 @@ let srv;
 // own serving host ever disagree again, every signing test below fails for
 // the right reason instead of silently agreeing with itself.
 let SCOPE_DOMAIN;
+// §6.3 item 2/9: this file's own isolated store (see roundtrip.test.mjs for why).
+let storeDir;
 before(async () => {
+  storeDir = mkdtempSync(join(tmpdir(), 'zkagent-demo-tier-b-'));
+  process.env.DEMO_STORE_PATH = join(storeDir, 'store.json');
   srv = await startServer(0);
   SCOPE_DOMAIN = new URL(srv.url).hostname;
 });
-after(async () => { await srv.close(); });
+after(async () => {
+  await srv.close();
+  delete process.env.DEMO_STORE_PATH;
+  rmSync(storeDir, { recursive: true, force: true });
+});
 
 function assertVerdictInvariant(verdict) {
   if (verdict.ok === false) assert.equal(verdict.allowed, null);

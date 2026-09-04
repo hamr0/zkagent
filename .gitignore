@@ -18,6 +18,10 @@ dist/
 build/
 *.log
 .env
+
+# apps/demo's persistent JSON store (§6.3 item 2/9) — operator-local runtime
+# state (nonces, attester-key bindings, zktags-seen), never committed.
+apps/demo/data/
 .env.*
 !.env.example
 
