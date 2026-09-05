@@ -20,7 +20,7 @@ adb devices                                  # 2. enable USB debugging, confirm 
 adb install app-regular-debug.apk            # 3. sideload the M2 scanner debug build, unmodified
 adb reverse tcp:8787 tcp:8787                # 4. forward the phone's localhost:8787 to this machine
 cd apps/demo && npm install                  # 5. install deps (chiproof + qrcode)
-LINK_SCHEME=av npm start                     # 6. start the verifier on http://127.0.0.1:8787
+npm start                                    # 6. start the verifier on http://127.0.0.1:8787
 ```
 Then open `http://127.0.0.1:8787` in the phone's own browser (Chrome) — 7. This is the ONLY
 supported origin for M3 (D76): the scanner's network security config trusts cleartext HTTP
@@ -108,7 +108,7 @@ operator-facing mode).
 |---|---|---|
 | `PORT` | `8787` | listen port |
 | `BIND_HOST` | `127.0.0.1` | listen address |
-| `LINK_SCHEME` | `https` | `av` for the custom-scheme app link (used in the M3 POC evidence run); `https` for the app-link variant |
+| `LINK_SCHEME` | `av` | `av` for the custom-scheme app link (default, D76: the only scheme the sideloaded scanner reaches this demo through); `https` for the app-link variant |
 | `APP_LINK_BASE` | `https://wallet.example.invalid/authorize` | where the `https` app link points (no online hosting is in scope for M3, D76 — this stays a non-resolving placeholder unless an operator has a real wallet app-link host) |
 | `SCOPE_DOMAIN` | `127.0.0.1` | must match the HOST the phone's request actually arrives on (D37) — stays `127.0.0.1` for the `adb reverse` recipe above |
 | `CHALLENGE_SECRET` | dev-only baked-in default | HMAC key sealing the challenge nonce — a real deployment supplies its own (≥16 bytes) |
@@ -133,19 +133,18 @@ scanner sends (a wire-contract change) and/or a device-attestation channel (e.g.
 Integrity, gated behind Track Z per D23) — both out of M3 scope (item 13: no scanner-side
 changes) and escalated to the owner rather than invented here.
 
-## Open questions (escalated, not decided in this change)
+## Decided since (D77, D78)
 
-1. **§6.3 item 5's "only nonce+signature differ" wording** — see the tier-A comparison section
-   above. The real diff also flags `challenge.issued_at`/`challenge.expires_at` because tier-A
-   challenges here are unsigned (no `signature` field exists at all) and are freshly
-   timestamped every scan. The page's caption lists the actual differing fields rather than
-   asserting the PRD's literal sentence. Needs owner sign-off: is this acceptable as-is, or
-   should chiproof's challenge shape change to make issued_at/expires_at derivable rather than
-   stored per-challenge (a chiproof-level change, out of scope here)?
-2. **Trust list / FR10 (item 8)** — see above. No implementation exists; needs an owner
-   decision on whether/how to add a client-identity channel to the wire contract, and (once a
-   real APK is signed) the actual package name + signing-cert digest, which can only come from
-   `apksigner`/`keytool` run against the installed APK — not invented here.
+1. **§6.3 item 5's wording** — resolved by D77 (2026-09-04): the sentence is corrected in place
+   to "Only the fresh nonce and the challenge's issued-at and expires-at timestamps may ever
+   land in the 'differs' column. Tier-A presentations carry no signature by design (D27,
+   unlinkable), so no signature row exists." — matching the real diff (`challenge.nonce`,
+   `challenge.issued_at`, `challenge.expires_at`), device-confirmed. See
+   `docs/wiki/decisions.md` D77.
+2. **Trust list / FR10 (item 8)** — resolved by D78 (2026-09-04): moved out of M3 scope to
+   §6.5 S4, enforceable only via a device-attestation evidence plug (Play Integrity / Key
+   Attestation), built alongside that plug. M3 relies on attester-key binding (D38/D39) instead
+   — a disclosed, weaker-than-FR10 limit, not a workaround. See `docs/wiki/decisions.md` D78.
 
 ## Deliberate simplifications (recorded, not hidden)
 

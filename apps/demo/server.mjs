@@ -111,9 +111,11 @@ const SCOPE_DOMAIN = process.env.SCOPE_DOMAIN ?? DEFAULT_SCOPE_HOST;
 // Spike-only dev secret. A real deployment supplies its own (>=16 bytes).
 const CHALLENGE_SECRET =
   process.env.CHALLENGE_SECRET ?? 'm2-handoff-spike-dev-secret-not-for-production';
-// Link scheme is configurable: 'https' app link (primary) or 'av' custom
-// scheme (Blueprint AV Profile fallback: "at least av:// MUST be supported").
-const LINK_SCHEME = process.env.LINK_SCHEME ?? 'https';
+// Link scheme is configurable: 'av' custom scheme (default -- D76: the
+// sideloaded scanner only reaches this demo via av:// VIEW intents, the
+// https app link below does not resolve without a real wallet app-link
+// host) or 'https' app link (selectable for that variant).
+const LINK_SCHEME = process.env.LINK_SCHEME ?? 'av';
 // Where the https app link points. On a real deployment this is the wallet
 // app's verified app-link host; .invalid TLD here so nothing resolves by accident.
 const APP_LINK_BASE = process.env.APP_LINK_BASE ?? 'https://wallet.example.invalid/authorize';
