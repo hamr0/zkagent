@@ -5,6 +5,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-09-05
+
+Lockstep patch release (D72): `packages/chiproof` and `apps/scanner` move
+0.6.0 → 0.6.1 together. Neither package's code changed since 0.6.0 —
+`apps/scanner` versionCode 3 → 4, republished under the lockstep rule same as
+prior patch-only cuts. The one behaviour change is in `apps/demo`.
+
+- **`apps/demo` — `LINK_SCHEME` defaults to `av`, commit `31c9d20` (PRD
+  §6.3 item 13).** The demo verifier's default handoff link scheme flips
+  from `https` to `av`: the sideloaded scanner reaches this demo only via
+  `av://` VIEW intents (D76), and the `https` app-link default never
+  resolved without a real wallet app-link host, so `npm start` alone
+  produced a link the scanner could not open. `https` stays selectable via
+  `LINK_SCHEME=https`. New subprocess test
+  `apps/demo/tests/link-scheme.test.mjs` asserts the default. Demo README's
+  open-questions section is retired in favour of pointers to D77/D78.
+- **Docs.** PRD (`docs/wiki/milestones.md`, `decisions.md`, `questions.md`,
+  `history.md` v1.65–v1.67): D80 (release-signing keystore written into
+  §6.6 item 7, PRD-gated, not built), Q51 (distribution model — per-operator
+  forks/keystores vs. one canonical build), D81 (model A confirmed — one
+  upstream Apache-2.0 repo, each operator builds and signs their own;
+  §6.7 "Operator knobs" added as a PRD-gated placeholder; Q51 point 3 still
+  open). NGI Zero grant application drafted (`docs/wiki/ngi-zero-application-draft.md`,
+  not filed). `.gitignore`: new `.claude/stash/` files are now ignored
+  (already-tracked ones stay tracked) — session handover notes, not
+  deliverables.
+
 ## [0.6.0] — 2026-09-05
 
 Lockstep release (D72): `packages/chiproof` and `apps/scanner` move 0.5.0 →
