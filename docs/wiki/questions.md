@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — open questions Q1–Q50
+title: zkagent — open questions Q1–Q51
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# zkagent — open questions Q1–Q50
+# zkagent — open questions Q1–Q51
 
 Deduped index of PRD §11 (Open questions). Every Qn from Q1–Q48 is listed in order;
 narrative status-update chains, commit/test-count histories, and line anchors from
@@ -423,3 +423,24 @@ this is flagged in the report back to the caller.
   verifier over HTTPS — that gap is not addressed by M3 at all. Status: OPEN, explicitly NOT
   solved in M3. Owner, 2026-09-04: "playstore will be clearer when we get to it." See
   milestones.md §6.3 item 7, §6.6; decisions.md D76.
+- **Q51 (opened 2026-09-05, owner)** — Distribution model: who signs the scanner? Owner,
+  verbatim: "if everyone makes their own we just give them the adb, why do i have to create and
+  share sensitive details with any adopter/operator?" and, clarifying intent: "operators need to
+  change ui and do adjust knobs to their use, i want the copy to be from one place, modified
+  knobs/ui to operator liking." Orchestrator's clarification the owner accepted: a keystore is
+  never shared; only the certificate's SHA-256 fingerprint is published (public by design) so a
+  verifier can pin it (FR10/D17). Two models: (A) source-only — operators fork ONE upstream (this
+  repo), adjust UI/knobs, build and sign their own app with their own keystore, pin their own
+  fingerprint in their own verifier; the owner's keystore signs only a showcase build; a Play
+  listing is each operator's decision for their own package; (B) one canonical build — the owner
+  signs, publishes one fingerprint, lists on Play; all operators pin it; end users install one
+  app. The owner's stated intent points to (A). Consequences to record if (A) is confirmed: §6.6
+  item 7 (D80 keystore) becomes a documented per-operator recipe (keytool, secrets/, env vars)
+  plus the owner's own showcase keystore, not a shared secret; §6.6 items 1–4 (closed track, Play
+  digest, review objections) apply to the owner's showcase listing only and are showcase evidence,
+  not a requirement on operators; §6.5 S4's trust list is per operator (their own digest); Q50
+  (Play HTTPS reachability) is then each operator's hosting question. Open decision points for the
+  owner: (1) confirm (A); (2) whether "one upstream" implies an operator-config layer
+  (knobs/UI as configuration rather than forking source) — that would be a new PRD item, not
+  assumed here; (3) whether the owner runs the showcase Play listing at all under (A). Status:
+  OPEN, no ruling yet; nothing in D80 changes until Q51 is answered.

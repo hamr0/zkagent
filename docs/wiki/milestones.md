@@ -462,7 +462,9 @@ Node process has no public HTTPS origin, and D76 rejected zkagent hosting one it
 "playstore will be clearer when we get to it."
 
 Item ordering: item 7 (release-signing keystore) precedes item 1 (first upload) — the Play
-upload key is derived from the local keystore, so the keystore must exist first.
+upload key is derived from the local keystore, so the keystore must exist first. Q51 (open)
+asks whether the keystore/Play items here are owner deliverables or a per-operator recipe —
+see questions.md; nothing is built under items 1–4 or 7 until Q51 is ruled.
 
 1. First upload goes to a **closed testing track**, never production, using the current release
    line (v0.5.0 or later under D72 lockstep). Production is a separate, later owner decision.
