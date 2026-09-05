@@ -127,10 +127,23 @@ class PaneState {
         selectedTab = normalizeTab(saved ?: TAB_SCAN)
     }
 
-    private fun normalizeTab(index: Int): Int = if (index == TAB_LOG) TAB_LOG else TAB_SCAN
+    // Device fix (2026-09-05) — §6.5 S3 round 3, item 4: a THIRD tab
+    // ("Diagnostics", the two no-tap-needed probe buttons moved out of the
+    // scan pane) extends the legal-state enumeration this class's own doc
+    // right-sized at "2 x 2 = FOUR" to THREE tab values x TWO readInProgress
+    // values = six. [TAB_DIAGNOSTICS] is a new writable value, not a new
+    // field — every existing writer ([userSelectedTab],
+    // [onIncomingHandoffIntent]'s TAB_SCAN target, [restoreTabIndex]) is
+    // unchanged in shape.
+    private fun normalizeTab(index: Int): Int = when (index) {
+        TAB_LOG -> TAB_LOG
+        TAB_DIAGNOSTICS -> TAB_DIAGNOSTICS
+        else -> TAB_SCAN
+    }
 
     companion object {
         const val TAB_SCAN = 0
         const val TAB_LOG = 1
+        const val TAB_DIAGNOSTICS = 2
     }
 }

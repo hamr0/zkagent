@@ -9,9 +9,23 @@
     <string name="input_date_of_birth">Date of birth</string>
 
     <string name="info_loading">Reading document…</string>
-    <string name="info_scan_passport">Please fill the details below, choose a presentation mode, press "Lock mode &amp; scan", then place your phone on top of the document.\n\nThis app never stores, uploads or shares document fields. Mode A discloses one fact and nothing that follows you to other sites. Mode B additionally lets this device be recognised again by the same site only. Field names, verdicts and hashes may appear below — never document field values.</string>
+    <!-- §6.5 S3 (D75) — the item-5 no-storage disclosure, moved out of the
+         pane's permanent layout into the About affordance (MainActivity
+         .showAboutDialog). Content unchanged, verbatim; only the stale
+         "choose a presentation mode" instructional preamble (obsolete since
+         item 4's mode-radio removal) is dropped, not carried over. -->
+    <string name="about_title">About this app</string>
+    <string name="about_disclosure_text">This app never stores, uploads or shares document fields. Mode A discloses one fact and nothing that follows you to other sites. Mode B additionally lets this device be recognised again by the same site only. Field names, verdicts and hashes may appear below — never document field values.</string>
     <string name="error_input">Please provide details to read the document</string>
-    <string name="error_read">Couldn\'t read — check your details and try again.</string>
+    <!-- Device fix (2026-09-05, round 4, "pop up asks to try again but
+         button is dimmed, not released") — this is the ACCESS_ESTABLISHMENT
+         (FailureTransition) case: a KEEP transition BY DESIGN (Q40/D67) —
+         the session stays locked and the Lock/Verify button stays disabled
+         on purpose (it is ARMED for another NFC tap, not a button press).
+         The button was never the bug; the wording was — it did not say HOW
+         to retry. Now matches TRANSIENT_READ_FAILURE_MESSAGE's register
+         ("keep the card at the top of your phone"). -->
+    <string name="error_read">Couldn\'t read — check your details, then hold your document to the phone again.</string>
 
     <string name="pass">Pass</string>
     <string name="failed">Failed</string>
@@ -34,14 +48,27 @@
     <string name="biometric_prompt_title_for_site">Authorize presentation to %1$s</string>
     <string name="biometric_prompt_subtitle">Required only to emit a result — the document has already been read</string>
 
-    <string name="handoff_heading">Hand off to the verifier</string>
+    <!-- §6.5 S3 round 3 (2026-09-05): moved from a permanent line inside
+         the paste reveal area into the About dialog (MainActivity
+         .showAboutDialog) — content unchanged. -->
     <string name="handoff_camera_hint">On another device? Scan the site\'s QR with your camera app, then tap the link.</string>
-    <string name="handoff_manual_hint">…or paste an av:// link / request_uri</string>
+    <!-- Device fix (2026-09-05, round 3, "too big"): shortened wording,
+         paired with the field's own 13sp/compact-height layout change. -->
+    <string name="handoff_manual_hint">av:// link or request_uri</string>
     <string name="handoff_qr_description">Photo of a QR code shown by the verifier, decoded locally on-device</string>
 
-    <!-- §6.2 item 16 (D44) — log tab -->
+    <!-- §6.5 S3 (D75) — the "Paste link" button (not a bare always-visible
+         field) and its locked/read-in-progress dimmed-state hint. -->
+    <string name="button_paste_link">Paste link</string>
+    <string name="paste_button_dimmed_hint">Finish this scan, or close and reopen the app to paste.</string>
+    <string name="button_about">About</string>
+    <string name="handoff_paste_unrecognised_message">Not a recognised av:// link or request_uri</string>
+
+    <!-- §6.2 item 16 (D44) — log tab; §6.5 S3 round 3 (2026-09-05) — a
+         third "Diagnostics" tab for the two no-tap-needed probe buttons. -->
     <string name="tab_scan">Scan</string>
     <string name="tab_log">Log</string>
+    <string name="tab_diagnostics">Diagnostics</string>
 
     <!-- §6.2 item 15 (D43) — blocking acknowledgment dialogs -->
     <string name="dialog_ok">OK</string>

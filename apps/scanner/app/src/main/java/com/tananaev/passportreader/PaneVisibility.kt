@@ -36,7 +36,12 @@ package com.tananaev.passportreader
  * leave two of them `VISIBLE` at once.
  */
 object PaneVisibility {
-    enum class Pane { SCAN, LOG, LOADING }
+    // Device fix (2026-09-05) — §6.5 S3 round 3, item 4: a fourth pane,
+    // [Pane.DIAGNOSTICS], for the two no-tap-needed probe buttons moved out
+    // of the scan pane into their own tab. Same "always names exactly ONE
+    // pane" invariant this object's class doc already establishes — now
+    // four overlapping siblings, still mutually exclusive by construction.
+    enum class Pane { SCAN, LOG, DIAGNOSTICS, LOADING }
 
     /**
      * @param readInProgress true while a chip read is in flight (mirrors
@@ -45,11 +50,13 @@ object PaneVisibility {
      *   progress always showed the loading pane regardless of which tab
      *   was selected.
      * @param selectedTabPosition the tab layout's current selection (0 =
-     *   Scan, 1 = Log) — only consulted when no read is in progress.
+     *   Scan, 1 = Log, 2 = Diagnostics) — only consulted when no read is in
+     *   progress.
      */
     fun choosePane(readInProgress: Boolean, selectedTabPosition: Int): Pane = when {
         readInProgress -> Pane.LOADING
         selectedTabPosition == 1 -> Pane.LOG
+        selectedTabPosition == 2 -> Pane.DIAGNOSTICS
         else -> Pane.SCAN
     }
 }

@@ -23,10 +23,14 @@
 
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- §6.2 item 16 (D44) — "Scan" is the existing form+report screen,
-         unchanged; "Log" is the additional per-scan report log view. Tab
-         selection only toggles which of [main_layout]/[log_layout] is
-         visible — see MainActivity.onTabSelected doc. -->
+    <!-- §6.2 item 16 (D44) — "Scan" is the form+report screen; "Log" is the
+         per-scan report log view. Device fix (2026-09-05, §6.5 S3 round 3
+         item 4) added "Diagnostics" — the two no-tap-needed probe buttons,
+         moved out of the scan pane. Tab selection only toggles which of
+         [main_layout]/[log_layout]/[diagnostics_layout] is visible — see
+         MainActivity.onTabSelected doc. TabLayout scrolls its own strip
+         horizontally if three tabs don't fit a narrow screen — no separate
+         HorizontalScrollView needed. -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tab_layout"
         android:layout_width="match_parent"
@@ -43,6 +47,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/tab_log" />
+
+        <com.google.android.material.tabs.TabItem
+            android:id="@+id/tab_diagnostics"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/tab_diagnostics" />
 
     </com.google.android.material.tabs.TabLayout>
 
@@ -78,203 +88,296 @@
 
         </LinearLayout>
 
-        <!-- FIX (Q47 / findings.md #17): focusableInTouchMode is required
-             here, not optional. View.clearFocus() defaults refocus=true,
-             which calls the root view's requestFocus() to find a new
-             candidate; a ViewGroup's default descendant-focusability order
-             (FOCUS_BEFORE_DESCENDANTS) tries the container itself before
-             descending into children. Without this attribute, main_layout
-             is not a valid candidate, so that search descends straight to
-             input_passport_number — the only focusableInTouchMode="true"
-             EditText on the form — and re-focuses it immediately, silently
-             undoing MainActivity's clearFocus() call. Setting this here
-             gives the search a legitimate, harmless landing spot before it
-             ever reaches the EditText (focusableInTouchMode="true" also
-             implies android:focusable="true" per View's own XML parsing). -->
+        <!-- Device fix (2026-09-05, "screen still busy with bottom
+             unmovable part") — REVERTED to a plain ScrollView (was briefly
+             split into a scrollable top half + a pinned, non-scrolling
+             report_view sibling; that pinning permanently ate screen
+             space). report_view is back INSIDE the scroll content, directly
+             under the Scan/Verify button (see report_view below). S3's
+             "fixed position" goal is now met a different way: every element
+             ABOVE the button that could vary in height (question_line,
+             the paste row, handoff_status) is capped/floored — see each
+             one's own comment — so the button and report_view stay put
+             across ordinary handoff-state changes without a pinned
+             footer. -->
         <ScrollView
             android:id="@+id/main_layout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:focusableInTouchMode="true">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingLeft="@dimen/activity_horizontal_margin"
-                android:paddingRight="@dimen/activity_horizontal_margin"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/description"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/activity_vertical_margin"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin"
-                    android:textAppearance="@style/TextAppearance.AppCompat.Subhead"
-                    android:text="@string/info_scan_passport" />
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/input_passport_number_layout"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/activity_vertical_margin">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/input_passport_number"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="textCapCharacters"
-                        android:hint="@string/input_passport_number" />
-
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/input_expiration_date_layout"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/activity_vertical_margin">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/input_expiration_date"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="@string/input_expiration_date"
-                        android:inputType="date"
-                        android:focusableInTouchMode="false" />
-
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/input_date_of_birth_layout"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/activity_vertical_margin"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/input_date_of_birth"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="@string/input_date_of_birth"
-                        android:inputType="date"
-                        android:focusableInTouchMode="false" />
-
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <!-- §6.2 item 4 (2026-09 real-device change, "remove the mode
-                     radio entirely") — mode is DERIVED, never a user choice: a
-                     verified handoff's tier sets it (D33/D34); a bare local scan
-                     with no verified request is mode A by definition. This
-                     TextView is the ONLY place mode is ever displayed — there is
-                     no control here to disagree with the executed mode (F5's bug
-                     class is eliminated by construction) — see MainActivity
-                     class doc / MainActivity.refreshSessionDisplay / lockModeAndArm
-                     (D58 step 4 renamed refreshModeStatus). -->
-                <TextView
-                    android:id="@+id/mode_status"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:textStyle="italic"
-                    tools:text="Locked: mode B — tap your document now" />
-
-                <Button
-                    android:id="@+id/button_lock_and_scan"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/activity_vertical_margin"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin"
-                    android:text="@string/button_lock_and_scan" />
-
-                <Button
-                    android:id="@+id/button_m2_masterlist_probe"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin"
-                    android:text="@string/button_masterlist_probe" />
-
-                <!-- Debug-only, zero-tap: exercises DeviceKey.ensureKey's
-                     generate -> reuse path (twice, same process) without an
-                     NFC session — see MainActivity's DeviceKey self-test
-                     root-cause note. -->
-                <Button
-                    android:id="@+id/button_devicekey_probe"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin"
-                    android:text="@string/button_devicekey_probe" />
-
-                <!-- §6.2 item 8 — handoff. Primary path is av:// + direct_post
-                     (handled by RegularActivity's VIEW intent-filter, no UI of
-                     its own needed — see MainActivity.pendingHandoff). This
-                     block is ONLY the cross-device fallback: a verifier
-                     website shows a QR on another screen; the person scans
-                     it with any camera app on their phone and taps the
-                     resulting link, which lands on the same VIEW intent
-                     filter as a same-device av:// link (D69, 2026-09-03 —
-                     no in-app scanner: see decisions.md D69 and
-                     README.md). A manual-paste field is the
-                     fallback-of-the-fallback. -->
+            <!-- FIX (Q47 / findings.md #17): focusableInTouchMode is required
+                 here, not optional. View.clearFocus() defaults refocus=true,
+                 which calls the root view's requestFocus() to find a new
+                 candidate; a ViewGroup's default descendant-focusability order
+                 (FOCUS_BEFORE_DESCENDANTS) tries the container itself before
+                 descending into children. Without this attribute, this
+                 ScrollView is not a valid candidate, so that search descends
+                 straight to input_passport_number — the only
+                 focusableInTouchMode="true" EditText on the form — and
+                 re-focuses it immediately, silently undoing MainActivity's
+                 clearFocus() call. Setting this here gives the search a
+                 legitimate, harmless landing spot before it ever reaches the
+                 EditText (focusableInTouchMode="true" also implies
+                 android:focusable="true" per View's own XML parsing). -->
                 <LinearLayout
-                    android:id="@+id/handoff_container"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:paddingLeft="@dimen/activity_horizontal_margin"
+                    android:paddingRight="@dimen/activity_horizontal_margin"
                     android:orientation="vertical">
 
+                    <!-- §6.5 S3 (D75) — the item-5 no-storage disclosure's new
+                         non-primary home (MainActivity.showAboutDialog); the
+                         old five-sentence @string/info_scan_passport blob
+                         that used to render here on every screen view is
+                         gone (DP7). -->
                     <TextView
-                        android:layout_width="match_parent"
+                        android:id="@+id/button_about"
+                        style="?android:attr/borderlessButtonStyle"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_gravity="end"
                         android:layout_marginTop="@dimen/activity_vertical_margin"
-                        android:textAppearance="@style/TextAppearance.AppCompat.Subhead"
-                        android:text="@string/handoff_heading" />
+                        android:text="@string/button_about" />
 
-                    <TextView
-                        android:id="@+id/handoff_camera_hint"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="@string/handoff_camera_hint" />
-
+                    <!-- MRZ input fields — kept (S3 does not remove them),
+                         placed above the question line where they read
+                         naturally: fill in the document, then see what's
+                         being asked, then act. -->
                     <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/handoff_manual_layout"
+                        android:id="@+id/input_passport_number_layout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp">
 
                         <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/handoff_manual_input"
+                            android:id="@+id/input_passport_number"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:hint="@string/handoff_manual_hint" />
+                            android:inputType="textCapCharacters"
+                            android:hint="@string/input_passport_number" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/input_expiration_date_layout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/activity_vertical_margin">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/input_expiration_date"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/input_expiration_date"
+                            android:inputType="date"
+                            android:focusableInTouchMode="false" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/input_date_of_birth_layout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/activity_vertical_margin"
+                        android:layout_marginBottom="@dimen/activity_vertical_margin">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/input_date_of_birth"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/input_date_of_birth"
+                            android:inputType="date"
+                            android:focusableInTouchMode="false" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- §6.2 item 4 (2026-09 real-device change, "remove the mode
+                         radio entirely") — mode is DERIVED, never a user choice: a
+                         verified handoff's tier sets it (D33/D34); a bare local scan
+                         with no verified request is mode A by definition. This
+                         TextView is the ONLY place mode is ever displayed — there is
+                         no control here to disagree with the executed mode (F5's bug
+                         class is eliminated by construction) — see MainActivity
+                         class doc / MainActivity.refreshSessionDisplay / lockModeAndArm
+                         (D58 step 4 renamed refreshModeStatus). Device fix
+                         (2026-09-05, owner device round 3): moved from directly
+                         above the Scan/Verify button (where it read as leftover
+                         clutter near the action) to ABOVE the question line —
+                         one small line, text/logic unchanged, purely relocated. -->
                     <TextView
-                        android:id="@+id/handoff_status"
+                        android:id="@+id/mode_status"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
+                        android:textSize="12sp"
+                        android:textStyle="italic"
+                        tools:text="Locked: mode B — tap your document now" />
+
+                    <!-- §6.5 S2 (D74) item 2 / S3 (D75) pane-order item (1) —
+                         the exact question from the signed request object,
+                         or D46's "Local scan (no site)" with nothing
+                         pending. See MainActivity.applySessionDisplay /
+                         SessionDisplay.render's questionText. Content/
+                         wrapping UNCHANGED (device-confirmed, "this website
+                         asks if you are over 18" — owner: keep as is);
+                         minLines="1" only RESERVES a one-line floor so a
+                         short question never collapses shorter than the
+                         layout below expects — it does NOT cap growth, so
+                         the tier-B recognition sentence still renders in
+                         full rather than being truncated. Device fix
+                         (2026-09-05, owner device round 3): bold, centered,
+                         16sp — text/logic otherwise unchanged. -->
+                    <TextView
+                        android:id="@+id/question_line"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/activity_vertical_margin"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:minLines="1"
+                        tools:text="This website asks if you are over 18" />
+
+                    <!-- §6.5 S3 (D75) pane-order item (2) — handoff block:
+                         the "Paste link" button (not a bare always-visible
+                         field), and the area it reveals (the D69
+                         cross-device QR hint + the existing manual-paste
+                         field, the fallback-of-the-fallback). Primary path
+                         is still av:// + direct_post, handled by
+                         RegularActivity's VIEW intent-filter with no UI of
+                         its own — this block is only the fallback.
+                         Device fix (2026-09-05, "paste is taking too much
+                         space with a button"): ONE compact row — a small
+                         borderless/text-style button, no heading, no
+                         card/box; the locked/read-in-progress dimmed hint
+                         REPLACES the button's own text (MainActivity
+                         .applySessionDisplay) rather than adding a second
+                         line — see button_paste_link below, paste_disabled_
+                         hint removed as its own view. maxLines/ellipsize
+                         keep this ONE row's height fixed regardless of
+                         which of the two texts (the short label or the
+                         longer hint) is showing. -->
+                    <LinearLayout
+                        android:id="@+id/handoff_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <Button
+                            android:id="@+id/button_paste_link"
+                            style="?android:attr/borderlessButtonStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:minHeight="0dp"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp"
+                            android:textSize="13sp"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:text="@string/button_paste_link" />
+
+                        <!-- Device fix (2026-09-05, "text note and text box
+                             is too big"): ONE row — the field alone. Apply
+                             happens on the MAIN Scan/Verify button (owner
+                             correction — MainActivity.onLockButtonTapped's
+                             doc). The D69 cross-device QR hint sentence
+                             (that USED to render here) moved into the About
+                             dialog (MainActivity.showAboutDialog) instead
+                             of taking a permanent second line of this
+                             already-optional reveal area. -->
+                        <LinearLayout
+                            android:id="@+id/paste_reveal_area"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <com.google.android.material.textfield.TextInputLayout
+                                android:id="@+id/handoff_manual_layout"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                app:hintTextAppearance="@style/TextAppearance.AppCompat.Small">
+
+                                <!-- Device fix (2026-09-05, "pasting link
+                                     doesn't work"): textUri + actionDone +
+                                     singleLine so the keyboard offers a
+                                     reliable Done/checkmark action (a
+                                     convenience trigger); the PRIMARY apply
+                                     trigger is the main Scan/Verify button
+                                     once this field holds text (owner
+                                     correction — MainActivity
+                                     .onLockButtonTapped). 13sp hint text,
+                                     compact height (2026-09-05 round 3). -->
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/handoff_manual_input"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:minHeight="0dp"
+                                    android:hint="@string/handoff_manual_hint"
+                                    android:textSize="13sp"
+                                    android:inputType="textUri"
+                                    android:imeOptions="actionDone"
+                                    android:singleLine="true" />
+
+                            </com.google.android.material.textfield.TextInputLayout>
+
+                        </LinearLayout>
+
+                        <!-- Device fix (2026-09-05, "bottom unmovable part
+                             of log"): capped so a long verified-handoff
+                             status line can shift what's below it by no
+                             more than a fixed two-line amount, instead of
+                             growing without bound. -->
+                        <TextView
+                            android:id="@+id/handoff_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:fontFamily="monospace"
+                            android:textIsSelectable="true"
+                            android:textSize="12sp"
+                            android:maxLines="2"
+                            android:ellipsize="end" />
+
+                    </LinearLayout>
+
+                    <!-- §6.5 S3 (D75) pane-order item (3) — the single
+                         Scan/Verify button; item 20's verb rule unchanged. -->
+                    <Button
+                        android:id="@+id/button_lock_and_scan"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/activity_vertical_margin"
+                        android:layout_marginBottom="@dimen/activity_vertical_margin"
+                        android:text="@string/button_lock_and_scan" />
+
+                    <!-- §6.5 S3 (D75) pane-order item (4) — value-free
+                         verdict/report screen (§6.2 item 5): verdict, step
+                         names, counts, hashes, timings, algorithm names
+                         only. Never a DG1/MRZ/personal field. Safe to
+                         screenshot. Device fix (2026-09-05): back INSIDE the
+                         scroll content, directly under the button — see
+                         main_layout's own comment above for why the
+                         earlier pinned-sibling approach was reverted; the
+                         elements above this point are now capped/floored
+                         instead, so this does not jump around under
+                         ordinary handoff-state changes. -->
+                    <TextView
+                        android:id="@+id/report_view"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/activity_vertical_margin"
+                        android:layout_marginBottom="@dimen/activity_vertical_margin"
                         android:fontFamily="monospace"
                         android:textIsSelectable="true"
-                        android:textSize="12sp" />
+                        android:textSize="12sp"
+                        android:text="" />
 
                 </LinearLayout>
-
-                <!-- Value-free verdict/report screen (§6.2 item 5): verdict,
-                     step names, counts, hashes, timings, algorithm names only.
-                     Never a DG1/MRZ/personal field. Safe to screenshot. -->
-                <TextView
-                    android:id="@+id/report_view"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/activity_vertical_margin"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin"
-                    android:fontFamily="monospace"
-                    android:textIsSelectable="true"
-                    android:textSize="12sp"
-                    android:text="" />
-
-            </LinearLayout>
 
         </ScrollView>
 
@@ -314,6 +417,69 @@
                     android:paddingRight="@dimen/activity_horizontal_margin"
                     android:paddingTop="@dimen/activity_vertical_margin"
                     android:paddingBottom="@dimen/activity_vertical_margin"
+                    android:fontFamily="monospace"
+                    android:textIsSelectable="true"
+                    android:textSize="12sp"
+                    android:text="" />
+
+            </LinearLayout>
+
+        </ScrollView>
+
+        <!-- Device fix (2026-09-05, §6.5 S3 round 3 item 4) — the two
+             no-tap-needed probe buttons' new home, moved out of the scan
+             pane (owner: "text that still appears between verify... run
+             masterlist... run device key self" cluttered the area right
+             below the main button). Output keeps going where it went
+             before (report_view/log — MainActivity.runMasterlistProbe /
+             .runDeviceKeyProbe are unchanged, only their trigger buttons
+             moved). Hidden unless the "Diagnostics" tab is selected. -->
+        <ScrollView
+            android:id="@+id/diagnostics_layout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingLeft="@dimen/activity_horizontal_margin"
+                android:paddingRight="@dimen/activity_horizontal_margin"
+                android:orientation="vertical">
+
+                <Button
+                    android:id="@+id/button_m2_masterlist_probe"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/activity_vertical_margin"
+                    android:layout_marginBottom="@dimen/activity_vertical_margin"
+                    android:text="@string/button_masterlist_probe" />
+
+                <!-- Debug-only, zero-tap: exercises DeviceKey.ensureKey's
+                     generate -> reuse path (twice, same process) without an
+                     NFC session — see MainActivity's DeviceKey self-test
+                     root-cause note. -->
+                <Button
+                    android:id="@+id/button_devicekey_probe"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/activity_vertical_margin"
+                    android:text="@string/button_devicekey_probe" />
+
+                <!-- Device fix (2026-09-05, round 4, "yield nothing when
+                     pressed") — both probes RAN (confirmed in logcat) but
+                     their output had nowhere to show on THIS tab: it went
+                     only to report_view (scan pane) / the log. This is a
+                     SECOND PROJECTION TARGET of the same reportLog.lastText
+                     MainActivity.applyReportText already writes to
+                     report_view — never a second writer of the scan-pane
+                     report. Same value-free rules as report_view/log_view:
+                     verdict, step names, counts, hashes, timings only. -->
+                <TextView
+                    android:id="@+id/diagnostics_report_view"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/activity_vertical_margin"
                     android:fontFamily="monospace"
                     android:textIsSelectable="true"
                     android:textSize="12sp"

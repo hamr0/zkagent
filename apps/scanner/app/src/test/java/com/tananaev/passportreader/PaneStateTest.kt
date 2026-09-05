@@ -142,6 +142,64 @@ class PaneStateTest {
         assertTrue(state.readInProgress)
     }
 
+    // ---- Device fix (2026-09-05) — §6.5 S3 round 3 item 4: Diagnostics tab
+
+    @Test
+    fun `userSelectedTab moves to the Diagnostics tab`() {
+        val state = PaneState()
+        state.userSelectedTab(PaneState.TAB_DIAGNOSTICS)
+        assertEquals(PaneState.TAB_DIAGNOSTICS, state.selectedTab)
+    }
+
+    @Test
+    fun `save then restore round-trips the Diagnostics tab`() {
+        val state = PaneState()
+        state.userSelectedTab(PaneState.TAB_DIAGNOSTICS)
+        val saved = state.tabIndexToSave()
+
+        val recreated = PaneState()
+        recreated.restoreTabIndex(saved)
+        assertEquals(PaneState.TAB_DIAGNOSTICS, recreated.selectedTab)
+    }
+
+    @Test
+    fun `an incoming admitted handoff intent switches away from the Diagnostics tab to Scan`() {
+        val state = PaneState()
+        state.userSelectedTab(PaneState.TAB_DIAGNOSTICS)
+        state.onIncomingHandoffIntent(admitted = true)
+        assertEquals(PaneState.TAB_SCAN, state.selectedTab)
+    }
+
+    @Test
+    fun `a refused handoff intent leaves the Diagnostics tab alone`() {
+        val state = PaneState()
+        state.userSelectedTab(PaneState.TAB_DIAGNOSTICS)
+        state.onIncomingHandoffIntent(admitted = false)
+        assertEquals(PaneState.TAB_DIAGNOSTICS, state.selectedTab)
+    }
+
+    @Test
+    fun `choosePane over PaneState's own state matches PaneVisibility's existing truth table for Diagnostics too`() {
+        val state = PaneState()
+        state.userSelectedTab(PaneState.TAB_DIAGNOSTICS)
+        assertEquals(
+            PaneVisibility.Pane.DIAGNOSTICS,
+            PaneVisibility.choosePane(state.readInProgress, state.selectedTab),
+        )
+
+        state.readStarted()
+        assertEquals(
+            PaneVisibility.Pane.LOADING,
+            PaneVisibility.choosePane(state.readInProgress, state.selectedTab),
+        )
+
+        state.readFinished()
+        assertEquals(
+            PaneVisibility.Pane.DIAGNOSTICS,
+            PaneVisibility.choosePane(state.readInProgress, state.selectedTab),
+        )
+    }
+
     @Test
     fun `choosePane over PaneState's own state matches PaneVisibility's existing truth table`() {
         val state = PaneState()

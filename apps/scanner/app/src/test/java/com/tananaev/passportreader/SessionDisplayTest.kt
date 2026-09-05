@@ -212,4 +212,192 @@ class SessionDisplayTest {
         )
         assertEquals(SessionDisplay.LockButtonLabel.TAP_AND_VERIFY, p.lockButtonLabel)
     }
+
+    // ---------------------------------------------- §6.5 S2 (D74): question line
+
+    @Test
+    fun `no handoff pending shows the Local scan question line`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.None)
+        assertEquals(MintPromptText.NO_HANDOFF_FALLBACK, p.questionText)
+    }
+
+    @Test
+    fun `verifying (not yet verified) shows the Local scan question line, not a guess`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verifying)
+        assertEquals(MintPromptText.NO_HANDOFF_FALLBACK, p.questionText)
+    }
+
+    @Test
+    fun `refused shows the Local scan question line`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Refused("origin mismatch"))
+        assertEquals(MintPromptText.NO_HANDOFF_FALLBACK, p.questionText)
+    }
+
+    @Test
+    fun `a verified tier A request shows the exact D74 worked example, unlocked`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("example.com", "A", threshold = 18))
+        assertEquals("This website asks if you are over 18", p.questionText)
+    }
+
+    @Test
+    fun `a verified tier B request appends the recognition sentence`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("example.com", "B", threshold = 21))
+        assertEquals("This website asks if you are over 21, and may recognise you again on this site", p.questionText)
+    }
+
+    @Test
+    fun `a verified request with no readable threshold does not print a guessed number`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("example.com", "A", threshold = null))
+        assertFalse("must not contain a literal null", p.questionText.contains("null"))
+        assertTrue(p.questionText.startsWith("This website asks if you are over"))
+    }
+
+    @Test
+    fun `a bare local lock shows the Local scan question line, locked`() {
+        val p = SessionDisplay.render(locked = SessionDisplay.LockedMode.A, handoff = SessionDisplay.HandoffState.None)
+        assertEquals(MintPromptText.NO_HANDOFF_FALLBACK, p.questionText)
+    }
+
+    @Test
+    fun `a handoff-driven lock shows the locked request's own question, from the frozen snapshot argument`() {
+        val p = SessionDisplay.render(
+            locked = SessionDisplay.LockedMode.B,
+            handoff = SessionDisplay.HandoffState.None,
+            handoffDrivenLock = true,
+            lockedQuestionHandoff = SessionDisplay.HandoffState.Verified("example.com", "B", threshold = 18),
+        )
+        assertEquals("This website asks if you are over 18, and may recognise you again on this site", p.questionText)
+    }
+
+    /**
+     * The question-line analogue of "locked always wins" (see the mode/verb
+     * cases above): once locked, a foreign handoff's live [handoff] argument
+     * changing must not change the displayed question — only
+     * [lockedQuestionHandoff] (the caller's own frozen [AuthorizedHandoff]
+     * snapshot) may.
+     */
+    @Test
+    fun `a foreign Verified outcome arriving after a bare lock does not change the locked question line`() {
+        val p = SessionDisplay.render(
+            locked = SessionDisplay.LockedMode.A,
+            handoff = SessionDisplay.HandoffState.Verified("attacker.example", "B", threshold = 60),
+        )
+        assertEquals(MintPromptText.NO_HANDOFF_FALLBACK, p.questionText)
+    }
+
+    // ------------------------------------------- §6.5 S3 (D75): paste button
+
+    @Test
+    fun `paste button is enabled when unlocked and no read is in flight`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.None, readInProgress = false)
+        assertTrue(p.pasteButtonEnabled)
+        assertEquals(HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = false, readInProgress = false), p.pasteButtonEnabled)
+    }
+
+    @Test
+    fun `paste button is dimmed while locked, even with no read in flight yet`() {
+        val p = SessionDisplay.render(locked = SessionDisplay.LockedMode.A, handoff = SessionDisplay.HandoffState.None, readInProgress = false)
+        assertFalse(p.pasteButtonEnabled)
+        assertEquals(HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = true, readInProgress = false), p.pasteButtonEnabled)
+    }
+
+    @Test
+    fun `paste button is dimmed while a read is in flight, even if unlocked`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.None, readInProgress = true)
+        assertFalse(p.pasteButtonEnabled)
+        assertEquals(HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = false, readInProgress = true), p.pasteButtonEnabled)
+    }
+
+    @Test
+    fun `paste button is dimmed while both locked and reading`() {
+        val p = SessionDisplay.render(locked = SessionDisplay.LockedMode.B, handoff = SessionDisplay.HandoffState.Verified("example.com", "B"), readInProgress = true)
+        assertFalse(p.pasteButtonEnabled)
+        assertEquals(HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = true, readInProgress = true), p.pasteButtonEnabled)
+    }
+
+    // ------------------------- §6.5 S3 (D75) owner correction, 2026-09-05:
+    // pending, un-applied paste text drives the main button's verb
+
+    @Test
+    fun `bare unlocked state with pending paste text renders APPLY_PASTE, not SCAN`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.None, pasteTextPending = true)
+        assertEquals(SessionDisplay.LockButtonLabel.APPLY_PASTE, p.lockButtonLabel)
+    }
+
+    @Test
+    fun `bare unlocked state with no pending paste text still renders SCAN`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.None, pasteTextPending = false)
+        assertEquals(SessionDisplay.LockButtonLabel.SCAN, p.lockButtonLabel)
+    }
+
+    /**
+     * "Locked always wins" (see the mode/verb/question-line cases above)
+     * extends to [pasteTextPending] too: a locked session must render its
+     * own locked verb regardless of what the (irrelevant, off-screen once
+     * locked) paste field happens to hold.
+     */
+    @Test
+    fun `a locked session ignores pasteTextPending and renders its own locked verb`() {
+        val bareLock = SessionDisplay.render(locked = SessionDisplay.LockedMode.A, handoff = SessionDisplay.HandoffState.None, pasteTextPending = true)
+        assertEquals(SessionDisplay.LockButtonLabel.TAP_AND_SCAN, bareLock.lockButtonLabel)
+
+        val handoffDrivenLock = SessionDisplay.render(
+            locked = SessionDisplay.LockedMode.B,
+            handoff = SessionDisplay.HandoffState.None,
+            handoffDrivenLock = true,
+            pasteTextPending = true,
+        )
+        assertEquals(SessionDisplay.LockButtonLabel.TAP_AND_VERIFY, handoffDrivenLock.lockButtonLabel)
+    }
+
+    @Test
+    fun `an already-verified handoff takes precedence over pending paste text`() {
+        val p = SessionDisplay.render(
+            locked = null,
+            handoff = SessionDisplay.HandoffState.Verified("example.com", "A", threshold = 18),
+            pasteTextPending = true,
+        )
+        assertEquals(SessionDisplay.LockButtonLabel.VERIFY, p.lockButtonLabel)
+    }
+
+    @Test
+    fun `a handoff still verifying takes precedence over pending paste text`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verifying, pasteTextPending = true)
+        assertEquals(SessionDisplay.LockButtonLabel.SCAN, p.lockButtonLabel)
+    }
+
+    // -------- Device round 4 investigation ("button is dimmed, not released")
+    //
+    // FailureTransition.classify(exception) for a mistyped-details read
+    // failure resolves ACCESS_ESTABLISHMENT -> keepsMrzAndMode(true) ->
+    // wipeSession(keepMrzAndMode = true) is a no-op -> lockedMode stays
+    // non-null. This is a KEEP transition, not RESET: the session stays
+    // locked BY DESIGN (Q40/D67 — armed for another NFC tap, not a second
+    // button press), so a disabled lockButton here is correct, not a bug.
+    // These two tests pin that both halves of the transition already
+    // behave correctly and are UNAFFECTED by this session's new
+    // pasteTextPending/readInProgress inputs (compared against 2b7d9ae,
+    // the pre-this-session projection: the locked branch's
+    // `lockButtonEnabled = false` line is identical there — unconditional,
+    // never reading either new parameter).
+
+    @Test
+    fun `a KEEP transition (session stays locked after a failed read) keeps the lock button disabled by design`() {
+        // pasteTextPending/readInProgress deliberately set to values that
+        // WOULD flip other projections' fields, to prove neither can flip
+        // this one while locked.
+        val p = SessionDisplay.render(
+            locked = SessionDisplay.LockedMode.A,
+            handoff = SessionDisplay.HandoffState.None,
+            pasteTextPending = true,
+            readInProgress = true,
+        )
+        assertFalse("a KEEP transition's disabled button is by design (Q40/D67) — armed for an NFC tap, not a press", p.lockButtonEnabled)
+    }
+
+    @Test
+    fun `a RESET transition (session unlocks after an unclassified failure) re-enables the lock button`() {
+        val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.None)
+        assertTrue(p.lockButtonEnabled)
+    }
 }

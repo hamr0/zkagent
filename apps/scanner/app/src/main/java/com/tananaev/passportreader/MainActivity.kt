@@ -41,6 +41,7 @@ import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.widget.doOnTextChanged
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import com.wdullaer.materialdatetimepicker.date.DatePickerDialog
@@ -279,13 +280,42 @@ abstract class MainActivity : AppCompatActivity() {
     private lateinit var tabLayout: TabLayout
     private lateinit var mainLayout: View
     private lateinit var logLayout: View
+    // Device fix (2026-09-05) — §6.5 S3 round 3, item 4: the two no-tap-
+    // needed probe buttons' new home; see [showPane].
+    private lateinit var diagnosticsLayout: View
     private lateinit var loadingLayout: View
     private lateinit var reportView: TextView
+    // Device fix (2026-09-05, round 4) — second projection target of the
+    // SAME reportLog.lastText [reportView] already shows; see
+    // [applyReportText]. Not a second writer of the scan-pane report.
+    private lateinit var diagnosticsReportView: TextView
     private lateinit var logView: TextView
     // §6.2 item 23 (D70(b)) — see [clearLog]'s doc.
     private lateinit var clearLogButton: Button
     private lateinit var handoffStatus: TextView
     private lateinit var handoffManualInput: EditText
+    // §6.5 S2 (D74) — the pre-tap question line; see [applySessionDisplay].
+    private lateinit var questionLineView: TextView
+    // §6.5 S3 (D75) — the "Paste link" button, its dimmed-state hint, and
+    // the area it reveals (QR hint + the existing manual-paste field). See
+    // [applySessionDisplay] for the ONE place these are written, and
+    // [pasteFieldRevealed]'s doc for the one field that drives the reveal
+    // half independent of the enabled/dimmed half.
+    private lateinit var pasteLinkButton: Button
+    private lateinit var pasteRevealArea: View
+
+    // §6.5 S3 (D75) — whether the user has tapped "Paste link" to reveal
+    // the paste field, in THIS idle/pending state. The ONE writer is the
+    // button's own click listener below; [applySessionDisplay] is the ONE
+    // reader/applier, ANDing this with the CURRENT
+    // `SessionDisplay.Projection.pasteButtonEnabled` so the area still
+    // collapses automatically the instant the button itself goes disabled
+    // (a lock/read-in-progress landing while the field happened to be
+    // open), without a second write site. Reset to `false` on a successful
+    // paste-apply ([applyPendingHandoffText]) — the deliberate clear/reset
+    // D75 describes already discards the old request; collapsing the
+    // now-empty field back to idle is the same reset, not a second one.
+    private var pasteFieldRevealed: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -308,8 +338,10 @@ abstract class MainActivity : AppCompatActivity() {
         tabLayout = findViewById(R.id.tab_layout)
         mainLayout = findViewById(R.id.main_layout)
         logLayout = findViewById(R.id.log_layout)
+        diagnosticsLayout = findViewById(R.id.diagnostics_layout)
         loadingLayout = findViewById(R.id.loading_layout)
         reportView = findViewById(R.id.report_view)
+        diagnosticsReportView = findViewById(R.id.diagnostics_report_view)
         logView = findViewById(R.id.log_view)
         // §6.2 item 18 (D67, Q43): required for the ClickableSpan
         // [ReportLog.rendered]'s `onEntryTap` places over each entry's
@@ -324,6 +356,41 @@ abstract class MainActivity : AppCompatActivity() {
         clearLogButton.setOnClickListener { clearLog() }
         handoffStatus = findViewById(R.id.handoff_status)
         handoffManualInput = findViewById(R.id.handoff_manual_input)
+        questionLineView = findViewById(R.id.question_line)
+        pasteLinkButton = findViewById(R.id.button_paste_link)
+        pasteRevealArea = findViewById(R.id.paste_reveal_area)
+        // §6.5 S3 (D75) — idle/pending: reveals [pasteRevealArea]; the
+        // button is disabled outright (no click delivered) while locked or
+        // reading, so this listener body only ever runs in the idle/pending
+        // state the spec describes. Writes nothing but the local flag —
+        // [applySessionDisplay] is still the one place that writes the
+        // views themselves.
+        pasteLinkButton.setOnClickListener {
+            pasteFieldRevealed = !pasteFieldRevealed
+            Log.i(TAG, "M2 stage: paste-link area ${if (pasteFieldRevealed) "revealed" else "hidden"}")
+            refreshSessionDisplay()
+            // Device fix (2026-09-05) — D75 item 3: the field is focused
+            // with the keyboard opened the instant the reveal area appears,
+            // so a user who came here to paste does not have to hunt for a
+            // second tap to get the keyboard up. Only on REVEAL, never on
+            // hide (nothing to focus once the area is gone).
+            if (pasteFieldRevealed) {
+                handoffManualInput.requestFocus()
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                imm?.showSoftInput(handoffManualInput, InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
+        // Owner correction (2026-09-05, D75's own words: "once pasted...it
+        // shows verify button replacing scan") — REMOVED the separate
+        // "Verify this link" button from this same fix batch. The pasted
+        // link is applied by the ONE main Scan/Verify button
+        // ([onLockButtonTapped]) once it holds text — see that function's
+        // doc. This listener only needs to keep the button's OWN verb
+        // current as the user types/pastes, since [refreshSessionDisplay]
+        // is otherwise only invoked on discrete state-change events (lock,
+        // handoff capture/resolve, reveal toggle), never per keystroke.
+        handoffManualInput.doOnTextChanged { _, _, _, _ -> refreshSessionDisplay() }
+        findViewById<View>(R.id.button_about).setOnClickListener { showAboutDialog() }
         // §6.2 item 24 (D70(c)) — one-line, write-once stamp; not part of
         // any state cluster this Activity owns (see ReportLog's technical-
         // line sibling stamp for the log entries).
@@ -384,7 +451,7 @@ abstract class MainActivity : AppCompatActivity() {
         // both-visible (or wrong-pane) combination. See [showPane]'s doc.
         showPane()
 
-        lockButton.setOnClickListener { lockModeAndArm() }
+        lockButton.setOnClickListener { onLockButtonTapped() }
 
         findViewById<View>(R.id.button_m2_masterlist_probe).setOnClickListener {
             Thread { runMasterlistProbe() }.start()
@@ -498,7 +565,78 @@ abstract class MainActivity : AppCompatActivity() {
             // §6.2 item 20 (D68): same waiting-frame as TAP_AND_SCAN, for a
             // handoff-driven lock — the ruling's own collision wording.
             SessionDisplay.LockButtonLabel.TAP_AND_VERIFY -> LOCK_BUTTON_WAITING_VERIFY_LABEL
+            // §6.5 S3 (D75) owner correction, 2026-09-05: SAME displayed
+            // text as TAP_AND_VERIFY ("Tap and verify" — owner verbatim),
+            // DISTINCT meaning (unlocked, enabled, a tap calls
+            // [onLockButtonTapped]'s paste-apply branch, not
+            // [lockModeAndArm]) — see [SessionDisplay.LockButtonLabel
+            // .APPLY_PASTE]'s doc.
+            SessionDisplay.LockButtonLabel.APPLY_PASTE -> LOCK_BUTTON_WAITING_VERIFY_LABEL
         }
+        // §6.5 S2 (D74) — the pre-tap question line. Logged alongside the
+        // write per this project's own rule (an unlogged UI-only write hid
+        // real M2 failures — see findings #7's doc): a real question change
+        // must never look like nothing happened, same reasoning already
+        // applied to modeStatusView/handoffStatus above.
+        questionLineView.text = projection.questionText
+        Log.i(TAG, "M2 stage: question line -> ${projection.questionText}")
+        // §6.5 S3 (D75) — paste-link button and the area it reveals.
+        // Device fix (2026-09-05, "too much space with a button"): the
+        // dimmed hint REPLACES the button's own text when disabled, rather
+        // than a second TextView/line — one compact row either way.
+        // [pasteFieldRevealed] ANDed with the CURRENT
+        // [SessionDisplay.Projection.pasteButtonEnabled] means a lock/read
+        // landing while the field happened to be open collapses it here,
+        // with no second write site.
+        pasteLinkButton.isEnabled = projection.pasteButtonEnabled
+        pasteLinkButton.text = if (projection.pasteButtonEnabled) {
+            getString(R.string.button_paste_link)
+        } else {
+            getString(R.string.paste_button_dimmed_hint)
+        }
+        pasteRevealArea.visibility = if (projection.pasteButtonEnabled && pasteFieldRevealed) View.VISIBLE else View.GONE
+    }
+
+    /** §6.5 S3 (D75) — the item-5 no-storage disclosure, moved out of the
+     * pane's permanent layout into this non-primary About affordance (D1/
+     * NO-GO #7's obligation does not lapse — it just stops being a
+     * five-sentence blob rendered on every screen view). A plain, non-
+     * blocking informational AlertDialog — not [showBlockingOutcomeDialog],
+     * which is reserved for a terminal scan OUTCOME the user must
+     * acknowledge (D43); this dialog causes no state transition and has
+     * nothing to acknowledge. */
+    private fun showAboutDialog() {
+        // Device fix (2026-09-05, round 3, "too big") — the D69 cross-
+        // device QR hint sentence moved here from a permanent line inside
+        // the paste reveal area; two separate string resources (unchanged
+        // content each) joined with a blank line, not a new merged string,
+        // so each keeps its own §6.5/D69 provenance comment in strings.xml.
+        AlertDialog.Builder(this)
+            .setTitle(R.string.about_title)
+            .setMessage(getString(R.string.about_disclosure_text) + "\n\n" + getString(R.string.handoff_camera_hint))
+            .setPositiveButton(R.string.dialog_ok, null)
+            .show()
+    }
+
+    /** §6.5 S3 device fix (2026-09-05) — D43's blocking-modal-with-OK
+     * requirement for [applyPendingHandoffText]'s two refusal cases, WITHOUT
+     * [showBlockingOutcomeDialog]'s state-mutating OK handler (finding #12's
+     * rule — see [applyPendingHandoffText]'s doc for the full reasoning).
+     * `setCancelable(false)` matches [showBlockingOutcomeDialog]'s own
+     * "blocking" contract (D43); the ONLY difference from that dialog is
+     * that OK here does nothing but dismiss — no field is nulled, no
+     * `wipeSession` call, so this is safe to show for an event that is not
+     * a terminal outcome of the CURRENT locked session (an unrelated bad
+     * paste, or a foreign handoff's admission refusal). Logged like every
+     * other user-facing status write in this file (an unlogged UI-only
+     * write hid real M2 failures — see [emitReport]'s doc). */
+    private fun showBlockingNotice(message: String) {
+        Log.i(TAG, "M2 stage: blocking notice shown: $message")
+        AlertDialog.Builder(this)
+            .setMessage(message)
+            .setCancelable(false)
+            .setPositiveButton(R.string.dialog_ok, null)
+            .show()
     }
 
     /** [SessionDisplay]'s `LockedMode` is its own type (that object cannot
@@ -519,11 +657,33 @@ abstract class MainActivity : AppCompatActivity() {
     private fun currentHandoffState(): SessionDisplay.HandoffState {
         val verified = verifiedRequest
         return when {
-            verified != null -> SessionDisplay.HandoffState.Verified(verified.origin, RequestTrust.tierOf(verified.json))
+            verified != null -> SessionDisplay.HandoffState.Verified(verified.origin, RequestTrust.tierOf(verified.json), RequestTrust.thresholdOf(verified.json))
             pendingHandoff != null -> SessionDisplay.HandoffState.Verifying
             else -> SessionDisplay.HandoffState.None
         }
     }
+
+    /** §6.5 S2 (D74) — the question line's frozen-snapshot argument for a
+     * LOCKED session (see [SessionDisplay.render]'s `lockedQuestionHandoff`
+     * doc for why this must NOT be [currentHandoffState], which keeps
+     * reading the live, mutable [pendingHandoff]/[verifiedRequest] fields
+     * that an admitted foreign handoff can still overwrite post-lock).
+     * Derived from [authorizedHandoff] — the SAME D58-step-3 lock-time
+     * snapshot [handoffDrivenLock] and the locked verb already read — never
+     * a second, independently-captured value. `null` (bare local lock) maps
+     * to [SessionDisplay.HandoffState.None], D46's "Local scan (no site)". */
+    private fun lockedQuestionHandoffState(): SessionDisplay.HandoffState {
+        val snapshot = authorizedHandoff ?: return SessionDisplay.HandoffState.None
+        return SessionDisplay.HandoffState.Verified(snapshot.origin, RequestTrust.tierOf(snapshot.request.json), RequestTrust.thresholdOf(snapshot.request.json))
+    }
+
+    /** §6.5 S3 (D75) owner correction, 2026-09-05 — [SessionDisplay.render]'s
+     * `pasteTextPending` input, computed ONCE here (the one place this
+     * Activity reads [handoffManualInput]'s live text for this purpose) and
+     * passed into the pure projection rather than that Android-free object
+     * ever touching the `EditText` itself. */
+    private fun pasteTextPending(): Boolean =
+        pasteFieldRevealed && !handoffManualInput.text?.toString().isNullOrBlank()
 
     /** §6.2 item 4 (2026-09 real-device fix, "remove the mode radio
      * entirely" — see class doc): recomputes all three of
@@ -543,7 +703,16 @@ abstract class MainActivity : AppCompatActivity() {
         // LOCKED verb, for the same reason [locked] already wins over a
         // live [handoff] for mode/handoff text: see
         // [SessionDisplay.render]'s `handoffDrivenLock` doc.
-        applySessionDisplay(SessionDisplay.render(lockedModeForDisplay(), currentHandoffState(), handoffDrivenLock = authorizedHandoff != null))
+        applySessionDisplay(
+            SessionDisplay.render(
+                lockedModeForDisplay(),
+                currentHandoffState(),
+                handoffDrivenLock = authorizedHandoff != null,
+                lockedQuestionHandoff = lockedQuestionHandoffState(),
+                readInProgress = paneState.readInProgress,
+                pasteTextPending = pasteTextPending(),
+            )
+        )
     }
 
     /** §6.2 item 13 (D33): the mode a pending, VERIFIED handoff request
@@ -565,6 +734,27 @@ abstract class MainActivity : AppCompatActivity() {
             "C" -> TierOutcome.Unsupported
             else -> TierOutcome.Invalid(tier ?: "<absent>")
         }
+    }
+
+    /** §6.5 S3 (D75) owner correction, 2026-09-05 — the ONE click handler
+     * for [lockButton], dispatching to whichever action the CURRENTLY
+     * DISPLAYED verb actually promises: [SessionDisplay.LockButtonLabel
+     * .APPLY_PASTE] ("Tap and verify" shown for a pending, un-applied
+     * pasted link — see that enum value's doc) means "begin verifying the
+     * pasted text", not "lock and arm for a document tap". Re-derives the
+     * SAME condition [refreshSessionDisplay] used to decide that verb
+     * ([lockedMode] still null, [pasteTextPending] still true, and no OTHER
+     * handoff already pending/verifying/verified) rather than trusting the
+     * button's own displayed text — a label is a rendering, never a source
+     * of truth for what a tap should do. Every other case (bare unlocked,
+     * a verified av:// handoff pending, already locked) falls through to
+     * the pre-existing [lockModeAndArm], unchanged. */
+    private fun onLockButtonTapped() {
+        if (lockedMode == null && pasteTextPending() && currentHandoffState() == SessionDisplay.HandoffState.None) {
+            applyPendingHandoffText(handoffManualInput.text?.toString().orEmpty())
+            return
+        }
+        lockModeAndArm()
     }
 
     // ---------------------------------------------------------------- item 4
@@ -915,27 +1105,39 @@ abstract class MainActivity : AppCompatActivity() {
      * button handler and the post-QR-scan callback) previously called
      * [beginHandoffVerification] with NO [HandoffAdmission] gate at all —
      * only the `av://` intent branch of [handleIncomingIntent] was guarded
-     * (finding #10's mitigation). Applies the SAME predicate here, reusing
-     * the SAME refusal shape (`Log.e` + `Snackbar` + return, assigning
-     * nothing, appending nothing to [reportLog] — finding #13's
-     * no-emitReport-on-refusal rule applies equally here, and finding #12's
-     * rule against [showBlockingOutcomeDialog] on any refusal path applies
-     * equally here: this is a Snackbar, not a dialog, so it causes no state
-     * transition). */
+     * (finding #10's mitigation). Applies the SAME predicate here.
+     *
+     * §6.5 S3 device fix (2026-09-05, "pasting link doesn't work"): both
+     * refusal cases below were a self-dismissing [Snackbar] (D43 requires a
+     * blocking modal + OK for anything the user must act on). Converted to
+     * [showBlockingNotice] — a NEW, deliberately NON-state-mutating dialog —
+     * rather than the existing [showBlockingOutcomeDialog]: that dialog's OK
+     * handler unconditionally calls `wipeSession`/nulls the handoff fields,
+     * and finding #12's rule ("no refusal/ignore path may use
+     * [showBlockingOutcomeDialog]") exists precisely because reusing it here
+     * would let the user's own OK tap on an UNRELATED bad paste — or an
+     * admission refusal — tear down an in-progress LEGITIMATE locked
+     * session, the exact one-tap-DoS shape finding #12 closed. [reportLog]
+     * still gets no append on either path (finding #13's rule, unchanged). */
     private fun applyPendingHandoffText(text: String) {
         val handoff = HandoffClient.parsePastedText(text)
         if (handoff == null) {
             val recognisedScheme = listOf("av://", "https://", "http://", "openid4vp://").firstOrNull { text.startsWith(it) }
             Log.w(TAG, "M2 stage: pasted/QR text not a recognised av:// link or request_uri (length=${text.length}, scheme=${recognisedScheme ?: "other"})")
-            Snackbar.make(reportView, "Not a recognised av:// link or request_uri", Snackbar.LENGTH_LONG).show()
+            showBlockingNotice(getString(R.string.handoff_paste_unrecognised_message))
             return
         }
         if (!HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = lockedMode != null, readInProgress = paneState.readInProgress)) {
             Log.e(TAG, "M2 stage: pasted/QR handoff REFUSED — session locked or read in progress (D57 mitigation for finding #10, extended to finding #15)")
-            Snackbar.make(reportView, HANDOFF_REFUSED_MID_SESSION_MESSAGE, Snackbar.LENGTH_LONG).show()
+            showBlockingNotice(HANDOFF_REFUSED_MID_SESSION_MESSAGE)
             return
         }
         handoffManualInput.text?.clear()
+        // §6.5 S3 (D75) — the deliberate clear/reset: applying a pasted
+        // link collapses the reveal area back to idle, the same way a
+        // fresh handoff always replaces whatever was pending. See
+        // [pasteFieldRevealed]'s doc.
+        pasteFieldRevealed = false
         beginHandoffVerification(handoff)
     }
 
@@ -1085,7 +1287,16 @@ abstract class MainActivity : AppCompatActivity() {
                 // handoff (non-null) and [verifiedRequest] is still null,
                 // indistinguishable from Verifying by field state alone. See
                 // [SessionDisplay.HandoffState]'s doc.
-                applySessionDisplay(SessionDisplay.render(lockedModeForDisplay(), SessionDisplay.HandoffState.Refused(outcome.reason), handoffDrivenLock = authorizedHandoff != null))
+                applySessionDisplay(
+                    SessionDisplay.render(
+                        lockedModeForDisplay(),
+                        SessionDisplay.HandoffState.Refused(outcome.reason),
+                        handoffDrivenLock = authorizedHandoff != null,
+                        lockedQuestionHandoff = lockedQuestionHandoffState(),
+                        readInProgress = paneState.readInProgress,
+                        pasteTextPending = pasteTextPending(),
+                    )
+                )
                 // §6.2 item 15 (D43): the state transition (clearing
                 // pendingHandoff/verifiedRequest, reverting the derived mode
                 // display via wipeSession) happens on dialog dismissal, not
@@ -1166,6 +1377,20 @@ abstract class MainActivity : AppCompatActivity() {
      *   Ignored when [pending] is true (always renders PENDING regardless).
      *   Every call site below states this explicitly from types it already
      *   has (never re-derived here) — see each call site's own comment. */
+    /** Device fix (2026-09-05, round 4, "yield nothing when pressed") — the
+     * ONE place [reportView]/[diagnosticsReportView] are ever written FROM
+     * [reportLog.lastText] — both are projections of the SAME owner
+     * (`reportLog`, D58 step 1), never a second writer of the scan-pane
+     * report. Replaces four previously-independent `reportView.text =
+     * reportLog.lastText` sites ([emitReport], [restoreReport],
+     * [loadPersistedLog], [clearLog]) with one applier, same shape as
+     * [applySessionDisplay] — so a future second output target never has to
+     * remember to touch four call sites again. */
+    private fun applyReportText() {
+        reportView.text = reportLog.lastText
+        diagnosticsReportView.text = reportLog.lastText
+    }
+
     private fun emitReport(text: String, summary: ReportLog.DisclosureSummary, attemptId: String? = null, pending: Boolean = false, outcome: ReportLog.Outcome = ReportLog.Outcome.FAIL) {
         // §6.2 item 16 (D46): the log tab is an ADDITIONAL CONSUMER of this
         // one write site — never a second write site. [text] is exactly
@@ -1176,7 +1401,7 @@ abstract class MainActivity : AppCompatActivity() {
         // requires — [attemptId]/[pending] are the same discipline applied
         // to the 2026-09-01 stale-in-progress-entry fix.
         reportLog.append(text, summary, attemptId = attemptId, pending = pending, outcome = outcome)
-        reportView.text = reportLog.lastText
+        applyReportText()
         refreshLogView()
         // §6.2 item 23 (D70(b)): durable on EVERY append/replace — see
         // [persistLog]'s doc for why this is a synchronous, best-effort
@@ -1239,7 +1464,7 @@ abstract class MainActivity : AppCompatActivity() {
         val outcomes = savedInstanceState.getStringArrayList(STATE_LOG_OUTCOMES)
             ?.map { runCatching { ReportLog.Outcome.valueOf(it) }.getOrDefault(ReportLog.Outcome.FAIL) }
         reportLog.restore(entries ?: emptyList(), lastText = text, expanded = expanded, outcomes = outcomes)
-        if (text != null) reportView.text = reportLog.lastText
+        if (text != null) applyReportText()
         if (entries != null) refreshLogView()
         Log.i(TAG, "M2 stage: restored report/log across Activity recreation (text=${text != null}, log_entries=${entries?.size ?: 0})")
     }
@@ -1267,7 +1492,7 @@ abstract class MainActivity : AppCompatActivity() {
         val snapshot = ReportLogStore.fromJson(json)
         if (snapshot.entries.isEmpty() && snapshot.lastText == null) return
         reportLog.restore(snapshot.entries, lastText = snapshot.lastText, expanded = snapshot.expanded, outcomes = snapshot.outcomes)
-        reportView.text = reportLog.lastText
+        applyReportText()
         refreshLogView()
         Log.i(TAG, "M2 stage: loaded persisted log from disk (entries=${snapshot.entries.size})")
     }
@@ -1324,7 +1549,7 @@ abstract class MainActivity : AppCompatActivity() {
     private fun clearLog() {
         val entryCount = reportLog.entriesSnapshot().size
         reportLog.clear()
-        reportView.text = reportLog.lastText
+        applyReportText()
         refreshLogView()
         persistLog()
         Log.i(TAG, "M2 stage: log cleared by user (entries=$entryCount)")
@@ -1460,17 +1685,17 @@ abstract class MainActivity : AppCompatActivity() {
      * [paneState] (its readInProgress and/or tab-index setters), then call
      * this function — never touch a view's `.visibility` directly.
      *
-     * WHY: `activity_main.xml` places these three views as overlapping
-     * siblings inside one `FrameLayout` — so more than one `VISIBLE` at
-     * once means one draws over another. Before D55, four scattered
-     * writes (the tab listener; `startSession`; `ReadTask.onPostExecute`)
-     * each owned a different pair of these views and could disagree with
-     * each other, which is exactly how a user got stranded on the Log tab
-     * with no way back to the MRZ form — see [PaneVisibility]'s class doc
-     * for the full root cause. This function always sets all THREE views
-     * on every call, from [PaneVisibility.choosePane]'s single decision,
-     * so the both-visible state is unrepresentable rather than merely
-     * avoided by convention.
+     * WHY: `activity_main.xml` places these views as overlapping siblings
+     * inside one `FrameLayout` — so more than one `VISIBLE` at once means
+     * one draws over another. Before D55, four scattered writes (the tab
+     * listener; `startSession`; `ReadTask.onPostExecute`) each owned a
+     * different pair of these views and could disagree with each other,
+     * which is exactly how a user got stranded on the Log tab with no way
+     * back to the MRZ form — see [PaneVisibility]'s class doc for the full
+     * root cause. This function always sets all FOUR views (three before
+     * the 2026-09-05 Diagnostics tab, item 4) on every call, from
+     * [PaneVisibility.choosePane]'s single decision, so the both-visible
+     * state is unrepresentable rather than merely avoided by convention.
      *
      * D58 step 2 (finding #1): both inputs now come from [paneState], never
      * from `tabLayout.selectedTabPosition` — the TabLayout is DRIVEN FROM
@@ -1490,6 +1715,7 @@ abstract class MainActivity : AppCompatActivity() {
         val pane = PaneVisibility.choosePane(paneState.readInProgress, paneState.selectedTab)
         mainLayout.visibility = if (pane == PaneVisibility.Pane.SCAN) View.VISIBLE else View.GONE
         logLayout.visibility = if (pane == PaneVisibility.Pane.LOG) View.VISIBLE else View.GONE
+        diagnosticsLayout.visibility = if (pane == PaneVisibility.Pane.DIAGNOSTICS) View.VISIBLE else View.GONE
         loadingLayout.visibility = if (pane == PaneVisibility.Pane.LOADING) View.VISIBLE else View.GONE
     }
 
@@ -2233,7 +2459,7 @@ abstract class MainActivity : AppCompatActivity() {
                 val result = HandoffClient.postDirectPost(responseUri, state, presentation)
                 if (result.httpStatus !in 200..299) {
                     Log.w(TAG, "M2 stage: mode A present-bare direct_post response NON-2xx http_status=${result.httpStatus} body=${result.body}")
-                    deliveryResult = DeliveryResult.Rejected(result.httpStatus)
+                    deliveryResult = DeliveryResult.Rejected(result.httpStatus, result.body)
                 } else {
                     Log.i(TAG, "M2 stage: mode A present-bare direct_post response http_status=${result.httpStatus} body=${result.body}")
                     val verdict = DirectPostVerdict.parse(result.body)
@@ -2247,8 +2473,9 @@ abstract class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "M2 stage: mode A present-bare direct_post FAILED", e)
-            report += "handoff: FAILED ${e.javaClass.simpleName}: ${e.message}\n"
-            deliveryResult = DeliveryResult.TransportFailed
+            val transportFailureLabel = "${e.javaClass.simpleName}: ${e.message}"
+            report += "handoff: FAILED $transportFailureLabel\n"
+            deliveryResult = DeliveryResult.TransportFailed(transportFailureLabel)
         }
 
         // Handoff has now definitively completed or failed — clear on the
@@ -2263,7 +2490,23 @@ abstract class MainActivity : AppCompatActivity() {
             authorizedHandoff = null
             refreshSessionDisplay()
         }
-        report += "\nverdict: PASS (bare presentation sent)"
+        // Device fix (2026-09-05, VerifierRefusal) corrected this line for
+        // the Rejected branch only (a non-2xx direct_post response was
+        // reported PASS — owner device evidence, HTTP 409
+        // already_responded). Findings.md #22 (opened by that same fix):
+        // the IDENTICAL hardcoded-PASS defect still applied to every other
+        // branch — fixed here via [DeliveryVerdictLine], the single place
+        // that now derives this raw "verdict:" line from [deliveryResult]
+        // for EVERY variant, matching what [summary]/[ReportLog.Outcome]
+        // below already compute independently.
+        report += "\n" + when (deliveryResult) {
+            DeliveryResult.Accepted -> DeliveryVerdictLine.accepted("bare presentation sent")
+            DeliveryResult.RefusedHonestUnderThreshold -> DeliveryVerdictLine.refusedHonestUnderThreshold()
+            is DeliveryResult.RefusedOtherReason -> DeliveryVerdictLine.refusedOtherReason(deliveryResult.reason)
+            is DeliveryResult.Rejected -> DeliveryVerdictLine.rejected(deliveryResult.httpStatus, deliveryResult.body)
+            DeliveryResult.NoResponseUri -> DeliveryVerdictLine.noResponseUri()
+            is DeliveryResult.TransportFailed -> DeliveryVerdictLine.transportFailed(deliveryResult.label)
+        }
 
         val disclosedThreshold = claim["threshold"]
         val disclosedAnswer = claim["over_threshold"]
@@ -2314,7 +2557,7 @@ abstract class MainActivity : AppCompatActivity() {
                 shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                 technicalNote = claimProofNote,
             )
-            DeliveryResult.TransportFailed -> ReportLog.DisclosureSummary(
+            is DeliveryResult.TransportFailed -> ReportLog.DisclosureSummary(
                 site = site,
                 result = "Read OK, but sending the result to the site failed",
                 chipAuthenticity = chipAuthLabel(chipAuthStatus),
@@ -2340,6 +2583,16 @@ abstract class MainActivity : AppCompatActivity() {
                 showBlockingOutcomeDialog(MINT_CONFIRMED_MESSAGE, isAccessEstablishmentFailure = false)
             } else if (deliveryResult is DeliveryResult.RefusedHonestUnderThreshold) {
                 showBlockingOutcomeDialog(MintOutcome.UNDER_THRESHOLD_DIALOG_MESSAGE, isAccessEstablishmentFailure = false)
+            } else if (deliveryResult is DeliveryResult.Rejected) {
+                // Device fix (2026-09-05, VerifierRefusal) — previously NO
+                // dialog fired for a non-2xx direct_post response at all
+                // (silent refusal); the owner's device evidence (HTTP 409
+                // already_responded reported PASS) is exactly this gap.
+                val outcome = VerifierRefusal.classify(deliveryResult.httpStatus, deliveryResult.body)
+                showBlockingOutcomeDialog(
+                    VerifierRefusal.dialogMessage(outcome) ?: "Verifier refused: HTTP ${deliveryResult.httpStatus}",
+                    isAccessEstablishmentFailure = false,
+                )
             }
         }
     }
@@ -2709,7 +2962,7 @@ abstract class MainActivity : AppCompatActivity() {
                 val result = HandoffClient.postDirectPost(responseUri, state, presentation)
                 if (result.httpStatus !in 200..299) {
                     Log.w(TAG, "M2 stage: handoff direct_post response NON-2xx http_status=${result.httpStatus} body=${result.body}")
-                    deliveryResult = DeliveryResult.Rejected(result.httpStatus)
+                    deliveryResult = DeliveryResult.Rejected(result.httpStatus, result.body)
                 } else {
                     Log.i(TAG, "M2 stage: handoff direct_post response http_status=${result.httpStatus} body=${result.body}")
                     // Q36/D66 item 3, FIX pass (Q36 follow-up): this
@@ -2739,8 +2992,9 @@ abstract class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "M2 stage: handoff direct_post FAILED", e)
-            report += "handoff: FAILED ${e.javaClass.simpleName}: ${e.message}\n"
-            deliveryResult = DeliveryResult.TransportFailed
+            val transportFailureLabel = "${e.javaClass.simpleName}: ${e.message}"
+            report += "handoff: FAILED $transportFailureLabel\n"
+            deliveryResult = DeliveryResult.TransportFailed(transportFailureLabel)
         }
         // Handoff has now definitively completed or failed — clear on the
         // main thread (item 6 lifecycle discipline). verifiedRequest is
@@ -2776,7 +3030,23 @@ abstract class MainActivity : AppCompatActivity() {
             // hit finding #14 against. See [SessionDisplay]'s class doc.
             refreshSessionDisplay()
         }
-        report += "\nverdict: PASS (minted)"
+        // Device fix (2026-09-05, VerifierRefusal) corrected this line for
+        // the Rejected branch only (a non-2xx direct_post response was
+        // reported PASS — owner device evidence, HTTP 409
+        // already_responded). Findings.md #22 (opened by that same fix):
+        // the IDENTICAL hardcoded-PASS defect still applied to every other
+        // branch — fixed here via [DeliveryVerdictLine], the single place
+        // that now derives this raw "verdict:" line from [deliveryResult]
+        // for EVERY variant, matching what [summary]/[ReportLog.Outcome]
+        // below already compute independently.
+        report += "\n" + when (deliveryResult) {
+            DeliveryResult.Accepted -> DeliveryVerdictLine.accepted("minted")
+            DeliveryResult.RefusedHonestUnderThreshold -> DeliveryVerdictLine.refusedHonestUnderThreshold()
+            is DeliveryResult.RefusedOtherReason -> DeliveryVerdictLine.refusedOtherReason(deliveryResult.reason)
+            is DeliveryResult.Rejected -> DeliveryVerdictLine.rejected(deliveryResult.httpStatus, deliveryResult.body)
+            DeliveryResult.NoResponseUri -> DeliveryVerdictLine.noResponseUri()
+            is DeliveryResult.TransportFailed -> DeliveryVerdictLine.transportFailed(deliveryResult.label)
+        }
 
         // §6.2 item 16 (D46/D48): Sent/Shared describe what a successful
         // LOCAL sign produces — this is true regardless of delivery outcome,
@@ -2880,7 +3150,7 @@ abstract class MainActivity : AppCompatActivity() {
                 identity = identity,
                 technicalNote = claimProofNote,
             )
-            DeliveryResult.TransportFailed -> ReportLog.DisclosureSummary(
+            is DeliveryResult.TransportFailed -> ReportLog.DisclosureSummary(
                 site = site,
                 result = "Signed OK, but sending the result to the site failed",
                 chipAuthenticity = chipAuthLabel(chipAuthStatus),
@@ -2925,12 +3195,23 @@ abstract class MainActivity : AppCompatActivity() {
                 showBlockingOutcomeDialog(MINT_CONFIRMED_MESSAGE, isAccessEstablishmentFailure = false)
             } else if (deliveryResult is DeliveryResult.RefusedHonestUnderThreshold) {
                 // Q36/D66 item 3: this outcome gets its own blocking dialog
-                // (not just a silent ReportLog entry, unlike Rejected/
-                // NoResponseUri/TransportFailed above) because it is a real,
-                // definitive answer from the site — the same "tell the user
-                // to go back to the browser" reasoning as MINT_CONFIRMED_MESSAGE,
-                // just the other outcome of the same real check.
+                // (not just a silent ReportLog entry, unlike NoResponseUri/
+                // TransportFailed below) because it is a real, definitive
+                // answer from the site — the same "tell the user to go back
+                // to the browser" reasoning as MINT_CONFIRMED_MESSAGE, just
+                // the other outcome of the same real check.
                 showBlockingOutcomeDialog(MintOutcome.UNDER_THRESHOLD_DIALOG_MESSAGE, isAccessEstablishmentFailure = false)
+            } else if (deliveryResult is DeliveryResult.Rejected) {
+                // Device fix (2026-09-05, VerifierRefusal) — previously NO
+                // dialog fired for a non-2xx direct_post response at all
+                // (silent refusal, grouped with NoResponseUri/TransportFailed
+                // above the fix); the owner's device evidence (HTTP 409
+                // already_responded reported PASS) is exactly this gap.
+                val outcome = VerifierRefusal.classify(deliveryResult.httpStatus, deliveryResult.body)
+                showBlockingOutcomeDialog(
+                    VerifierRefusal.dialogMessage(outcome) ?: "Verifier refused: HTTP ${deliveryResult.httpStatus}",
+                    isAccessEstablishmentFailure = false,
+                )
             }
         }
     }
@@ -2951,9 +3232,20 @@ abstract class MainActivity : AppCompatActivity() {
         object Accepted : DeliveryResult() // HTTP 2xx, allowed:true or unknown
         object RefusedHonestUnderThreshold : DeliveryResult() // HTTP 2xx, allowed:false, this device claimed over_threshold:false
         data class RefusedOtherReason(val reason: String?) : DeliveryResult() // HTTP 2xx, allowed:false, any other reason
-        data class Rejected(val httpStatus: Int) : DeliveryResult() // non-2xx
+        // Device fix (2026-09-05, VerifierRefusal): [body] added alongside
+        // [httpStatus] — needed to classify a 409 already_responded vs. any
+        // other non-2xx refusal (VerifierRefusal.classify), which the
+        // hardcoded "verdict: PASS" text this fix replaces never consulted.
+        data class Rejected(val httpStatus: Int, val body: String) : DeliveryResult() // non-2xx
         object NoResponseUri : DeliveryResult()
-        object TransportFailed : DeliveryResult() // network/other exception
+        // Device fix (2026-09-05, findings.md #22, DeliveryVerdictLine):
+        // [label] added alongside the bare object — same reason [Rejected]
+        // grew [body] above — needed so the raw report's "verdict:" line
+        // can name the actual exception instead of a hardcoded "PASS"; both
+        // call sites already compute this exact text for the adjacent
+        // "handoff: FAILED ..." log/report line and now pass it through
+        // rather than re-deriving it.
+        data class TransportFailed(val label: String) : DeliveryResult() // network/other exception
     }
 
     // -------------------------------------------------------- masterlist UI

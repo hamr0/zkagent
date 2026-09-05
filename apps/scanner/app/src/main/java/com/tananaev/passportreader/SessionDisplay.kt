@@ -86,7 +86,15 @@ object SessionDisplay {
     sealed class HandoffState {
         object None : HandoffState()
         object Verifying : HandoffState()
-        data class Verified(val origin: String, val tier: String?) : HandoffState()
+        // §6.5 S2 (D74) — [threshold] is the already-signed
+        // `zkagent.challenge.threshold` field ([RequestTrust.thresholdOf],
+        // the same parse path item 1's per-origin lock and item 13's mint
+        // gate already use), carried alongside [tier] so [questionTextFor]
+        // can compose the exact pre-tap question without re-parsing
+        // anything. Defaulted to `null` so every pre-S2 call site (this
+        // constructor is used by three existing call sites/tests with only
+        // two positional args) keeps compiling unchanged.
+        data class Verified(val origin: String, val tier: String?, val threshold: Int? = null) : HandoffState()
         data class Refused(val reason: String) : HandoffState()
     }
 
@@ -97,17 +105,39 @@ object SessionDisplay {
      * Q40's locked relabel for a bare local lock; [TAP_AND_VERIFY] is the
      * same locked relabel for a handoff-driven lock (item 20's collision
      * wording, D68 — "Tap and verify"/"Tap and scan" once both Q40's
-     * waiting-frame and item 20's verb apply at once). `MainActivity`
-     * substitutes the actual owner-specified strings; this object stays
-     * string-free.
+     * waiting-frame and item 20's verb apply at once). [APPLY_PASTE] is the
+     * §6.5 S3 (D75) owner correction, 2026-09-05: while UNLOCKED, the paste
+     * reveal area is open, and its field holds text that has NOT yet been
+     * applied, the ONE main button reads the SAME text as [TAP_AND_VERIFY]
+     * ("Tap and verify" — owner verbatim) but is a DISTINCT value: unlike
+     * [TAP_AND_VERIFY] (locked, button disabled, armed for an NFC tap) this
+     * one is UNLOCKED and ENABLED, and a tap on it calls
+     * `MainActivity.applyPendingHandoffText` (begins verifying the pasted
+     * text, exactly as an `av://` intent would) rather than
+     * `lockModeAndArm`. Kept as its own enum value rather than reusing
+     * [TAP_AND_VERIFY] so `MainActivity`'s click dispatch can be driven by
+     * the SAME projection this text comes from, never by string-matching
+     * the displayed label. `MainActivity` substitutes the actual
+     * owner-specified strings; this object stays string-free.
      */
-    enum class LockButtonLabel { SCAN, VERIFY, TAP_AND_SCAN, TAP_AND_VERIFY }
+    enum class LockButtonLabel { SCAN, VERIFY, TAP_AND_SCAN, TAP_AND_VERIFY, APPLY_PASTE }
 
     data class Projection(
         val modeStatusText: String,
         val handoffStatusText: String,
         val lockButtonEnabled: Boolean,
         val lockButtonLabel: LockButtonLabel,
+        // §6.5 S2 (D74) — the exact pre-tap question, sourced from
+        // [questionTextFor]. See [render]'s `lockedQuestionHandoff` param
+        // doc for why this needs its own frozen-snapshot argument, mirroring
+        // [handoffDrivenLock].
+        val questionText: String,
+        // §6.5 S3 (D75) — the "Paste link" button's enabled state, the SAME
+        // [HandoffAdmission.mayAdmitInboundHandoff] predicate the av://
+        // intent and manual-paste call sites already gate admission on
+        // (`MainActivity.handleIncomingIntent`/`applyPendingHandoffText`) —
+        // not a second, independently-derived lock check.
+        val pasteButtonEnabled: Boolean,
     )
 
     /** §6.2 item 25 (D71b, 2026-09-03) — the plain-language label for each
@@ -153,7 +183,73 @@ object SessionDisplay {
      *   Ignored while [locked] is `null`. Default `false` matches every
      *   pre-item-20 call site (a bare mode-A lock).
      */
-    fun render(locked: LockedMode?, handoff: HandoffState, handoffDrivenLock: Boolean = false): Projection {
+    /**
+     * §6.5 S2 (D74) — the exact pre-tap question, D74's own worked example
+     * verbatim ("This website asks if you are over 18"). Only a VERIFIED
+     * request has an actual question to ask; every other [HandoffState]
+     * (none pending, still verifying, refused) falls back to D46's existing
+     * "no site" label ([MintPromptText.NO_HANDOFF_FALLBACK]) — there is
+     * nothing signed yet for those states to name. Tier B appends D47-
+     * consistent recognition wording; a [HandoffState.Verified.threshold]
+     * of `null` (a verified request whose threshold this build cannot read
+     * — should not occur once [RequestTrust.thresholdOf]'s own gate has run,
+     * but this function must not guess a number it was not given) falls
+     * back to a threshold-free phrasing rather than printing "over null".
+     */
+    private fun questionTextFor(handoff: HandoffState): String {
+        val verified = handoff as? HandoffState.Verified ?: return MintPromptText.NO_HANDOFF_FALLBACK
+        val base = if (verified.threshold != null) {
+            "This website asks if you are over ${verified.threshold}"
+        } else {
+            "This website asks if you are over its requested age"
+        }
+        return if (verified.tier == "B") "$base, and may recognise you again on this site" else base
+    }
+
+    /**
+     * @param locked see [render]'s existing doc.
+     * @param handoff see [render]'s existing doc.
+     * @param handoffDrivenLock see [render]'s existing doc.
+     * @param lockedQuestionHandoff §6.5 S2 (D74) — the question line's OWN
+     *   frozen-snapshot argument, for the identical reason
+     *   [handoffDrivenLock] is one: once [locked] is non-null, the live
+     *   [handoff] argument can keep changing (an admitted foreign handoff's
+     *   async verification resolving after lock — see class doc's "locked
+     *   wins" passage), and the question line must be just as immune to
+     *   that as the mode/handoff text and the verb already are. Callers
+     *   pass their OWN lock-time snapshot (`AuthorizedHandoff`, mapped to a
+     *   [HandoffState.Verified]) here, not [handoff]. Defaults to
+     *   [HandoffState.None] (D46's "Local scan (no site)" wording) — every
+     *   pre-S2 call site keeps compiling with no behaviour change for the
+     *   fields it already asserts on.
+     * @param readInProgress §6.5 S3 (D75) — `MainActivity.paneState
+     *   .readInProgress`, threaded straight into
+     *   [HandoffAdmission.mayAdmitInboundHandoff] for
+     *   [Projection.pasteButtonEnabled] — the SAME two inputs
+     *   (`sessionLocked`, `readInProgress`) that predicate already gates
+     *   admission on, not a second lock check. Defaults to `false`,
+     *   matching every pre-S3 call site.
+     * @param pasteTextPending §6.5 S3 (D75) owner correction, 2026-09-05 —
+     *   `MainActivity`'s own `pasteFieldRevealed && handoffManualInput.text`
+     *   non-blank check, computed ONCE by the caller and passed in here
+     *   rather than this Android-free object ever touching the `EditText`
+     *   itself (same reasoning as every other primitive-in, decision-out
+     *   parameter this function takes). Only changes anything when [locked]
+     *   is `null` AND [handoff] is [HandoffState.None] — see [LockButtonLabel
+     *   .APPLY_PASTE]'s doc: once ANY handoff is pending/verifying/verified,
+     *   or the session is locked, the existing verb for THAT state takes
+     *   over unconditionally, matching the "locked always wins" precedent.
+     *   Defaults to `false`, matching every pre-owner-correction call site.
+     */
+    fun render(
+        locked: LockedMode?,
+        handoff: HandoffState,
+        handoffDrivenLock: Boolean = false,
+        lockedQuestionHandoff: HandoffState = HandoffState.None,
+        readInProgress: Boolean = false,
+        pasteTextPending: Boolean = false,
+    ): Projection {
+        val pasteButtonEnabled = HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = locked != null, readInProgress = readInProgress)
         if (locked != null) {
             // Matches lockModeAndArm's pre-refactor text verbatim
             // ("Locked: mode ${lockedMode} — tap your document now") —
@@ -172,6 +268,8 @@ object SessionDisplay {
                 handoffStatusText = "",
                 lockButtonEnabled = false,
                 lockButtonLabel = if (handoffDrivenLock) LockButtonLabel.TAP_AND_VERIFY else LockButtonLabel.TAP_AND_SCAN,
+                questionText = questionTextFor(lockedQuestionHandoff),
+                pasteButtonEnabled = pasteButtonEnabled,
             )
         }
         return when (handoff) {
@@ -179,7 +277,13 @@ object SessionDisplay {
                 modeStatusText = MODE_DEFAULT_TEXT,
                 handoffStatusText = "",
                 lockButtonEnabled = true,
-                lockButtonLabel = LockButtonLabel.SCAN,
+                // §6.5 S3 (D75) owner correction: only the bare-None state
+                // (nothing else already pending/verifying/verified) yields
+                // to a pending, un-applied paste — see [LockButtonLabel
+                // .APPLY_PASTE]'s doc.
+                lockButtonLabel = if (pasteTextPending) LockButtonLabel.APPLY_PASTE else LockButtonLabel.SCAN,
+                questionText = questionTextFor(handoff),
+                pasteButtonEnabled = pasteButtonEnabled,
             )
             HandoffState.Verifying -> Projection(
                 // Matches beginHandoffVerification's pre-refactor text verbatim.
@@ -190,6 +294,8 @@ object SessionDisplay {
                 handoffStatusText = "Handoff request received — verifying signature and origin…",
                 lockButtonEnabled = false,
                 lockButtonLabel = LockButtonLabel.SCAN,
+                questionText = questionTextFor(handoff),
+                pasteButtonEnabled = pasteButtonEnabled,
             )
             is HandoffState.Verified -> Projection(
                 // Matches the pre-refactor refreshModeStatus's tier-mapping
@@ -202,6 +308,8 @@ object SessionDisplay {
                 handoffStatusText = "Handoff verified — origin: ${handoff.origin}, requested tier: ${handoff.tier ?: "<absent>"}. Fill in your document details and lock to answer it.",
                 lockButtonEnabled = true,
                 lockButtonLabel = LockButtonLabel.VERIFY,
+                questionText = questionTextFor(handoff),
+                pasteButtonEnabled = pasteButtonEnabled,
             )
             is HandoffState.Refused -> Projection(
                 // The pre-refactor code left modeStatusView/lockButton
@@ -219,6 +327,8 @@ object SessionDisplay {
                 handoffStatusText = "Handoff refused (${handoff.reason}) — you may still scan manually.",
                 lockButtonEnabled = false,
                 lockButtonLabel = LockButtonLabel.SCAN,
+                questionText = questionTextFor(handoff),
+                pasteButtonEnabled = pasteButtonEnabled,
             )
         }
     }

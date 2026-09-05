@@ -1,12 +1,12 @@
-# /remember report — 2026-09-03
+# /remember report — 2026-09-05
 
-- Stashes processed: 1 (`m2-reconciliation-unfreeze-prep.md`); 21 total in manifest.
-- Facts: 65 → 71. 5 new standalone facts, 1 folded from the aged-out episode, 1 old worktree fact split into 2 refined lines. Nothing else merged; nothing shortened (already ≤160). Length gate: 0 lines over 180, 0 exemptions.
-- Episodes: 1 new, 10 kept hot, 1 folded then deleted ("2026-08-30 (late) — M1b probe + chiproof 0.2.0 release" → adopter-gate fact).
-- Friction: ran over ~/.claude/projects/ (global). 34 clusters, all single-session. Classified: 5 → ag-001, 13 → new (1 session each, written nowhere), 16 → drop.
-- Antigens (from count_report.json): High 1, Medium 0, Low 0, newly promoted 0. ag-001 matched 5 clusters, all already-stored session hashes → 0 increments (sessions stays 8).
-- ledger: ag-001 "never claim done/validated without a real run"  hot, 0 recurrences since adoption, last_seen 2026-08-25.
-- Ledger check: I7 0 mismatches; I6-new EQUAL (Antigens section is the script render).
-- Docs: 17 changed since a7e03417 — REORG IS DUE. `index-flat` ran: docs/index.md already current, docs/log.md gained one stamp line.
-- MEMORY.md and CLAUDE.md markers confirmed (CLAUDE.md unchanged; both marker pairs present with correct pointers).
-- Nothing committed (owner commits on request).
+- Stashes processed: 5 (m2-unfreeze-device-session-and-close-out, m2-exit-cleanup-round, m2-closed-v0.5.0-released, m3-prd-scope-gate, m3-poc-s2-s3-device-rounds); .processed now 26 entries.
+- Facts: 71 → 84 (19 extracted; 7 merged into existing lines, M2-frozen line replaced, 2 folded from removed episodes by the merge agent, 1 folded by the orchestrator after the check below). Length gate: 0 lines over 180; no exemptions.
+- Episodes: 10 before → 7 after (5 new appended, 8 removed). Defect found and corrected: the merge agent named 5 removals but removed 8; the 3 unnamed (M2 D43 dialogs/D44 log view; M2 D58 refactor; M2 freeze/ownership audit) — two lessons were already facts (transition-only tests blind to message changes; check the counterparty's state), the third (three-layer guard proof) was missing and has been added as a fact.
+- Antigens (count_report.json): ag-001 hot, 9 sessions (+1 new conversation, cluster 16), recurred_while_hot 1 (<2, no rephrase); 0 new entries; 12 `new:` clusters dropped at 1 session; 17 clusters dropped as non-agent-directed. High 1 / Medium 0 / Low 0. Decay: nothing observing to expire.
+- ledger: ag-001 "verify, don't assert done"  hot, 1 recurrence since 2026-08-xx adoption (needs 2 to rephrase)
+- version-check: `liteagents 2.5.2 -> 2.24.1 available: npm i -g liteagents@latest && liteagents`
+- sync-rules: silent (AGENT_RULES.md identical to template)
+- stub-check: silent
+- Docs: `due` reported 7 docs changed since f7877554 — REORG IS DUE; auto re-index ran: docs/index.md and docs/log.md regenerated (37 rows) — include them in the next commit.
+- MEMORY.md Antigens render check: I6-new EQUAL; I7 0 mismatches. CLAUDE.md MEMORY section present, unchanged.

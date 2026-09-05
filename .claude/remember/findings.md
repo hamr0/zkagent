@@ -1033,3 +1033,67 @@ JUnit XML, not from a device run.
   matching item 9's bare-mode requirement. This is the actual compiled Kotlin running on real
   hardware, not the JVM-side hand-mirrored proof this entry's prior update flagged as unverified
   against the real bytecode.
+
+### 2026-09-05 — #22: hardcoded `report += "\nverdict: PASS (...)"` line ignored `deliveryResult` for EVERY outcome, not only the non-2xx case this session fixed
+
+- **Source**: agent (coder spawn fixing the owner-reported non-2xx-reported-as-PASS bug, found
+  adjacent while touching the exact line)
+- **Anchor**: `MainActivity.kt`, `presentBareA` (mode A) and `mintAndMaybeHandoff` (mode B), the
+  `report += "\nverdict: PASS (bare presentation sent)"` / `"\nverdict: PASS (minted)"` lines,
+  immediately after each function's `try`/`catch` block that computes `deliveryResult:
+  DeliveryResult` — anchored at the commit this session left uncommitted (working tree, not yet a
+  SHA; re-anchor on read).
+- **Finding**: this session's fix (VerifierRefusal, owner device evidence: HTTP 409
+  `already_responded` reported `verdict: PASS`) corrects the raw report/log "verdict:" line ONLY
+  for the `is DeliveryResult.Rejected` branch (non-2xx). The IDENTICAL hardcoded-text defect still
+  applies, unfixed, to THREE other `DeliveryResult` variants that are NOT `Accepted`:
+  `RefusedHonestUnderThreshold`, `RefusedOtherReason` (both HTTP 2xx, but the verifier's own
+  `{allowed:false}` body refused the claim), and `TransportFailed`/`NoResponseUri` (the request
+  never reached the verifier at all). Every one of these still gets the literal "verdict: PASS
+  (bare presentation sent)" / "verdict: PASS (minted)" text in the raw report/log dump, even though
+  the STRUCTURED `summary.result` line (the four-line disclosure block) and `ReportLog.Outcome`
+  (the PASS/FAIL glyph) both already compute the CORRECT outcome for these branches independently —
+  so the raw text and the structured summary can disagree on the same entry. Scoped out of this
+  session's fix deliberately: the owner's ask named "a non-2xx direct_post response," matching only
+  `Rejected`; touching the other four branches' report-line text was judged wider than the explicit
+  ask (per this project's "surgical changes only" rule) and is left for an owner-scoped follow-up.
+- **Status**: CLOSED (2026-09-05, FIX, owner-approved coder spawn; anchor was working-tree, not a
+  SHA, per this entry's own note — re-anchor on read still applies to the fix commit once made).
+  Added `DeliveryVerdictLine` (sibling pure object to `VerifierRefusal`, same package) as the
+  single place that derives the raw report's `"verdict:"` line from `deliveryResult` for EVERY
+  variant: `Accepted` keeps its exact existing text (parameterized on "bare presentation sent" /
+  "minted" so mode A/B differ only in that one argument); `RefusedHonestUnderThreshold` ->
+  `"verdict: REFUSED — under threshold, nothing sent"`; `RefusedOtherReason` -> `"verdict: REFUSED
+  — <reason>, nothing sent"` (falls back to `"no reason given"` when the verifier's `reason` field
+  was null); `Rejected` delegates to the existing `VerifierRefusal.classify`/`reportLine`
+  (unchanged behavior, now called from one place instead of duplicated inline at both call sites);
+  `NoResponseUri` -> `"verdict: NOT SENT — request had no response_uri"`; `TransportFailed` ->
+  `"verdict: NOT SENT — network error: <label>"`. `DeliveryResult.TransportFailed` (an `object`)
+  was extended to a `data class TransportFailed(val label: String)` — same precedent as this
+  session's own `Rejected(httpStatus, body)` extension — carrying the SAME
+  `"${e.javaClass.simpleName}: ${e.message}"` text already written to the adjacent `"handoff: FAILED
+  ..."` line at both call sites (captured once into a local `transportFailureLabel`, not
+  re-derived); the two `summary` `when` blocks' bare `DeliveryResult.TransportFailed ->` matches
+  were updated to `is DeliveryResult.TransportFailed ->` to compile against the new data class. No
+  dialog changed at either call site — this fix only touches the raw report/log text, matching what
+  `summary`/`ReportLog.Outcome` already computed independently for every branch. Owner's wording
+  note captured verbatim in `DeliveryVerdictLine.accepted`'s doc but NOT applied: a future PASS ->
+  "delivered" rewording for `Accepted` is now a one-line change in that single function.
+  **Proof the new expectations could fail**: before restoring the real mapping, `DeliveryVerdictLine`
+  was temporarily swapped for a stub reproducing the exact pre-fix hardcoded-PASS behavior
+  (`refusedHonestUnderThreshold`/`refusedOtherReason`/`noResponseUri`/`transportFailed` all
+  returning the old `"verdict: PASS (bare presentation sent)"` text) and
+  `DeliveryVerdictLineTest` was run against it: 5 of 8 new expectations failed
+  (`org.junit.ComparisonFailure`), confirming the test can distinguish the fixed mapping from the
+  bug it replaces; the stub was then discarded and the real fix restored byte-for-byte (diffed
+  clean against the pre-stub file). **Verification**: `assembleRegularDebug` +
+  `testRegularDebugUnitTest` both green, JUnit XML (not agent prose) parsed directly —
+  `app/build/test-results/testRegularDebugUnitTest/` (28 suite files, mtime 2026-09-05 10:44:06
+  local) totals 383 tests / 0 failures / 0 errors / 0 skipped, up from the prior session's reported
+  375 by exactly the 8 new `DeliveryVerdictLineTest` cases; `VerifierRefusalTest`'s own 20 cases
+  remained green and untouched by this change. Working tree otherwise unchanged beyond this
+  session's own two new files (`DeliveryVerdictLine.kt`, `DeliveryVerdictLineTest.kt`) — the
+  pre-existing S2/S3 uncommitted diff (`MainActivity.kt`, `PaneState.kt`, `PaneVisibility.kt`,
+  `SessionDisplay.kt`, `activity_main.xml`, `strings.xml`, and their three test files, plus
+  `VerifierRefusal.kt`/`VerifierRefusalTest.kt` from finding #22's own opening fix) was left as
+  found — not reverted, not committed.

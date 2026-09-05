@@ -44,4 +44,21 @@ class PaneVisibilityTest {
         // back on whatever pane the tab selection already names.
         assertEquals(PaneVisibility.Pane.LOG, PaneVisibility.choosePane(readInProgress = false, selectedTabPosition = 1))
     }
+
+    // ---- Device fix (2026-09-05) — §6.5 S3 round 3 item 4: Diagnostics tab
+
+    @Test
+    fun `no read in progress, Diagnostics tab selected, shows DIAGNOSTICS`() {
+        assertEquals(PaneVisibility.Pane.DIAGNOSTICS, PaneVisibility.choosePane(readInProgress = false, selectedTabPosition = 2))
+    }
+
+    @Test
+    fun `read in progress always shows LOADING even with Diagnostics selected`() {
+        assertEquals(PaneVisibility.Pane.LOADING, PaneVisibility.choosePane(readInProgress = true, selectedTabPosition = 2))
+    }
+
+    @Test
+    fun `finishing a read while the Diagnostics tab is selected returns to DIAGNOSTICS`() {
+        assertEquals(PaneVisibility.Pane.DIAGNOSTICS, PaneVisibility.choosePane(readInProgress = false, selectedTabPosition = 2))
+    }
 }

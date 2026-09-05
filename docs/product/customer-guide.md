@@ -20,6 +20,27 @@ Nothing personal ever leaves the phone. The website runs its own verifier (its o
 its own database of who it has seen) — zkagent does not host anything, does not run a server on
 anyone's behalf, and does not keep any list of users anywhere.
 
+## Two answers, two places
+
+The phone and the page never answer the same question, and treating one as a stand-in for the
+other is the single most common misreading of a scan.
+
+| | Answers | Possible values |
+|---|---|---|
+| The app's popup | Delivery status: did the phone read the chip and get its presentation to the verifier | "Read OK", "Sent", "Refused by the app" (a local check failed before anything was sent), "Verifier refused the upload" |
+| The page | The site's verdict: what the verifier decided to do with what it received | "Allowed", "Not allowed", "Already registered at this site", "Key mismatch" |
+
+Why they're separate: the app's own network call (`direct_post`) gets back a **receipt**, not a
+verdict — a `200` with `{"accepted": true}` means only "the verifier received your presentation."
+The verdict is a separate fact that reaches the page later, by the page polling the verifier — the
+EU Age Verification Blueprint-shaped handoff zkagent follows (origin-bound request/response, per
+`docs/wiki/decisions.md` D37; `av://` + `direct_post` as the primary handoff, milestones.md item 8).
+Device-confirmed 2026-09-05 (`docs/logs/M3-POC-EVIDENCE-2026-09-04.md`): a reinstalled app showed
+"ID scanned successfully" — a true statement about delivery — at the exact moment the page showed
+a refusal (`ok=true allowed=false reason=attester_key_mismatch`) — an equally true statement about
+the verdict. Neither reading was wrong; they were answers to two different questions. **The app
+cannot tell you the site's decision. Read the page.**
+
 ## 2. Glossary
 
 | Term | Meaning |
@@ -47,6 +68,7 @@ anyone's behalf, and does not keep any list of users anywhere.
 | PIN/biometric prompt | None | Yes, before every mint | Not built |
 | Scanner popup | Yes, every scan — confirmed, including two tier-A scans in a row | Yes, expected every scan — **unconfirmed observation: may not appear on a repeat tier-B scan** (an earlier report of a missing popup was traced to tier-B taps, not tier A; corrected 2026-09-04) | Not built |
 | Page outcome text | "ALLOWED (over threshold)" or refusal reason | First visit: allowed/refused as normal. Repeat visit, same document: "Already registered at this site" | Not built |
+| Where the verdict shows | Page, never the app (see "Two answers, two places" above) | Page, never the app (see "Two answers, two places" above) | Not built |
 | Stored on the phone | Nothing persists beyond a value-free log entry | Same, plus a device key bound to (this site, this zktag) | Not built |
 | Stored by the site | Nothing durable (a spent one-time nonce) | zktag + attester-key binding, kept until the operator clears it | Not built |
 | Can the site recognise you again | No | Yes, at that one site only | Not built |
@@ -155,7 +177,11 @@ kill-and-restart; zktags unchanged across the restart.
 | Step | You do | Page shows | App shows | Verifier logs |
 |---|---|---|---|---|
 | 1 | Uninstall, then reinstall the scanner app | Unaffected until next scan | Fresh install: no saved device keys, no per-origin threshold lock, empty log | Nothing yet |
-| 2 | Scan the same document at a site where you had already registered (tier B) | Device-confirmed: the zktag computed from the document is identical to before (it's derived from the chip, not stored on the phone) | Same document, new PIN prompt, but the phone's device key is brand new (Keystore state is per-install) | **Expected (not yet verified):** the site's original binding was to the OLD key, so this presentation likely refuses as a key mismatch rather than being silently re-recognised — there is no re-enrolment path today (open question) |
+| 2 | Scan the same document at a site where you had already registered (tier B) | **"Not allowed — key mismatch"** (`ok=true allowed=false reason=attester_key_mismatch`) | **"ID scanned successfully"** — same document, new PIN prompt, but the phone's device key is brand new (Keystore state is per-install) | **Device-confirmed 2026-09-05:** the zktag computed from the document is identical to before (it's derived from the chip, not stored on the phone), but the site's original binding was to the OLD key, so this presentation is refused rather than being silently re-recognised — there is no re-enrolment path today (open question) |
+
+Both readings are correct at once, and neither is a bug: the app's dialog reports delivery only
+("your presentation reached the verifier"), while the page reports the verifier's separate verdict
+("what it decided to do with what it received") — see "Two answers, two places" above.
 
 ### 6.11 Paste-link fallback
 
@@ -235,6 +261,7 @@ What's actually checked, and what isn't yet:
 | Per-install state | Keys, zktag bindings' local record, threshold locks, and the log all reset on reinstall (see §6.10) |
 | LAN cleartext | Refused outright by the app's network settings — no plain HTTP over Wi-Fi, ever |
 | Key-loss recovery | Unsolved — no way to re-enrol at a site after losing the original device/key |
+| App can't report the site's decision | The app cannot tell you the site's decision; read the page — see "Two answers, two places" |
 
 ## 11. How to test locally
 

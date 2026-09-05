@@ -305,6 +305,51 @@ already-bound zktag) remains node-test-only, not device-confirmed.
 
 ---
 
+---
+
+---
+
+## Session 4 — second-device key mismatch (2026-09-05)
+
+**Setup**: Pixel 6a, scanner build 4 of 2026-09-05 (JUnit run 01:08), package
+`com.zkagent.scanner`. The app was fully UNINSTALLED (`adb uninstall com.zkagent.scanner`) and
+reinstalled from the same APK — this empties the AndroidKeyStore entry, unlike the `adb install -r`
+upgrades used earlier this evening (Sessions B/C in `M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md`),
+which retain the keystore across the upgrade. Demo store on port 8787 unchanged: 2 zktags
+(`e218e2cf6a6a` NL, `a89f966d0f20` US) and 2 P-256 attester bindings, from prior sessions. Owner ran
+one tier-B handoff with the NL ID card.
+
+Server log, verbatim:
+
+```
+[apps/demo] tx created P8wi mode=B ttlMs=120000 threshold=18
+[apps/demo] verdict P8wi tier=B threshold=18 ok=true allowed=false reason=attester_key_mismatch evidence=[] attester=n/a
+```
+
+App log: `direct_post` `http_status=200`, body `{"accepted": true}`, then `verdict: PASS (minted)`,
+dialog "ID scanned successfully."
+
+**Interpretation**: the verifier's verdict is `ok=true allowed=false reason=attester_key_mismatch` —
+a new device key (post-reinstall, fresh keystore) presenting an already-bound zktag is correctly
+refused; the D38/D39 per-origin-and-zktag key binding holds across the app's own key loss. The
+page (polled from the site, Blueprint-shaped) shows this refusal. The app's own "scanned
+successfully" dialog is not a defect: by contract the `direct_post` HTTP response is a receipt only
+(`accepted: true` means "received," not "allowed") — the actual verdict belongs to the site and
+reaches the page by polling, never by the app's own response handling. Flagged as an open wording
+question for the owner (Q-candidate: should the app say "sent — the site decides" rather than
+"successfully"?), not a defect to fix.
+
+**Consequence for operators**: after a reinstall (or a new phone) a tier-B site that already bound
+the old key refuses the new one until its operator clears the binding — this is the D38 per-install
+reset, already disclosed in §6.5 S1 / the customer guide's §6.10.
+
+**Result: the second-device/key-mismatch negative, previously node-test-only (see Session 3's "Not
+run on device" and the S2/S3 evidence doc's matching gap), is now device-confirmed.** One case, one
+document, one run — see `M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md` for the corresponding update to
+its own "Did NOT establish" list.
+
+---
+
 **No PII values appear anywhere above, in any session.** All quoted log lines, transaction
 identifiers, and store states are value-free by construction — stage names, boolean/status fields,
 truncated transaction IDs, 12-char zktag prefixes, and timings only — checked against this file's

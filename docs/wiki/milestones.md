@@ -308,6 +308,8 @@ alongside M3b without a further gate check.
    bare local scan with no pending verified request MUST show "Local scan (no site)" instead, per
    D46's existing wording for that case. This extends D47's disclosure requirement to the
    pre-action moment, not just the post-outcome dialog.
+
+   Status: built 2026-09-05, device-confirmed (see evidence doc), uncommitted at time of writing. [M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md](../logs/M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md)
 3. **S3 (ENHANCEMENT, owner UI feedback 2026-09-03) — scan-pane cleanup.** Owner, verbatim: "big
    blob of text top screen, and below a place for manual av:// paste and it still reads the result
    below it, clean all that up." Read against the actual layout
@@ -370,6 +372,8 @@ alongside M3b without a further gate check.
    dialogs), D46 ("Local scan (no site)" wording), D47 (disclosure), D52 (dialog strings); finding
    #10 (the mint-path race this reuses the admission guard against) — none of those mechanisms are
    altered by this cleanup beyond what is stated above.
+
+   Status: built 2026-09-05, device-confirmed (see evidence doc), uncommitted at time of writing. Two FIXes delivered alongside (non-2xx `direct_post` misreport; `error_read` dialog wording). [M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md](../logs/M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md)
 
 4. **S4 (ENHANCEMENT, D78) — client trust list (FR10) via attestation plug.** Moved here from
    §6.3 item 8 by D78: a package name + signing-cert digest is not carried by the OpenID4VP wire,
