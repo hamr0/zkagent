@@ -19,7 +19,8 @@ class ReportLogStoreTest {
         lastScanInfo: LastScanLine.Entry? = null,
         handoffGeneration: Int = 0,
         lastScanGeneration: Int = 0,
-    ) = ReportLogStore.Snapshot(entries, expanded, outcomes, lastText, lastScanInfo, handoffGeneration, lastScanGeneration)
+        originThresholdLocks: Map<String, Int> = emptyMap(),
+    ) = ReportLogStore.Snapshot(entries, expanded, outcomes, lastText, lastScanInfo, handoffGeneration, lastScanGeneration, originThresholdLocks)
 
     @Test
     fun `round-trips a snapshot through toJson and fromJson byte-identically`() {
@@ -158,5 +159,42 @@ class ReportLogStoreTest {
         val restored = ReportLogStore.fromJson(json)
         assertEquals(0, restored.handoffGeneration)
         assertEquals(0, restored.lastScanGeneration)
+    }
+
+    // §6.5 S1 (D74) — the per-origin threshold-lock record. A SEPARATE
+    // field from every log field above: "Clear log" must never touch it —
+    // proven at the MainActivity level (clearLog() never constructs a
+    // Snapshot with this field cleared), but the round-trip/backward-
+    // compatibility contract belongs here, same as every other field.
+
+    @Test
+    fun `round-trips a non-empty origin threshold lock map byte-identically`() {
+        val original = snapshot(originThresholdLocks = mapOf("127.0.0.1" to 18, "example.com" to 21))
+        val restored = ReportLogStore.fromJson(ReportLogStore.toJson(original))
+        assertEquals(original, restored)
+    }
+
+    @Test
+    fun `an empty origin threshold lock map round-trips to an empty map, not null`() {
+        val original = snapshot(originThresholdLocks = emptyMap())
+        val restored = ReportLogStore.fromJson(ReportLogStore.toJson(original))
+        assertEquals(emptyMap<String, Int>(), restored.originThresholdLocks)
+    }
+
+    @Test
+    fun `an OLD persisted file written before the threshold lock existed still loads, with an empty lock map`() {
+        val json = """{"version":1,"entries":[{"text":"09:00:00 · site-a.test\n\nResult    ok","expanded":false,"outcome":"PASS"}],"last_text":"last report text"}"""
+        val restored = ReportLogStore.fromJson(json)
+        assertEquals(emptyMap<String, Int>(), restored.originThresholdLocks)
+        // The rest of the file still loads correctly alongside the missing
+        // key — this is not a partial-recovery/corrupt-file path.
+        assertEquals(listOf("09:00:00 · site-a.test\n\nResult    ok"), restored.entries)
+    }
+
+    @Test
+    fun `a malformed single lock entry is skipped, not fatal to the whole parse`() {
+        val json = """{"version":1,"entries":[],"last_text":null,"origin_threshold_locks":{"good.test":18,"bad.test":"not-a-number"}}"""
+        val restored = ReportLogStore.fromJson(json)
+        assertEquals(mapOf("good.test" to 18), restored.originThresholdLocks)
     }
 }

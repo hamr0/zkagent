@@ -228,6 +228,21 @@ abstract class MainActivity : AppCompatActivity() {
     // the SAME snapshot exactly as it keeps [lockedMode].
     private var authorizedHandoff: AuthorizedHandoff? = null
 
+    // ---- §6.5 S1 (D74) — the per-origin threshold lock, keyed by
+    // HOSTNAME ONLY ([ThresholdPolicy.hostnameOf] — see that class's doc
+    // for why, mirroring D38's attester-binding key shape). Loaded ONCE
+    // from disk in [loadPersistedLog] (the SAME `ReportLogStore` file item
+    // 23 already persists, per D74's own requirement — not a new store),
+    // then held here as the in-memory source of truth: written ONLY by
+    // [applyHandoffVerificationOutcome]'s Verified branch, on genuine
+    // first-sight for a hostname ([ThresholdPolicy.shouldRecordLock]), and
+    // NEVER by [clearLog] — "Clear log" empties [reportLog]'s own fields
+    // only, this map is untouched, matching S1's "policy state, not log"
+    // rule. [persistLog] always serializes whatever this map CURRENTLY
+    // holds, so a clear's own `persistLog()` call still round-trips
+    // whatever locks were already recorded.
+    private val originThresholdLocks = mutableMapOf<String, Int>()
+
     // ---- §6.2 item 16 (D44): per-scan report log. D58 step 1: this class
     // is now also the sole owner of the last-rendered-report text (formerly
     // a separate `lastReportText` field here, written at two independent
@@ -1268,6 +1283,66 @@ abstract class MainActivity : AppCompatActivity() {
         }
         when (outcome) {
             is RequestTrust.Outcome.Verified -> {
+                // §6.5 S1 (D74) — runs BEFORE verifiedRequest is ever set,
+                // extending item 13's fail-loudly rule from "tier
+                // absent/invalid" to "threshold not on the preset list" /
+                // "different threshold than this origin's first-seen one".
+                // A request refused here NEVER becomes verifiedRequest (and
+                // pendingHandoff is nulled below, alongside it) — the S2
+                // question line and the Scan/Verify button both fall back
+                // to their bare-scan defaults via the SAME
+                // currentHandoffState() derivation every other "no handoff"
+                // case already uses, not a special-cased display. A
+                // threshold this build cannot even PARSE (absent/malformed)
+                // is left to item 13's own existing lock-time/mint-time
+                // refusal — S1 has nothing to judge yet in that case.
+                val threshold = RequestTrust.thresholdOf(outcome.request.json)
+                val hostname = threshold?.let { ThresholdPolicy.hostnameOf(outcome.request.origin) }
+                val policyMessage = if (threshold != null && hostname != null) {
+                    when (val decision = ThresholdPolicy.evaluate(hostname, threshold, originThresholdLocks[hostname])) {
+                        is ThresholdPolicy.Decision.RefuseNotPreset ->
+                            "This site asked for over ${decision.threshold}, which is not a supported threshold — refused."
+                        is ThresholdPolicy.Decision.RefuseDifferentThreshold ->
+                            "This site asked for over ${decision.requestedThreshold}, but it first asked for over ${decision.lockedThreshold} — refused."
+                        ThresholdPolicy.Decision.Admit -> {
+                            // The lock is written ONLY on genuine first
+                            // sight for this hostname (never on refusal,
+                            // never a second time) — see
+                            // [ThresholdPolicy.shouldRecordLock]'s doc.
+                            if (ThresholdPolicy.shouldRecordLock(hostname, originThresholdLocks[hostname])) {
+                                originThresholdLocks[hostname] = threshold
+                                persistLog()
+                                Log.i(TAG, "M2 stage: threshold $threshold locked for origin host=$hostname (S1, D74)")
+                            }
+                            null
+                        }
+                    }
+                } else null
+
+                if (policyMessage != null) {
+                    Log.e(TAG, "M2 stage: handoff REFUSED by threshold policy (S1, D74) — host=$hostname threshold=$threshold")
+                    pendingHandoff = null
+                    verifiedRequest = null
+                    emitReport(
+                        "handoff: REFUSED — threshold policy (S1/D74): $policyMessage",
+                        ReportLog.DisclosureSummary(
+                            site = siteTitleFor(outcome.request.origin),
+                            result = "Refused — $policyMessage",
+                            sent = "nothing left this device",
+                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                        ),
+                        // item 22: a refusal — see ReportLog.Outcome's doc.
+                        // lastScan omitted: ReportLog.append's own default
+                        // (Entry(origin = summary.site, reason = REFUSED))
+                        // already renders exactly "Last scan: <host:port>,
+                        // refused ✗", the D79 shape this refusal needs.
+                        outcome = ReportLog.Outcome.FAIL,
+                    )
+                    refreshSessionDisplay()
+                    showBlockingNotice(policyMessage)
+                    return
+                }
+
                 verifiedRequest = outcome.request
                 // §6.2 item 13 (D33): SHOW the mode the request set the instant
                 // verification succeeds (2026-09: via refreshSessionDisplay —
@@ -1574,6 +1649,13 @@ abstract class MainActivity : AppCompatActivity() {
             return
         }
         val snapshot = ReportLogStore.fromJson(json)
+        // §6.5 S1 (D74) — loaded UNCONDITIONALLY, before the log-emptiness
+        // early return below: the threshold lock is a separate field from
+        // the log (see [originThresholdLocks]'s doc) and must load even on
+        // a file whose log entries are empty but which still carries a
+        // recorded lock (e.g. right after "Clear log").
+        originThresholdLocks.clear()
+        originThresholdLocks.putAll(snapshot.originThresholdLocks)
         if (snapshot.entries.isEmpty() && snapshot.lastText == null) return
         reportLog.restore(snapshot.entries, lastText = snapshot.lastText, expanded = snapshot.expanded, outcomes = snapshot.outcomes, lastScanInfo = snapshot.lastScanInfo, handoffGeneration = snapshot.handoffGeneration, lastScanGeneration = snapshot.lastScanGeneration)
         applyReportText()
@@ -1613,6 +1695,11 @@ abstract class MainActivity : AppCompatActivity() {
             lastScanInfo = reportLog.lastScanInfo,
             handoffGeneration = reportLog.handoffGeneration,
             lastScanGeneration = reportLog.lastScanGeneration,
+            // §6.5 S1 (D74) — this Activity's own field, NOT reportLog's:
+            // see [originThresholdLocks]'s doc for why it survives
+            // [clearLog] untouched (clearLog calls this same persistLog(),
+            // and never mutates this map first).
+            originThresholdLocks = originThresholdLocks.toMap(),
         )
         try {
             val json = ReportLogStore.toJson(snapshot)

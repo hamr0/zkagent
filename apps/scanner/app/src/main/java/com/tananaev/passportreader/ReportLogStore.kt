@@ -54,7 +54,20 @@ object ReportLogStore {
      *   2026-09-05) the staleness counters — see
      *   [ReportLog.handoffGeneration]/[ReportLog.lastScanGeneration]'s doc.
      *   Both default to 0, same backward-compatibility reasoning as
-     *   [lastScanInfo]. */
+     *   [lastScanInfo].
+     * @param originThresholdLocks §6.5 S1 (D74) — the per-origin
+     *   "first-seen threshold" lock (`ThresholdPolicy`'s own decision),
+     *   keyed by HOSTNAME ONLY (see [ThresholdPolicy]'s class doc for why),
+     *   value the locked threshold. Deliberately a SEPARATE field from
+     *   [entries]/[expanded]/[outcomes]/[lastText]/[lastScanInfo] — S1's own
+     *   spec requires "Clear log" to empty the log but NEVER this record
+     *   (it is policy state, not log); [MainActivity.clearLog] only ever
+     *   clears [ReportLog]'s own fields, never this map, so a `persistLog()`
+     *   call after a clear still round-trips whatever locks were already
+     *   recorded. Defaults to an empty map, same backward-compatibility
+     *   reasoning as [lastScanInfo]/[handoffGeneration] — an OLD file
+     *   written before this field existed simply lacks the key, read back
+     *   as empty with no version check required. */
     data class Snapshot(
         val entries: List<String>,
         val expanded: List<Boolean>,
@@ -63,6 +76,7 @@ object ReportLogStore {
         val lastScanInfo: LastScanLine.Entry? = null,
         val handoffGeneration: Int = 0,
         val lastScanGeneration: Int = 0,
+        val originThresholdLocks: Map<String, Int> = emptyMap(),
     ) {
         companion object {
             val EMPTY = Snapshot(emptyList(), emptyList(), emptyList(), null)
@@ -95,6 +109,16 @@ object ReportLogStore {
         // fromJson's optInt(..., 0) below already reads that back as 0.
         root.put("handoff_generation", snapshot.handoffGeneration)
         root.put("last_scan_generation", snapshot.lastScanGeneration)
+        // §6.5 S1 (D74) — the per-origin threshold-lock record, a plain
+        // JSON object keyed by hostname. Old files simply lack this key —
+        // fromJson's optJSONObject below already reads that back as an
+        // empty map with no special-case code needed for backward
+        // compatibility (same shape as last_scan_info above).
+        val locksObject = JSONObject()
+        for ((hostname, threshold) in snapshot.originThresholdLocks) {
+            locksObject.put(hostname, threshold)
+        }
+        root.put("origin_threshold_locks", locksObject)
         return root.toString()
     }
 
@@ -131,6 +155,25 @@ object ReportLogStore {
             // both keys entirely) needs — no version check required.
             val handoffGeneration = root.optInt("handoff_generation", 0)
             val lastScanGeneration = root.optInt("last_scan_generation", 0)
+            // §6.5 S1 (D74) — optJSONObject returns null for both an
+            // explicit JSON null AND a wholly absent key (an OLD file
+            // written before this field existed) — read back as an empty
+            // map either way, same backward-compatibility shape as
+            // last_scan_info above. A malformed (non-integer) value for a
+            // given hostname is skipped rather than failing the whole
+            // parse — one bad entry must not lose every other recorded
+            // lock or crash startup.
+            val locksJson = root.optJSONObject("origin_threshold_locks")
+            val originThresholdLocks = mutableMapOf<String, Int>()
+            if (locksJson != null) {
+                val keys = locksJson.keys()
+                while (keys.hasNext()) {
+                    val hostname = keys.next()
+                    if (locksJson.isNull(hostname)) continue
+                    val value = locksJson.optInt(hostname, -1)
+                    if (value > 0) originThresholdLocks[hostname] = value
+                }
+            }
             // D59: the cap is re-enforced on load, not just on append —
             // keep the newest MAX_ENTRIES, oldest-first (same shape as
             // ReportLog.append's own eviction).
@@ -142,7 +185,7 @@ object ReportLogStore {
                     outcomes.removeAt(0)
                 }
             }
-            Snapshot(entries, expanded, outcomes, lastText, lastScanInfo, handoffGeneration, lastScanGeneration)
+            Snapshot(entries, expanded, outcomes, lastText, lastScanInfo, handoffGeneration, lastScanGeneration, originThresholdLocks)
         } catch (e: Exception) {
             Log.w(TAG, "M2 stage: persisted log file is corrupt/unparseable — starting with an empty log (${e.javaClass.simpleName}: ${e.message})")
             Snapshot.EMPTY

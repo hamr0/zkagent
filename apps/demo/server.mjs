@@ -491,6 +491,31 @@ export function createApp() {
       const requestId = randomBytes(12).toString('base64url');
       const challenge = verifier.issueChallenge({ tier: mode, ttlMs });
 
+      // TEST-ONLY (§6.5 S1 POC, D74) — an optional `threshold` query param,
+      // NEVER the page's own default: THRESHOLD stays the hardcoded 18
+      // above (item 6's own instruction), and `verifier.issueChallenge`
+      // above is called exactly as before, unconditionally against that
+      // real, configured threshold (chiproof's own "verifier serves ONE
+      // threshold" ruling — passing a mismatched threshold to
+      // issueChallenge itself throws). This override only replaces the
+      // VALUE embedded in the outgoing request object's
+      // `zkagent.challenge.threshold` field, for the scanner's own §6.5 S1
+      // policy (preset list / per-origin lock) to read and judge — it is
+      // the one field that policy actually parses
+      // (`RequestTrust.thresholdOf`). Accepted ONLY from the six published
+      // presets plus ONE deliberately off-list value (43) for the
+      // not-a-preset negative test; any other value is ignored and the
+      // real THRESHOLD is used unmodified. A device that somehow completed
+      // a full mint against an overridden threshold would still fail
+      // chiproof's own server-side threshold_mismatch check (D11) — this
+      // override only proves the SCANNER refuses before ever attempting a
+      // read, which is this POC's own claim, nothing more.
+      const TEST_ONLY_THRESHOLD_OVERRIDES = new Set([15, 16, 18, 21, 60, 65, 43]);
+      const requestedTestThreshold = Number(url.searchParams.get('threshold'));
+      if (TEST_ONLY_THRESHOLD_OVERRIDES.has(requestedTestThreshold) && requestedTestThreshold !== THRESHOLD) {
+        challenge.threshold = requestedTestThreshold;
+      }
+
       const responseUri = `${origin(req)}/wallet/direct_post`;
       const requestUri = `${origin(req)}/wallet/request.jwt/${requestId}`;
       const requestObject = {
@@ -545,7 +570,7 @@ export function createApp() {
       // operator can see what was asked for next to the verdict that comes
       // back below.
       // eslint-disable-next-line no-console
-      console.log(`[apps/demo] tx created transactionId=${transactionId} mode=${mode} ttlMs=${ttlMs} threshold=${THRESHOLD}`);
+      console.log(`[apps/demo] tx created transactionId=${transactionId} mode=${mode} ttlMs=${ttlMs} threshold=${THRESHOLD} embedded_threshold=${challenge.threshold}`);
 
       sendJson(res, 201, {
         transactionId,
