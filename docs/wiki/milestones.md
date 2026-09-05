@@ -462,9 +462,12 @@ Node process has no public HTTPS origin, and D76 rejected zkagent hosting one it
 "playstore will be clearer when we get to it."
 
 Item ordering: item 7 (release-signing keystore) precedes item 1 (first upload) — the Play
-upload key is derived from the local keystore, so the keystore must exist first. Q51 (open)
-asks whether the keystore/Play items here are owner deliverables or a per-operator recipe —
-see questions.md; nothing is built under items 1–4 or 7 until Q51 is ruled.
+upload key is derived from the local keystore, so the keystore must exist first. **D81
+(2026-09-05, owner) closed Q51 points (1) and (2): distribution model (A) confirmed** — items
+1–4 below are the owner's own showcase-listing deliverables only, not a requirement on
+operators (who make their own listing/hosting decisions for their own package), and remain
+gated on Q51 point (3) (whether the owner runs a showcase listing at all under model (A),
+still OPEN); item 7 is reframed below. See questions.md Q51; decisions.md D81.
 
 1. First upload goes to a **closed testing track**, never production, using the current release
    line (v0.5.0 or later under D72 lockstep). Production is a separate, later owner decision.
@@ -504,7 +507,21 @@ see questions.md; nothing is built under items 1–4 or 7 until Q51 is ruled.
    generated; from the next release, `assembleRegularRelease` MUST produce a signed APK, and the
    release evidence MUST record the digest. This local key is distinct from the Play upload key
    (item 2) and from the device attester keys in AndroidKeyStore (D38) — three different keys,
-   three different purposes. Status: PRD-gated, not built.
+   three different purposes. Status: PRD-gated, not built. **Reframed by D81 (2026-09-05):**
+   this item is now (a) a documented per-operator keystore recipe (the same `keytool`/`secrets/`/
+   env-var procedure above, followed by each operator for their own build/keystore/fingerprint)
+   and (b) the owner's own showcase keystore, generated the same way — neither is a shared
+   secret; the requirements above (MUST) apply to whoever runs them, operator or owner.
+
+## 6.7 Operator knobs (D81) — PRD-gated, not scoped
+
+Purpose: an operator-configuration layer (D81 point 2) so UI/knob adjustments do not require
+forking or editing source, consistent with the one-upstream, Apache-2.0 distribution model (A)
+confirmed by D81 point 1. Candidate knobs (listed as candidates only, not decisions): the
+threshold preset list and hostname exception allowlist (today's `ThresholdPolicy` constants),
+verifier origin/scope, question-line wording, and app branding/strings. The knob list, config
+format, and location are NOT decided here — a new PRD item is required and must be owner-approved
+before any build (NO-GO #10, the scope gate). See decisions.md D81; questions.md Q51.
 
 ## 7. Riskiest-assumption register (what M0 must answer)
 

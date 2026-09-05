@@ -443,4 +443,8 @@ this is flagged in the report back to the caller.
   owner: (1) confirm (A); (2) whether "one upstream" implies an operator-config layer
   (knobs/UI as configuration rather than forking source) — that would be a new PRD item, not
   assumed here; (3) whether the owner runs the showcase Play listing at all under (A). Status:
-  OPEN, no ruling yet; nothing in D80 changes until Q51 is answered.
+  PARTIALLY CLOSED by D81 (points 1 and 2); point 3 open. D81 (2026-09-05, owner): distribution
+  model (A) confirmed and an operator-configuration layer confirmed as a deliverable (knob list
+  and location PRD-gated, not decided — new PRD item required, NO-GO #10, see milestones.md
+  §6.7); point (3), whether the owner runs the showcase Play listing at all, remains OPEN. See
+  decisions.md D81; milestones.md §6.6, §6.7.
