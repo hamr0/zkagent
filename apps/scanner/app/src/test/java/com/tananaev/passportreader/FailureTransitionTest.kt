@@ -45,6 +45,75 @@ class FailureTransitionTest {
         assertTrue(FailureTransition.keepsMrzAndMode(isAccessEstablishmentFailure = true, isTransientChipCommunicationFailure = true))
     }
 
+    // ------------------------------------------------------- keepsLockedMode
+    //
+    // Owner device fix (2026-09-05) — "wrong details entry still doesn't
+    // reset to re-enter". Truth table over all four boolean combinations
+    // (only three are reachable from a real classification, matching
+    // keepsMrzAndMode's own defensive-fourth-case precedent above): only
+    // TRANSIENT keeps the lock; ACCESS_ESTABLISHMENT now releases it (the
+    // decoupling this fix introduces) so a corrected field can be
+    // re-locked via a fresh Scan/Verify tap.
+
+    @Test
+    fun `bucket 1 - access-establishment failure RELEASES the lock (the fix)`() {
+        assertFalse(FailureTransition.keepsLockedMode(isAccessEstablishmentFailure = true, isTransientChipCommunicationFailure = false))
+    }
+
+    @Test
+    fun `bucket 2 - transient chip-communication failure KEEPS the lock (unchanged)`() {
+        assertTrue(FailureTransition.keepsLockedMode(isAccessEstablishmentFailure = false, isTransientChipCommunicationFailure = true))
+    }
+
+    @Test
+    fun `bucket 3 - neither bucket applies, lock is already released`() {
+        assertFalse(FailureTransition.keepsLockedMode(isAccessEstablishmentFailure = false, isTransientChipCommunicationFailure = false))
+    }
+
+    @Test
+    fun `both buckets true (defensive) still keeps the lock - transient wins`() {
+        assertTrue(FailureTransition.keepsLockedMode(isAccessEstablishmentFailure = true, isTransientChipCommunicationFailure = true))
+    }
+
+    @Test
+    fun `keepsLockedMode(Classification) - TRANSIENT_CHIP_COMMUNICATION keeps the lock`() {
+        assertTrue(FailureTransition.keepsLockedMode(FailureTransition.Classification.TRANSIENT_CHIP_COMMUNICATION))
+    }
+
+    @Test
+    fun `keepsLockedMode(Classification) - ACCESS_ESTABLISHMENT releases the lock`() {
+        assertFalse(FailureTransition.keepsLockedMode(FailureTransition.Classification.ACCESS_ESTABLISHMENT))
+    }
+
+    @Test
+    fun `keepsLockedMode(Classification) - UNCLASSIFIED releases the lock`() {
+        assertFalse(FailureTransition.keepsLockedMode(FailureTransition.Classification.UNCLASSIFIED))
+    }
+
+    // ------------------------------------- pending handoff survives (bucket 1)
+    //
+    // The regression this fix must not introduce: releasing the lock on an
+    // access-establishment failure must NOT cost the pending/verified
+    // handoff. `MainActivity.showBlockingOutcomeDialog`'s OK handler nulls
+    // `pendingHandoff`/`verifiedRequest`/`authorizedHandoff` ONLY when
+    // `keepsMrzAndMode` is false — this pins, side by side, that bucket 1
+    // still answers `keepsMrzAndMode = true` (handoff survives) at the
+    // EXACT SAME TIME `keepsLockedMode` now answers `false` (lock releases)
+    // — the two decisions the fix deliberately decoupled.
+    @Test
+    fun `bucket 1 keeps the handoff (keepsMrzAndMode) while releasing the lock (keepsLockedMode)`() {
+        val classification = FailureTransition.Classification.ACCESS_ESTABLISHMENT
+        assertTrue("pending handoff must survive an access-establishment failure", FailureTransition.keepsMrzAndMode(classification))
+        assertFalse("the lock must release so a corrected field can be re-locked", FailureTransition.keepsLockedMode(classification))
+    }
+
+    @Test
+    fun `bucket 2 keeps BOTH the handoff and the lock, unchanged by this fix`() {
+        val classification = FailureTransition.Classification.TRANSIENT_CHIP_COMMUNICATION
+        assertTrue(FailureTransition.keepsMrzAndMode(classification))
+        assertTrue(FailureTransition.keepsLockedMode(classification))
+    }
+
     // ------------------------------------------------- keepsMrzAndMode (Classification)
 
     @Test

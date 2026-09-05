@@ -312,6 +312,192 @@ class ReportLogTest {
         assertEquals("restored report text", log2.lastText)
     }
 
+    // §6.5 S4 device fix (2026-09-05, findings.md — "diagnosis result at
+    // Diagnostics tab still shows in Scan tab"). [ReportLog.Channel]/
+    // [lastChannel] is the pure state `MainActivity.applyReportText` routes
+    // on instead of writing every report to both TextViews unconditionally.
+
+    @Test
+    fun `lastChannel defaults to SCAN before any report is ever appended`() {
+        val log = ReportLog()
+        assertEquals(ReportLog.Channel.SCAN, log.lastChannel)
+    }
+
+    @Test
+    fun `append with no channel argument keeps lastChannel at SCAN - every pre-fix call site`() {
+        val log = ReportLog()
+        log.append("a scan report", summary(), nowMillis = 0L)
+        assertEquals(ReportLog.Channel.SCAN, log.lastChannel)
+    }
+
+    @Test
+    fun `append with channel = DIAGNOSTICS sets lastChannel accordingly`() {
+        val log = ReportLog()
+        log.append("a probe report", summary(), channel = ReportLog.Channel.DIAGNOSTICS, nowMillis = 0L)
+        assertEquals(ReportLog.Channel.DIAGNOSTICS, log.lastChannel)
+    }
+
+    @Test
+    fun `lastChannel tracks the MOST RECENT append, overwriting on each call`() {
+        val log = ReportLog()
+        log.append("probe", summary(), channel = ReportLog.Channel.DIAGNOSTICS, nowMillis = 0L)
+        assertEquals(ReportLog.Channel.DIAGNOSTICS, log.lastChannel)
+        log.append("scan", summary(), channel = ReportLog.Channel.SCAN, nowMillis = 1000L)
+        assertEquals(ReportLog.Channel.SCAN, log.lastChannel)
+    }
+
+    // targetsDiagnosticsView — the actual routing decision
+    // MainActivity.applyReportText dispatches on for diagnosticsReportView.
+    // Its former SCAN-side counterpart, targetsScanView, is gone along with
+    // MainActivity.reportView — see ReportLog's own doc.
+
+    @Test
+    fun `targetsDiagnosticsView is true only for DIAGNOSTICS`() {
+        assertFalse(ReportLog.targetsDiagnosticsView(ReportLog.Channel.SCAN))
+        assertTrue(ReportLog.targetsDiagnosticsView(ReportLog.Channel.DIAGNOSTICS))
+    }
+
+    // FIX (owner, 2026-09-05) — ReportLog.lastScanInfo, the "Last scan"
+    // line's data. See LastScanLineTest for the rendering truth table;
+    // these tests pin only ReportLog's OWN bookkeeping (when it is written,
+    // when it is skipped, the generic-default fallback, and clear/restore).
+
+    @Test
+    fun `lastScanInfo is null before any report is ever appended or restored`() {
+        val log = ReportLog()
+        assertEquals(null, log.lastScanInfo)
+    }
+
+    @Test
+    fun `a SCAN append with no lastScanInfo argument falls back to a generic REFUSED entry`() {
+        val log = ReportLog()
+        log.append("report", summary(site = "state.gov"), nowMillis = 0L)
+        assertEquals(LastScanLine.Entry(origin = "state.gov", reason = LastScanLine.Reason.REFUSED), log.lastScanInfo)
+    }
+
+    @Test
+    fun `a SCAN append with an explicit lastScanInfo argument uses it verbatim, not the generic default`() {
+        val log = ReportLog()
+        val explicit = LastScanLine.Entry(origin = "state.gov", reason = LastScanLine.Reason.DELIVERED, threshold = 18, overThreshold = true)
+        log.append("report", summary(site = "state.gov"), lastScanInfo = explicit, nowMillis = 0L)
+        assertEquals(explicit, log.lastScanInfo)
+    }
+
+    @Test
+    fun `a DIAGNOSTICS append never updates lastScanInfo, even with an explicit argument`() {
+        val log = ReportLog()
+        val explicit = LastScanLine.Entry(origin = "state.gov", reason = LastScanLine.Reason.DELIVERED, threshold = 18, overThreshold = true)
+        log.append("probe", summary(), channel = ReportLog.Channel.DIAGNOSTICS, lastScanInfo = explicit, nowMillis = 0L)
+        assertEquals(null, log.lastScanInfo)
+    }
+
+    @Test
+    fun `a pending SCAN append never updates lastScanInfo - the in-progress entry must not overwrite the last completed scan`() {
+        val log = ReportLog()
+        val priorScan = LastScanLine.Entry(origin = "state.gov", reason = LastScanLine.Reason.DELIVERED, threshold = 18, overThreshold = true)
+        log.append("terminal", summary(site = "state.gov"), lastScanInfo = priorScan, nowMillis = 0L)
+        log.append("in progress", summary(site = "other-site.test"), attemptId = "a1", pending = true, nowMillis = 1000L)
+        assertEquals("the pending append must not clobber the prior terminal scan's line", priorScan, log.lastScanInfo)
+    }
+
+    @Test
+    fun `lastScanInfo tracks the MOST RECENT terminal SCAN append, overwriting on each call`() {
+        val log = ReportLog()
+        log.append("first", summary(site = "site-a.test"), nowMillis = 0L)
+        assertEquals(LastScanLine.Entry(origin = "site-a.test", reason = LastScanLine.Reason.REFUSED), log.lastScanInfo)
+        log.append("second", summary(site = "site-b.test"), nowMillis = 1000L)
+        assertEquals(LastScanLine.Entry(origin = "site-b.test", reason = LastScanLine.Reason.REFUSED), log.lastScanInfo)
+    }
+
+    @Test
+    fun `clear resets lastScanInfo to null`() {
+        val log = ReportLog()
+        log.append("report", summary(site = "state.gov"), nowMillis = 0L)
+        log.clear()
+        assertEquals(null, log.lastScanInfo)
+    }
+
+    @Test
+    fun `restore sets lastScanInfo from its argument, defaulting to null when omitted (old persisted files predate this field)`() {
+        val log = ReportLog()
+        log.append("stale", summary(), nowMillis = 0L)
+        log.restore(listOf("09:00:00 · site-a.test\n\nResult    restored"))
+        assertEquals("restore with no lastScanInfo argument defaults to null", null, log.lastScanInfo)
+
+        val log2 = ReportLog()
+        val restoredEntry = LastScanLine.Entry(origin = "state.gov", reason = LastScanLine.Reason.DELIVERED, threshold = 18, overThreshold = true)
+        log2.restore(listOf("09:00:00 · site-a.test\n\nResult    restored"), lastScanInfo = restoredEntry)
+        assertEquals(restoredEntry, log2.lastScanInfo)
+    }
+
+    // Owner refinement (2026-09-05) — handoffGeneration/lastScanGeneration,
+    // the staleness counters LastScanLine.isStale compares.
+
+    @Test
+    fun `handoffGeneration and lastScanGeneration are both 0 before any handoff capture or append`() {
+        val log = ReportLog()
+        assertEquals(0, log.handoffGeneration)
+        assertEquals(0, log.lastScanGeneration)
+    }
+
+    @Test
+    fun `noteNewHandoffCaptured increments handoffGeneration by exactly one per call`() {
+        val log = ReportLog()
+        log.noteNewHandoffCaptured()
+        assertEquals(1, log.handoffGeneration)
+        log.noteNewHandoffCaptured()
+        assertEquals(2, log.handoffGeneration)
+    }
+
+    @Test
+    fun `a terminal SCAN append stamps lastScanGeneration with the CURRENT handoffGeneration`() {
+        val log = ReportLog()
+        log.noteNewHandoffCaptured()
+        log.noteNewHandoffCaptured()
+        log.append("report", summary(site = "state.gov"), nowMillis = 0L)
+        assertEquals(2, log.lastScanGeneration)
+    }
+
+    @Test
+    fun `a pending SCAN append never stamps lastScanGeneration`() {
+        val log = ReportLog()
+        log.append("terminal", summary(site = "state.gov"), nowMillis = 0L)
+        log.noteNewHandoffCaptured()
+        log.append("in progress", summary(site = "other-site.test"), attemptId = "a1", pending = true, nowMillis = 1000L)
+        assertEquals("the pending append must not advance the stamped generation", 0, log.lastScanGeneration)
+    }
+
+    @Test
+    fun `a DIAGNOSTICS append never stamps lastScanGeneration`() {
+        val log = ReportLog()
+        log.noteNewHandoffCaptured()
+        log.append("probe", summary(), channel = ReportLog.Channel.DIAGNOSTICS, nowMillis = 0L)
+        assertEquals(0, log.lastScanGeneration)
+    }
+
+    @Test
+    fun `clear resets lastScanGeneration but never handoffGeneration`() {
+        val log = ReportLog()
+        log.noteNewHandoffCaptured()
+        log.append("report", summary(site = "state.gov"), nowMillis = 0L)
+        log.clear()
+        assertEquals("handoffGeneration tracks av:// captures, unrelated to clearing the log", 1, log.handoffGeneration)
+        assertEquals(0, log.lastScanGeneration)
+    }
+
+    @Test
+    fun `restore sets both generation counters from their arguments, defaulting to 0 when omitted`() {
+        val log = ReportLog()
+        log.restore(emptyList(), handoffGeneration = 3, lastScanGeneration = 2)
+        assertEquals(3, log.handoffGeneration)
+        assertEquals(2, log.lastScanGeneration)
+
+        val log2 = ReportLog()
+        log2.restore(emptyList())
+        assertEquals("an old persisted file/Bundle predating these fields restores both to 0", 0, log2.handoffGeneration)
+        assertEquals(0, log2.lastScanGeneration)
+    }
+
     // D58 step 1 / finding #13 (unbounded ReportLog.entries growth,
     // TransactionTooLargeException reachable via looped av:// intents) — a
     // FIX per the owner's position (Challenge C): externally-triggerable

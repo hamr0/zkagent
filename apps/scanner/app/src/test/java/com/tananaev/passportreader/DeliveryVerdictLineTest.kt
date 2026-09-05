@@ -16,8 +16,11 @@ class DeliveryVerdictLineTest {
 
     @Test
     fun `accepted names what was sent`() {
-        assertEquals("verdict: PASS (bare presentation sent)", DeliveryVerdictLine.accepted("bare presentation sent"))
-        assertEquals("verdict: PASS (minted)", DeliveryVerdictLine.accepted("minted"))
+        // Owner decision 2026-09-05: DELIVERED, not PASS — the site's own
+        // verdict on the claim is never known to this app, only whether
+        // the request reached it.
+        assertEquals("verdict: DELIVERED (bare presentation sent)", DeliveryVerdictLine.accepted("bare presentation sent"))
+        assertEquals("verdict: DELIVERED (minted)", DeliveryVerdictLine.accepted("minted"))
     }
 
     @Test

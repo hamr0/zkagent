@@ -27,15 +27,16 @@ package com.tananaev.passportreader
 object DeliveryVerdictLine {
 
     /** HTTP 2xx and the verifier's own body did not refuse the claim (or
-     * carried no verdict at all) — the wording callers already used
-     * inline, now just parameterized on what was attempted so mode A and
-     * mode B keep their own exact existing text ("bare presentation sent" /
-     * "minted"). Owner decision pending (do NOT apply here): a future
-     * change may prefer "delivered" over "PASS" since the site's OWN
-     * verdict on the claim's truth is never known to this app — kept as a
-     * single line specifically so that is a one-line change when asked
-     * for. */
-    fun accepted(whatWasSent: String): String = "verdict: PASS ($whatWasSent)"
+     * carried no verdict at all) — parameterized on what was attempted so
+     * mode A and mode B keep their own distinct text ("bare presentation
+     * sent" / "minted"). Owner decision, 2026-09-05 (findings.md #22's own
+     * follow-up): "PASS" replaced with "DELIVERED" — the site's OWN
+     * verdict on the claim's truth is never known to this app, only
+     * whether the request reached it; "what they need to learn is if
+     * their AV request was delivered". This was kept as a single line
+     * specifically so this wording change is exactly the one-line change
+     * it turned out to be. */
+    fun accepted(whatWasSent: String): String = "verdict: DELIVERED ($whatWasSent)"
 
     /** This device's OWN claim already said `over_threshold:false` — an
      * honest, expected refusal (Q36/D66 item 3), not a plumbing failure.

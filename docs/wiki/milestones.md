@@ -333,12 +333,24 @@ alongside M3b without a further gate check.
    or "Local scan (no site)" (D46) when nothing is pending; (2) the manual `av://` / request_uri
    paste field, kept — per (b) it is D69's documented fallback-of-the-fallback, not disposable —
    moved UP to sit directly under the question line; (3) the single Scan/Verify button (item 20's
-   verb rule unchanged: "Tap and verify" when a request is pending, "Tap and scan" bare); (4) the
-   report/result view (`report_view`, §6.2 item 5) in a FIXED position below the button,
-   independent of the handoff block's height, resolving (c) above. The old `description` text
-   block (a) is gone from the pane entirely; the item 5 no-storage disclosure it carried moves to
-   a persistent but non-primary location (an info/About affordance), not deleted, since D1/NO-GO
-   #7's disclosure obligations don't lapse.
+   verb rule unchanged: "Tap and verify" when a request is pending, "Tap and scan" bare); (4) —
+   REVERSED by D79(a), 2026-09-05: the full value-free `report_view` is removed from the scan pane
+   entirely, not merely repositioned. In its place, ONE height-stable summary line sits directly
+   under the Scan/Verify button: `Last scan: <origin hostname>, over <threshold>: <true|false>,
+   delivered ✓` for an accepted presentation; `refused ✗` / `not sent ✗` / `read failed ✗` replace
+   `delivered ✓` for the corresponding non-accepted outcomes; a local scan (no pending request)
+   reads `Last scan: Local scan (no site), chip check passed ✓|failed ✗`. This line is derived
+   from the same log entry the Log tab renders (D46, value-free content) — never a second writer
+   of scan results — persists across app restarts with the log itself (item 23) and clears with
+   "Clear log," and is hidden from the moment a new `av://` link is captured until that session
+   writes its own log entry (both refinements owner-approved together, D79(a): "yes, do both").
+   The Log tab is now the ONLY reader of full scan reports, and the Diagnostics tab (added by this
+   same build, see below) is the ONLY reader of probe output — probes never leak into the scan
+   pane or the Log tab. Rationale for "delivered" over a bare checkmark: a bare ✓ reads as the
+   site's own approval, which is never the app's to show (customer-guide.md, "Two answers, two
+   places"). The old `description` text block (a) is gone from the pane entirely; the item 5
+   no-storage disclosure it carried moves to a persistent but non-primary location (an info/About
+   affordance), not deleted, since D1/NO-GO #7's disclosure obligations don't lapse.
 
    Paste semantics — history (owner, 2026-09-03, superseded same day by the rule below): "it always
    overrides whatever is there"; "once pasted it nullify whatever is there"; "if that would cause a
@@ -373,7 +385,38 @@ alongside M3b without a further gate check.
    #10 (the mint-path race this reuses the admission guard against) — none of those mechanisms are
    altered by this cleanup beyond what is stated above.
 
-   Status: built 2026-09-05, device-confirmed (see evidence doc), uncommitted at time of writing. Two FIXes delivered alongside (non-2xx `direct_post` misreport; `error_read` dialog wording). [M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md](../logs/M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md)
+   **Delivery wording (D79(b), 2026-09-05, closes finding #22).** Owner: "delivered for both A/B.
+   Logs say Delivered (minted) / Delivered (bare presentation sent) and PASS (read); that way the
+   UI front isn't front-loaded with confusing detail and logs carry details." The raw report
+   `verdict:` line is `DELIVERED (minted)` for tier B, `DELIVERED (bare presentation sent)` for
+   tier A; `PASS (read)` is reserved ONLY for the chip sanity check with no site involved (the
+   local-scan case); every non-accepted delivery outcome prints `REFUSED`/`NOT SENT` with the
+   reason (unchanged from the `VerifierRefusal` classifier above). The post-scan blocking dialog
+   for both tiers reads "Delivered — the website shows the result." — replacing "ID scanned
+   successfully" everywhere it appeared — and the D71/item 25 mode-disclosure sentence still
+   follows it, unchanged. This closes finding #22 (the hardcoded "verdict: PASS" line) by
+   replacing the vocabulary itself, not by patching the four other response-handling branches
+   finding #22 named as untouched — those branches now emit `REFUSED`/`NOT SENT` under this same
+   rule.
+
+   **Two FIXes (D79(c), device-confirmed 2026-09-05).** (i) After an access-establishment failure
+   (wrong MRZ details typed in, BAC `SW 6982`) the MRZ text fields stay populated, the admission
+   lock releases so Scan/Verify re-arms, and the pending handoff link survives — unchanged from
+   transient chip-loss (card lifted mid-read) behaviour, which already worked this way. Device
+   evidence: multiple wrong entries in a row, each re-arming the button and keeping the pending
+   link, followed by a final corrected entry that delivered successfully — server verdict
+   `allowed=true attester=matched` against a fresh store. (ii) Diagnostics probe output (the
+   masterlist check and device-key self-test) is routed by report channel to the Diagnostics pane
+   only, never to the scan pane's last-scan line or the Log tab — same single-writer
+   `applyReportText()` fan-out named in the S2/S3 evidence doc, extended to keep the two channels
+   disjoint under the D79(a) rewrite above.
+
+   **Scope note (D79(d), 2026-09-05, owner).** "ok write it into S3 then S1 next, i just want to
+   avoid the feat creep." **S3 is CLOSED as of this amendment** — no further scan-pane UI work
+   proceeds without a new PRD entry (NO-GO #10). Next item to build is S1 (preset threshold
+   list/lock/exceptions, still Planned per the table below).
+
+   Status: built 2026-09-05, device-confirmed (see evidence doc), uncommitted at time of writing. Two FIXes delivered alongside (non-2xx `direct_post` misreport; `error_read` dialog wording). D79(c)'s two further FIXes (wrong-details re-arm; Diagnostics routing) are also device-confirmed 2026-09-05; D79(a)'s last-scan line and D79(b)'s delivery wording are recorded here ahead of the code that will implement them (NO-GO #10 scope gate); D79(d) closes S3. [M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md](../logs/M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md)
 
 4. **S4 (ENHANCEMENT, D78) — client trust list (FR10) via attestation plug.** Moved here from
    §6.3 item 8 by D78: a package name + signing-cert digest is not carried by the OpenID4VP wire,

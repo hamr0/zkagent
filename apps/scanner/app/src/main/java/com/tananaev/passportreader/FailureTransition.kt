@@ -81,6 +81,45 @@ object FailureTransition {
         isAccessEstablishmentFailure || isTransientChipCommunicationFailure
 
     /**
+     * Owner device fix (2026-09-05, "wrong details entry still doesn't
+     * reset to re-enter"): [keepsMrzAndMode] alone used to ALSO govern
+     * whether `MainActivity.lockedMode` (and therefore the Scan/Verify
+     * button's enabled state, [SessionDisplay.render]'s `locked` branch)
+     * stayed set across a kept retry. That was correct for bucket 2
+     * (transient chip-communication failure): the typed details were
+     * RIGHT, only the physical NFC link dropped, so the user just holds
+     * the document against the phone again with no field edit and no
+     * button re-press — the session must stay armed exactly as it was.
+     * It was WRONG for bucket 1 (access-establishment failure): the BAC/
+     * PACE key DERIVED FROM THE CURRENT FIELDS was rejected, so holding
+     * the document again with the SAME fields re-derives the SAME wrong
+     * key and fails identically. The owner's ask is to let the user edit
+     * the field(s) then tap Scan/Verify again — which requires
+     * `lockedMode` to actually clear so a fresh `lockModeAndArm()` call
+     * does not immediately no-op on its `if (lockedMode != null) return`
+     * guard. This is DELIBERATELY decoupled from [keepsMrzAndMode]: bucket
+     * 1 now keeps the typed MRZ text (unchanged — a mistyped key is a
+     * correction, not a full retype) while releasing the lock (changed);
+     * bucket 2 keeps both (unchanged); bucket 3 keeps neither (unchanged).
+     * This function governs ONLY the lock/arm state — it has no opinion on
+     * `pendingHandoff`/`verifiedRequest`/`authorizedHandoff`, which
+     * [keepsMrzAndMode] (via `MainActivity.showBlockingOutcomeDialog`'s OK
+     * handler) still independently decides whether to null — a released
+     * lock does not have to mean a lost verified handoff: a fresh
+     * `lockModeAndArm()` call re-derives the SAME pending/verified handoff
+     * (still not nulled) into a new lock, never a re-fetch. */
+    fun keepsLockedMode(classification: Classification): Boolean = classification == Classification.TRANSIENT_CHIP_COMMUNICATION
+
+    /** Legacy two-boolean form of [keepsLockedMode], mirroring
+     * [keepsMrzAndMode]'s own two-boolean overload for the same reason: a
+     * call site that already knows its own bucket without ever running
+     * [classify]. Only [isTransientChipCommunicationFailure] keeps the
+     * lock — an access-establishment failure (or any other reset-shaped
+     * refusal) always releases it, per this function's own doc above. */
+    fun keepsLockedMode(isAccessEstablishmentFailure: Boolean, isTransientChipCommunicationFailure: Boolean): Boolean =
+        isTransientChipCommunicationFailure
+
+    /**
      * Walks [throwable]'s cause chain looking for a [CardServiceException]
      * whose message indicates the tag/connection was lost mid-read.
      *

@@ -1097,3 +1097,27 @@ JUnit XML, not from a device run.
   `SessionDisplay.kt`, `activity_main.xml`, `strings.xml`, and their three test files, plus
   `VerifierRefusal.kt`/`VerifierRefusalTest.kt` from finding #22's own opening fix) was left as
   found — not reverted, not committed.
+
+- **2026-09-05 status update (FIX, owner-approved wording, commit-pending):** the "PASS ->
+  delivered" rewording flagged above as pending was applied. `DeliveryVerdictLine.accepted` now
+  returns `"verdict: DELIVERED ($whatWasSent)"` (was `"verdict: PASS (...)"`) — the only line this
+  entry's own note said would need to change, changed exactly as predicted, nothing else in
+  `DeliveryVerdictLine` touched. `MainActivity`'s `MINT_CONFIRMED_MESSAGE` (the user-facing outcome
+  dialog, shown at both the mode-A and mode-B `DeliveryResult.Accepted` call sites) changed from
+  `"ID scanned successfully"` to `"Delivered — the website shows the result."` — ONE wording for
+  BOTH tiers now (owner: "what they need to learn is if their AV request was delivered... that way
+  the UI front isn't front-loaded with confusing detail and logs carry details"); the D71b
+  mode-disclosure sentence `OutcomeText.withModeSentence` appends is unaffected. `DeliveryVerdictLineTest`'s
+  `accepted` case updated to assert `DELIVERED`; no other test referenced the old `"ID scanned
+  successfully"` string (it is a `private const val` in `MainActivity`, unreachable from any test).
+  Docs (NOT edited, per this session's scope — instructed to grep and report, not fix):
+  `docs/logs/M3-POC-EVIDENCE-2026-09-04.md:330`, `docs/product/customer-guide.md:39,180`,
+  `docs/archive/zkagent-prd.md:210,251,1285,1672,1791,1792,2241` all still read `"ID scanned
+  successfully"` — every one is a device-evidence transcript or PRD decision record quoting the
+  string AS IT WAS AT THE TIME, not live UI copy this session is authorized to touch (`docs/product`
+  and the PRD are explicitly out of scope for this session) — flagged for the orchestrator to decide
+  whether any should be annotated as superseded. **Verification**: `assembleRegularDebug` +
+  `testRegularDebugUnitTest` both green, JUnit XML parsed directly — 398 tests / 0 failures / 0
+  errors / 0 skipped, up from 383 by the 15 new cases this session's three fixes added combined (not
+  isolated per-fix in this count). Status stays CLOSED — this is the wording note's own resolution,
+  not a new finding.

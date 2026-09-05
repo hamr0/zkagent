@@ -117,11 +117,12 @@ import kotlin.math.roundToInt
  * ---------------------------------------------------------------------
  * §6.2 item 5 — no ResultActivity, no field rendering, anywhere:
  * ---------------------------------------------------------------------
- * [reportView] is value-free by construction the same way
- * `spikes/m2-session-poc` proved it could be: verdict booleans, step names,
- * counts, hashes, algorithm names, timings. Grep-provable: `mrzInfo`,
- * `secondaryIdentifier`, `primaryIdentifier` (the M0-era field-rendering
- * call sites) do not appear in this file.
+ * Every report (the Log/Diagnostics tabs' full detail, and — FIX,
+ * 2026-09-05 — the Scan pane's own one-line [LastScanLine]) is value-free
+ * by construction the same way `spikes/m2-session-poc` proved it could be:
+ * verdict booleans, step names, counts, hashes, algorithm names, timings.
+ * Grep-provable: `mrzInfo`, `secondaryIdentifier`, `primaryIdentifier` (the
+ * M0-era field-rendering call sites) do not appear in this file.
  *
  * ---------------------------------------------------------------------
  * §6.2 item 6 — lifecycle:
@@ -284,10 +285,12 @@ abstract class MainActivity : AppCompatActivity() {
     // needed probe buttons' new home; see [showPane].
     private lateinit var diagnosticsLayout: View
     private lateinit var loadingLayout: View
-    private lateinit var reportView: TextView
-    // Device fix (2026-09-05, round 4) — second projection target of the
-    // SAME reportLog.lastText [reportView] already shows; see
-    // [applyReportText]. Not a second writer of the scan-pane report.
+    // FIX (owner, 2026-09-05): report_view (the Scan pane's full-detail
+    // TextView) is REMOVED — replaced by [lastScanLineView], the one-line
+    // "Last scan: ..." summary directly under the Scan/Verify button. The
+    // Log tab (logView, below) and Diagnostics tab remain the only
+    // full-detail readers. See [LastScanLine] / [applyLastScanLine].
+    private lateinit var lastScanLineView: TextView
     private lateinit var diagnosticsReportView: TextView
     private lateinit var logView: TextView
     // §6.2 item 23 (D70(b)) — see [clearLog]'s doc.
@@ -340,7 +343,7 @@ abstract class MainActivity : AppCompatActivity() {
         logLayout = findViewById(R.id.log_layout)
         diagnosticsLayout = findViewById(R.id.diagnostics_layout)
         loadingLayout = findViewById(R.id.loading_layout)
-        reportView = findViewById(R.id.report_view)
+        lastScanLineView = findViewById(R.id.last_scan_view)
         diagnosticsReportView = findViewById(R.id.diagnostics_report_view)
         logView = findViewById(R.id.log_view)
         // §6.2 item 18 (D67, Q43): required for the ClickableSpan
@@ -423,8 +426,8 @@ abstract class MainActivity : AppCompatActivity() {
         // D58 step 1 (finding #7): restores the report/log cluster across
         // an Activity re-creation (config change / background memory
         // reclaim) — an in-memory Bundle via onSaveInstanceState, never
-        // disk. wipeSession() never touches reportView, so within one
-        // Activity instance the report already survived onStop; this
+        // disk. wipeSession() never touches reportLog/lastScanLineView, so
+        // within one Activity instance the report already survived onStop; this
         // additionally survives the instance itself being destroyed and
         // recreated, which is what actually looked like "onStop wiped the
         // report" from the UI. See [restoreReport]'s doc — this used to be
@@ -941,10 +944,10 @@ abstract class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        wipeSession(keepMrzAndMode = false)
-        // wipeSession() intentionally does not touch reportView — the
-        // value-free report (item 5) stays visible; only MRZ + locked mode +
-        // keys-in-flight (item 6's "session state") are wiped. See emitReport.
+        wipeSession(keepMrz = false)
+        // wipeSession() intentionally does not touch reportLog/lastScanLineView
+        // — the value-free report (item 5) stays visible; only MRZ + locked
+        // mode + keys-in-flight (item 6's "session state") are wiped. See emitReport.
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -959,6 +962,14 @@ abstract class MainActivity : AppCompatActivity() {
         // §6.2 item 22 (D70(a)): the sibling per-entry glyph state — see
         // [ReportLog.outcomesSnapshot]'s doc.
         outState.putStringArrayList(STATE_LOG_OUTCOMES, ArrayList(reportLog.outcomesSnapshot().map { it.name }))
+        // FIX (owner, 2026-09-05): the "Last scan" line's sibling — Bundle
+        // has no native nested-object type, so this is one String extra
+        // (LastScanLine's own JSON shape) rather than several primitives.
+        LastScanLine.toJson(reportLog.lastScanInfo)?.let { outState.putString(STATE_LAST_SCAN_INFO, it) }
+        // Owner refinement (2026-09-05): the staleness counters' own Bundle
+        // sibling — see ReportLog.handoffGeneration/lastScanGeneration's doc.
+        outState.putInt(STATE_HANDOFF_GENERATION, reportLog.handoffGeneration)
+        outState.putInt(STATE_LAST_SCAN_GENERATION, reportLog.lastScanGeneration)
         // D58 step 2 (finding #1): reads FROM the owner (paneState), the
         // app's own tab index — see [PaneState]'s class doc.
         outState.putInt(STATE_TAB_INDEX, paneState.tabIndexToSave())
@@ -989,8 +1000,8 @@ abstract class MainActivity : AppCompatActivity() {
                 // coordinator correction, verified at source): that dialog's
                 // OK handler (see its doc / :905-909) is a TERMINAL-OUTCOME
                 // state transition — it nulls pendingHandoff/verifiedRequest
-                // and calls wipeSession(false), clearing lockedMode and the
-                // MRZ fields. A refused foreign intent is not a terminal
+                // and calls wipeSession(keepMrz = false), clearing lockedMode
+                // and the MRZ fields. A refused foreign intent is not a terminal
                 // outcome of the LOCKED SESSION; routing it through that
                 // dialog would let the user's own OK tap destroy the
                 // legitimate in-progress session the guard exists to
@@ -1008,10 +1019,18 @@ abstract class MainActivity : AppCompatActivity() {
                 // the only outputs.
                 if (!HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = lockedMode != null, readInProgress = paneState.readInProgress)) {
                     Log.e(TAG, "M2 stage: av:// handoff REFUSED — session locked or read in progress (D57 mitigation for finding #10)")
-                    Snackbar.make(reportView, HANDOFF_REFUSED_MID_SESSION_MESSAGE, Snackbar.LENGTH_LONG).show()
+                    Snackbar.make(lockButton, HANDOFF_REFUSED_MID_SESSION_MESSAGE, Snackbar.LENGTH_LONG).show()
                     return
                 }
                 Log.i(TAG, "M2 stage: pendingHandoff captured from av:// intent")
+                // Owner refinement (2026-09-05) to the "Last scan" line —
+                // staleness: bump the generation counter THE MOMENT a new
+                // av:// handoff is captured (never for a pasted/QR link —
+                // see ReportLog.noteNewHandoffCaptured's own doc) and hide
+                // the line immediately, before this new session produces
+                // its own SCAN-channel entry — see LastScanLine.isStale.
+                reportLog.noteNewHandoffCaptured()
+                applyLastScanLine()
                 // §6.2 item 17 (D67, Q39): switch to the Scan pane BEFORE
                 // the read begins — the admission check just above already
                 // returned for a refused intent, so reaching here means
@@ -1306,31 +1325,42 @@ abstract class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** §6.2 item 6: MRZ + [lockedMode] are kept on an access-establishment
-     * failure OR (2026-09) a transient chip-communication failure — see
+    /** §6.2 item 6: MRZ is kept on an access-establishment failure OR
+     * (2026-09) a transient chip-communication failure — see
      * [FailureTransition]'s three-bucket doc. Every other case (success, or
-     * a later-stage failure) wipes both. §6.2 item 13: if a VERIFIED
-     * handoff is still pending across a retry, the derived mode display
-     * stays as it was for that handoff — a failed read must not silently
-     * revert to the bare-scan default out from under a still-pending
-     * handoff (2026-09: [refreshSessionDisplay] already handles this
-     * correctly, since it re-derives from [pendingHandoff]/
-     * [verifiedRequest], not from a separately-tracked enabled/disabled
-     * flag the way the removed mode radio needed). D58 step 4: this is
-     * ALSO now finding #14's actual close point for the common case — once
-     * [lockedMode] clears here, [refreshSessionDisplay] derives
-     * [handoffStatus]'s text too (not only [modeStatusView]'s), so a
-     * session that reaches here with [pendingHandoff]/[verifiedRequest]
-     * already null (every terminal outcome except a kept retry) can no
-     * longer leave a stale "verified/waiting" line behind — see
-     * [SessionDisplay]'s class doc. */
-    private fun wipeSession(keepMrzAndMode: Boolean) {
-        if (!keepMrzAndMode) {
+     * a later-stage failure) wipes it. §6.2 item 13: if a VERIFIED handoff
+     * is still pending across a retry, the derived mode display stays as
+     * it was for that handoff — a failed read must not silently revert to
+     * the bare-scan default out from under a still-pending handoff (2026-09:
+     * [refreshSessionDisplay] already handles this correctly, since it
+     * re-derives from [pendingHandoff]/[verifiedRequest], not from a
+     * separately-tracked enabled/disabled flag the way the removed mode
+     * radio needed). D58 step 4: this is ALSO now finding #14's actual
+     * close point for the common case — once [lockedMode] clears here,
+     * [refreshSessionDisplay] derives [handoffStatus]'s text too (not only
+     * [modeStatusView]'s), so a session that reaches here with
+     * [pendingHandoff]/[verifiedRequest] already null (every terminal
+     * outcome except a kept retry) can no longer leave a stale
+     * "verified/waiting" line behind — see [SessionDisplay]'s class doc.
+     *
+     * Owner device fix (2026-09-05, findings.md — "wrong details entry
+     * still doesn't reset to re-enter"): [keepMrz] and [keepLockedMode] are
+     * now INDEPENDENT parameters, no longer one conflated boolean — see
+     * [FailureTransition.keepsLockedMode]'s doc for why. Bucket 1
+     * (access-establishment) is the new reachable combination
+     * (`keepMrz=true, keepLockedMode=false`): the typed MRZ stays on
+     * screen, but [lockedMode] clears so [refreshSessionDisplay] re-enables
+     * the Scan/Verify button (via the CURRENT [pendingHandoff]/
+     * [verifiedRequest], which [showBlockingOutcomeDialog]'s OK handler
+     * left untouched for this same bucket) and a fresh `lockModeAndArm()`
+     * tap can re-lock. [keepLockedMode] defaults to [keepMrz], matching
+     * every pre-fix call site's shape (bucket 2 and bucket 3 both still
+     * pass the same value for both parameters). */
+    private fun wipeSession(keepMrz: Boolean, keepLockedMode: Boolean = keepMrz) {
+        if (!keepMrz) {
             passportNumberView.text?.clear()
             expirationDateView.text?.clear()
             birthDateView.text?.clear()
-            lockedMode = null
-            refreshSessionDisplay()
             // D56: the MRZ itself is cleared above — the next attempt must
             // correctly read as a first attempt, not "unchanged" against a
             // hash of details that no longer exist on screen.
@@ -1343,6 +1373,21 @@ abstract class MainActivity : AppCompatActivity() {
             // including a successful one, so the log never held more than
             // one entry). The log now empties only when the app process
             // does.
+        }
+        // A real state change (not merely a no-op re-assignment of an
+        // already-null field) is what decides whether the derived display
+        // needs recomputing — this is what keeps the LOCK_FIELDS_INCOMPLETE_
+        // MESSAGE call site's pre-fix behavior byte-identical: at that call
+        // site lockedMode is already null (the lock never succeeded), so
+        // `keepLockedMode=false` there is a no-op, exactly as before this
+        // fix (no new refreshSessionDisplay() call is introduced for a
+        // state that didn't actually change).
+        val lockedModeChanged = !keepLockedMode && lockedMode != null
+        if (!keepLockedMode) {
+            lockedMode = null
+        }
+        if (!keepMrz || lockedModeChanged) {
+            refreshSessionDisplay()
         }
     }
 
@@ -1377,21 +1422,47 @@ abstract class MainActivity : AppCompatActivity() {
      *   Ignored when [pending] is true (always renders PENDING regardless).
      *   Every call site below states this explicitly from types it already
      *   has (never re-derived here) — see each call site's own comment. */
-    /** Device fix (2026-09-05, round 4, "yield nothing when pressed") — the
-     * ONE place [reportView]/[diagnosticsReportView] are ever written FROM
-     * [reportLog.lastText] — both are projections of the SAME owner
-     * (`reportLog`, D58 step 1), never a second writer of the scan-pane
-     * report. Replaces four previously-independent `reportView.text =
-     * reportLog.lastText` sites ([emitReport], [restoreReport],
-     * [loadPersistedLog], [clearLog]) with one applier, same shape as
-     * [applySessionDisplay] — so a future second output target never has to
-     * remember to touch four call sites again. */
+    /** Device fix (2026-09-05, round 4, "yield nothing when pressed"); FIX
+     * (2026-09-05, §6.5 S4, findings.md — "diagnosis result at Diagnostics
+     * tab still shows in Scan tab") — the ONE place [reportView]/
+     * [diagnosticsReportView] are ever written FROM [reportLog.lastText] —
+     * both are projections of the SAME owner (`reportLog`, D58 step 1),
+     * never a second writer of either report pane. Replaces four
+     * previously-independent `reportView.text = reportLog.lastText` sites
+     * ([emitReport], [restoreReport], [loadPersistedLog], [clearLog]) with
+     * one applier, same shape as [applySessionDisplay] — so a future second
+     * output target never has to remember to touch four call sites again.
+     * FORMERLY wrote [reportLog.lastText] to BOTH views unconditionally —
+     * a Diagnostics-tab probe's report and a scan/handoff report share this
+     * one write path, so that leaked one pane's output into the other's
+     * TextView.
+     *
+     * FIX (owner, 2026-09-05): `reportView` (the Scan pane's own full-detail
+     * TextView) is REMOVED — a SCAN-channel entry no longer gets a dedicated
+     * per-channel TextView write here at all; its full text still surfaces,
+     * unconditionally, via the Log tab (`refreshLogView`, called at every
+     * one of this function's own call sites already — see that function's
+     * doc). Only [ReportLog.targetsDiagnosticsView] remains, since
+     * `diagnosticsReportView` is still Diagnostics-only. */
     private fun applyReportText() {
-        reportView.text = reportLog.lastText
-        diagnosticsReportView.text = reportLog.lastText
+        if (ReportLog.targetsDiagnosticsView(reportLog.lastChannel)) diagnosticsReportView.text = reportLog.lastText
     }
 
-    private fun emitReport(text: String, summary: ReportLog.DisclosureSummary, attemptId: String? = null, pending: Boolean = false, outcome: ReportLog.Outcome = ReportLog.Outcome.FAIL) {
+    /** FIX (owner, 2026-09-05) — the single place [lastScanLineView]'s text
+     * is ever set, FROM [reportLog.lastScanInfo] (the SAME owner
+     * [applyReportText] already reads from) — never a second writer. Called
+     * at the SAME four sites as [applyReportText] ([emitReport],
+     * [restoreReport], [loadPersistedLog], [clearLog]) so the two stay in
+     * lockstep, same discipline as that function's own doc. */
+    private fun applyLastScanLine() {
+        lastScanLineView.text = LastScanLine.render(reportLog.lastScanInfo, reportLog.lastScanGeneration, reportLog.handoffGeneration)
+    }
+
+    /** @param lastScan (owner FIX, 2026-09-05) the "Last scan" line's data
+     *   for this entry — see [ReportLog.append]'s `lastScanInfo` param doc
+     *   for the generic default used when this is omitted, and for why it
+     *   is ignored on a [pending] or [ReportLog.Channel.DIAGNOSTICS] call. */
+    private fun emitReport(text: String, summary: ReportLog.DisclosureSummary, attemptId: String? = null, pending: Boolean = false, outcome: ReportLog.Outcome = ReportLog.Outcome.FAIL, channel: ReportLog.Channel = ReportLog.Channel.SCAN, lastScan: LastScanLine.Entry? = null) {
         // §6.2 item 16 (D46): the log tab is an ADDITIONAL CONSUMER of this
         // one write site — never a second write site. [text] is exactly
         // what reportView shows, unmodified; [summary] is the value-free,
@@ -1399,9 +1470,13 @@ abstract class MainActivity : AppCompatActivity() {
         // entry with — see ReportLog's class doc. Extending THIS call site
         // (rather than adding a second one) is the mechanism D46 itself
         // requires — [attemptId]/[pending] are the same discipline applied
-        // to the 2026-09-01 stale-in-progress-entry fix.
-        reportLog.append(text, summary, attemptId = attemptId, pending = pending, outcome = outcome)
+        // to the 2026-09-01 stale-in-progress-entry fix. [channel] (§6.5 S4)
+        // defaults to [ReportLog.Channel.SCAN] — the scan/handoff pipeline's
+        // many call sites are unchanged; only the two Diagnostics-tab probe
+        // call sites pass [ReportLog.Channel.DIAGNOSTICS] explicitly.
+        reportLog.append(text, summary, attemptId = attemptId, pending = pending, outcome = outcome, channel = channel, lastScanInfo = lastScan)
         applyReportText()
+        applyLastScanLine()
         refreshLogView()
         // §6.2 item 23 (D70(b)): durable on EVERY append/replace — see
         // [persistLog]'s doc for why this is a synchronous, best-effort
@@ -1463,8 +1538,17 @@ abstract class MainActivity : AppCompatActivity() {
         // Bundle fast path as expanded.
         val outcomes = savedInstanceState.getStringArrayList(STATE_LOG_OUTCOMES)
             ?.map { runCatching { ReportLog.Outcome.valueOf(it) }.getOrDefault(ReportLog.Outcome.FAIL) }
-        reportLog.restore(entries ?: emptyList(), lastText = text, expanded = expanded, outcomes = outcomes)
+        // FIX (owner, 2026-09-05): the "Last scan" line's sibling restore —
+        // see ReportLog.restore's own doc.
+        val lastScanInfo = LastScanLine.fromJson(savedInstanceState.getString(STATE_LAST_SCAN_INFO))
+        // Owner refinement (2026-09-05): the staleness counters' own Bundle
+        // restore — getInt's default (0) is exactly the backward-compatible
+        // value a Bundle predating these keys needs.
+        val handoffGeneration = savedInstanceState.getInt(STATE_HANDOFF_GENERATION, 0)
+        val lastScanGeneration = savedInstanceState.getInt(STATE_LAST_SCAN_GENERATION, 0)
+        reportLog.restore(entries ?: emptyList(), lastText = text, expanded = expanded, outcomes = outcomes, lastScanInfo = lastScanInfo, handoffGeneration = handoffGeneration, lastScanGeneration = lastScanGeneration)
         if (text != null) applyReportText()
+        applyLastScanLine()
         if (entries != null) refreshLogView()
         Log.i(TAG, "M2 stage: restored report/log across Activity recreation (text=${text != null}, log_entries=${entries?.size ?: 0})")
     }
@@ -1491,8 +1575,9 @@ abstract class MainActivity : AppCompatActivity() {
         }
         val snapshot = ReportLogStore.fromJson(json)
         if (snapshot.entries.isEmpty() && snapshot.lastText == null) return
-        reportLog.restore(snapshot.entries, lastText = snapshot.lastText, expanded = snapshot.expanded, outcomes = snapshot.outcomes)
+        reportLog.restore(snapshot.entries, lastText = snapshot.lastText, expanded = snapshot.expanded, outcomes = snapshot.outcomes, lastScanInfo = snapshot.lastScanInfo, handoffGeneration = snapshot.handoffGeneration, lastScanGeneration = snapshot.lastScanGeneration)
         applyReportText()
+        applyLastScanLine()
         refreshLogView()
         Log.i(TAG, "M2 stage: loaded persisted log from disk (entries=${snapshot.entries.size})")
     }
@@ -1525,6 +1610,9 @@ abstract class MainActivity : AppCompatActivity() {
             expanded = reportLog.expandedSnapshot(),
             outcomes = reportLog.outcomesSnapshot(),
             lastText = reportLog.lastText,
+            lastScanInfo = reportLog.lastScanInfo,
+            handoffGeneration = reportLog.handoffGeneration,
+            lastScanGeneration = reportLog.lastScanGeneration,
         )
         try {
             val json = ReportLogStore.toJson(snapshot)
@@ -1550,6 +1638,7 @@ abstract class MainActivity : AppCompatActivity() {
         val entryCount = reportLog.entriesSnapshot().size
         reportLog.clear()
         applyReportText()
+        applyLastScanLine()
         refreshLogView()
         persistLog()
         Log.i(TAG, "M2 stage: log cleared by user (entries=$entryCount)")
@@ -1634,7 +1723,7 @@ abstract class MainActivity : AppCompatActivity() {
      * the THREE buckets applies — access-establishment failure, transient
      * chip-communication failure (2026-09), or reset; a success dialog
      * always resolves to the plain reset branch, the SAME
-     * `wipeSession(keepMrzAndMode = false)` every other terminal outcome
+     * `wipeSession(keepMrz = false)` every other terminal outcome
      * uses — no separate post-success policy). A handoff-specific pointer
      * reset (pendingHandoff/verifiedRequest, which [wipeSession] itself
      * does not own — see its doc) happens first when the session is NOT
@@ -1658,6 +1747,17 @@ abstract class MainActivity : AppCompatActivity() {
      * UI-only write (the standing rule this whole cluster follows). */
     private fun showBlockingOutcomeDialog(message: String, isAccessEstablishmentFailure: Boolean, isTransientChipCommunicationFailure: Boolean = false) {
         val keepMrzAndMode = FailureTransition.keepsMrzAndMode(isAccessEstablishmentFailure, isTransientChipCommunicationFailure)
+        // Owner device fix (2026-09-05, findings.md — "wrong details entry
+        // still doesn't reset to re-enter"): decoupled from [keepMrzAndMode]
+        // — see [FailureTransition.keepsLockedMode]'s doc. Only a transient
+        // chip-communication failure keeps the session ARMED (lockedMode
+        // set, button disabled, waiting for the same document to be
+        // re-tapped); an access-establishment failure now RELEASES the
+        // lock (button re-enables) while [keepMrzAndMode] above still keeps
+        // the typed MRZ text AND (via the `!keepMrzAndMode` guard below)
+        // the pending/verified handoff — so the user edits the field(s)
+        // and taps Scan/Verify again, without losing the site's request.
+        val keepLockedMode = FailureTransition.keepsLockedMode(isAccessEstablishmentFailure, isTransientChipCommunicationFailure)
         val displayedMessage = OutcomeText.withModeSentence(message, lockedModeForDisplay())
         Log.i(TAG, "M2 stage: terminal outcome dialog shown: $displayedMessage")
         AlertDialog.Builder(this)
@@ -1672,7 +1772,7 @@ abstract class MainActivity : AppCompatActivity() {
                     // [authorizedHandoff]'s doc.
                     authorizedHandoff = null
                 }
-                wipeSession(keepMrzAndMode = keepMrzAndMode)
+                wipeSession(keepMrz = keepMrzAndMode, keepLockedMode = keepLockedMode)
             }
             .show()
     }
@@ -1680,7 +1780,7 @@ abstract class MainActivity : AppCompatActivity() {
     /**
      * D55 — THE ONLY place in this file that writes `.visibility` on
      * [mainLayout], [logLayout] or [loadingLayout]. Enforced the same way
-     * [emitReport] is the only place that writes [reportView]'s text: any
+     * [emitReport] is the only place that writes [reportLog]'s state: any
      * future call site that wants a different pane shown must write
      * [paneState] (its readInProgress and/or tab-index setters), then call
      * this function — never touch a view's `.visibility` directly.
@@ -1963,6 +2063,11 @@ abstract class MainActivity : AppCompatActivity() {
                     // item 22: a read exception is always a FAIL — see
                     // ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
+                    // FIX (owner, 2026-09-05, "Last scan" line): no claim was
+                    // ever built (the chip read itself failed) — chip-check
+                    // outcome, not a threshold, matching the "chip read
+                    // failed" case in LastScanLine's truth table.
+                    lastScan = LastScanLine.Entry(origin = snapshot?.site ?: SITE_NO_HANDOFF, reason = LastScanLine.Reason.READ_FAILED),
                 )
                 showBlockingOutcomeDialog(
                     reason,
@@ -1974,7 +2079,7 @@ abstract class MainActivity : AppCompatActivity() {
             // Any completed read (success or a real masterlist "no") wipes the
             // session — only an access-establishment failure (or, as of
             // 2026-09, a transient chip-communication failure) keeps it (F3).
-            wipeSession(keepMrzAndMode = false)
+            wipeSession(keepMrz = false)
             continueAfterRead(mode, passiveAuthVerdict!!, chipAuthStatus, accessProtocol, masterlistReport, dg1File, snapshot)
         }
     }
@@ -2057,6 +2162,15 @@ abstract class MainActivity : AppCompatActivity() {
                     // text above already renders); an integrity failure is
                     // FAIL. See ReportLog.Outcome's doc — owner-overturnable.
                     outcome = if (verdict.ok) ReportLog.Outcome.PASS else ReportLog.Outcome.FAIL,
+                    // FIX (owner, 2026-09-05, "Last scan" line): no claim was
+                    // ever built here (mode A by design, or a masterlist
+                    // real-no) — chip-check outcome, the SAME [verdict.ok]
+                    // boolean this entry's own verdict text already uses;
+                    // matches the "local scan pass" case in LastScanLine's
+                    // truth table (also covers a real masterlist no with a
+                    // known site, which the truth table does not name but
+                    // this shape still fits correctly).
+                    lastScan = LastScanLine.Entry(origin = site, reason = if (verdict.ok) LastScanLine.Reason.CHIP_CHECK_PASSED else LastScanLine.Reason.CHIP_CHECK_FAILED),
                 )
                 // finding #21 / item 15: mode A's own terminal outcomes now
                 // get the SAME blocking modal every other terminal outcome
@@ -2576,7 +2690,12 @@ abstract class MainActivity : AppCompatActivity() {
             // delivered presentation, everything else (including an honest
             // under-threshold refusal) is FAIL. See ReportLog.Outcome's doc.
             val logOutcome = if (deliveryResult is DeliveryResult.Accepted) ReportLog.Outcome.PASS else ReportLog.Outcome.FAIL
-            emitReport(report, summary, attemptId = attemptId, outcome = logOutcome)
+            // FIX (owner, 2026-09-05, "Last scan" line): the claim really
+            // was built (threshold/overThreshold, above) for every
+            // DeliveryResult branch here — [DeliveryResult.toLastScanReason]
+            // is the single mapping, never re-derived a second way.
+            val lastScan = LastScanLine.Entry(origin = site, reason = deliveryResult.toLastScanReason(), threshold = threshold, overThreshold = overThreshold)
+            emitReport(report, summary, attemptId = attemptId, outcome = logOutcome, lastScan = lastScan)
             // item 15: the SAME confirm-success-only / honest-under-both-get-
             // a-dialog discipline as mintAndMaybeHandoff — see its doc.
             if (MintConfirmation.confirmsSuccess(deliveryAccepted = deliveryResult is DeliveryResult.Accepted)) {
@@ -3180,7 +3299,12 @@ abstract class MainActivity : AppCompatActivity() {
             // still said no) is FAIL. See ReportLog.Outcome's doc for the
             // full rule and why RefusedHonestUnderThreshold is FAIL here.
             val logOutcome = if (deliveryResult is DeliveryResult.Accepted) ReportLog.Outcome.PASS else ReportLog.Outcome.FAIL
-            emitReport(report, summary, attemptId = attemptId, outcome = logOutcome)
+            // FIX (owner, 2026-09-05, "Last scan" line): the claim really
+            // was built (threshold/overThreshold, above) for every
+            // DeliveryResult branch here — [DeliveryResult.toLastScanReason]
+            // is the single mapping, never re-derived a second way.
+            val lastScan = LastScanLine.Entry(origin = site, reason = deliveryResult.toLastScanReason(), threshold = threshold, overThreshold = overThreshold)
+            emitReport(report, summary, attemptId = attemptId, outcome = logOutcome, lastScan = lastScan)
             // 2026-09 real-device fix ("confirm success too" — the owner's
             // three follow-up scans were all genuine successes with nothing
             // telling him to go back to the browser): ONLY a genuinely
@@ -3248,13 +3372,32 @@ abstract class MainActivity : AppCompatActivity() {
         data class TransportFailed(val label: String) : DeliveryResult() // network/other exception
     }
 
+    /** FIX (owner, 2026-09-05, "Last scan" line) — the single place a
+     * [DeliveryResult] is turned into a [LastScanLine.Reason], for both
+     * `presentBareA` and `mintAndMaybeHandoff` (same "split the decision
+     * from the machinery" discipline as [DeliveryVerdictLine]). A claim
+     * really was built by the time either call site reaches this — see
+     * [LastScanLine.Reason]'s own doc for why [DeliveryResult.Rejected] and
+     * both refusal variants all map to [LastScanLine.Reason.REFUSED]: from
+     * this line's point of view they are all "a claim was disclosed, the
+     * site said no", the same grouping [ReportLog.Outcome]'s FAIL rule
+     * already uses. */
+    private fun DeliveryResult.toLastScanReason(): LastScanLine.Reason = when (this) {
+        DeliveryResult.Accepted -> LastScanLine.Reason.DELIVERED
+        DeliveryResult.RefusedHonestUnderThreshold -> LastScanLine.Reason.REFUSED
+        is DeliveryResult.RefusedOtherReason -> LastScanLine.Reason.REFUSED
+        is DeliveryResult.Rejected -> LastScanLine.Reason.REFUSED
+        DeliveryResult.NoResponseUri -> LastScanLine.Reason.NOT_SENT
+        is DeliveryResult.TransportFailed -> LastScanLine.Reason.NOT_SENT
+    }
+
     // -------------------------------------------------------- masterlist UI
     /** §6.2 item 16 (D46): the debug-only probe buttons below are NOT a
      * document scan — no site is involved and nothing is ever disclosed to
      * one — so they get this fixed, minimal summary rather than the
      * SITE_NO_HANDOFF label's scan-shaped semantics or an invented site
      * name. [failed] is whether the probe's own text contains a failure
-     * marker, read from the SAME string already built for [reportView] —
+     * marker, read from the SAME string already built for [diagnosticsReportView] —
      * never a second judgment about what happened. */
     private fun diagnosticSummary(failed: Boolean, label: String) = ReportLog.DisclosureSummary(
         site = SITE_NO_HANDOFF,
@@ -3301,7 +3444,7 @@ abstract class MainActivity : AppCompatActivity() {
             // own Result line is built from — never a second, independent
             // read of [text].
             val probeFailed = text.contains("PROBE FAILED") || text.contains("INVALID RUN")
-            emitReport(text, diagnosticSummary(failed = probeFailed, label = "masterlist checks"), outcome = if (probeFailed) ReportLog.Outcome.FAIL else ReportLog.Outcome.PASS)
+            emitReport(text, diagnosticSummary(failed = probeFailed, label = "masterlist checks"), outcome = if (probeFailed) ReportLog.Outcome.FAIL else ReportLog.Outcome.PASS, channel = ReportLog.Channel.DIAGNOSTICS)
         }
     }
 
@@ -3349,7 +3492,7 @@ abstract class MainActivity : AppCompatActivity() {
             // own Result line is built from — never a second, independent
             // read of [text].
             val probeFailed = text.contains("PROBE FAILED") || text.contains("MISMATCH") || text.contains("UNEXPECTED")
-            emitReport(text, diagnosticSummary(failed = probeFailed, label = "device key self-test"), outcome = if (probeFailed) ReportLog.Outcome.FAIL else ReportLog.Outcome.PASS)
+            emitReport(text, diagnosticSummary(failed = probeFailed, label = "device key self-test"), outcome = if (probeFailed) ReportLog.Outcome.FAIL else ReportLog.Outcome.PASS, channel = ReportLog.Channel.DIAGNOSTICS)
         }
     }
 
@@ -3399,6 +3542,13 @@ abstract class MainActivity : AppCompatActivity() {
         // as enum NAMEs (StringArrayList; Bundle has no native enum-array
         // type), see [ReportLog.outcomesSnapshot]'s doc.
         private const val STATE_LOG_OUTCOMES = "m2_log_outcomes"
+        // FIX (owner, 2026-09-05): the "Last scan" line's Bundle sibling —
+        // see [ReportLog.lastScanInfo]/[LastScanLine]'s doc.
+        private const val STATE_LAST_SCAN_INFO = "m2_last_scan_info"
+        // Owner refinement (2026-09-05): the staleness counters' Bundle
+        // siblings — see [ReportLog.handoffGeneration]/[ReportLog.lastScanGeneration]'s doc.
+        private const val STATE_HANDOFF_GENERATION = "m2_handoff_generation"
+        private const val STATE_LAST_SCAN_GENERATION = "m2_last_scan_generation"
         // §6.2 item 23 (D70(b)): app-private storage filename for the
         // durable log — see [persistLog]'s doc. Not a shared-prefs key: a
         // single JSON file, per that function's own storage-choice note.
@@ -3425,14 +3575,23 @@ abstract class MainActivity : AppCompatActivity() {
         // 2026-09 real-device fix ("confirm success too"). Owner-specified
         // shape: minimal, just the outcome — no restated site/predicate/
         // identity detail (that already lives in the log entry and
-        // report). Not yet owner-approved (report requested back
-        // explicitly): reuses the exact Result-line wording for this same
-        // outcome, so there is only one phrase to approve, not two.
-        // Owner-supplied wording, deliberately DIFFERENT from the Result
-        // line for this same outcome ("Verified — the site accepted you")
-        // — the two are not meant to match; do not propagate one into the
-        // other.
-        private const val MINT_CONFIRMED_MESSAGE = "ID scanned successfully"
+        // report).
+        //
+        // Owner decision, 2026-09-05 (findings.md #22's follow-up, FIX 1):
+        // superseded the original "ID scanned successfully" wording. What
+        // the user needs to learn from this dialog is whether their
+        // verification request was DELIVERED to the site — not a
+        // read-outcome statement (that already reads as ambiguous between
+        // "the chip was read" and "the site got an answer"). Now shared,
+        // UNCHANGED, by BOTH tiers — the same wording for a tier-A bare
+        // presentation and a tier-B mint — per the owner's own reasoning:
+        // "so the UI front isn't front-loaded with confusing detail and
+        // logs carry details" (see [DeliveryVerdictLine.accepted] for the
+        // corresponding raw report/log wording, which DOES distinguish the
+        // two tiers). The mode-disclosure sentence [OutcomeText
+        // .withModeSentence] appends (D71b) is unaffected — it is composed
+        // onto this text, not replacing part of it.
+        private const val MINT_CONFIRMED_MESSAGE = "Delivered — the website shows the result."
 
         // Finding #10 (.claude/remember/findings.md) MITIGATION, not yet
         // owner-approved (report requested back explicitly, per this

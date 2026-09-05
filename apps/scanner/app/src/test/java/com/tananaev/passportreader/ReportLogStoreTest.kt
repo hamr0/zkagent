@@ -16,7 +16,10 @@ class ReportLogStoreTest {
         expanded: List<Boolean> = listOf(false),
         outcomes: List<ReportLog.Outcome> = listOf(ReportLog.Outcome.PASS),
         lastText: String? = "last report text",
-    ) = ReportLogStore.Snapshot(entries, expanded, outcomes, lastText)
+        lastScanInfo: LastScanLine.Entry? = null,
+        handoffGeneration: Int = 0,
+        lastScanGeneration: Int = 0,
+    ) = ReportLogStore.Snapshot(entries, expanded, outcomes, lastText, lastScanInfo, handoffGeneration, lastScanGeneration)
 
     @Test
     fun `round-trips a snapshot through toJson and fromJson byte-identically`() {
@@ -111,5 +114,49 @@ class ReportLogStoreTest {
         val lastOriginalIndex = entries.lastIndex
         assertEquals(expanded[lastOriginalIndex], restored.expanded.last())
         assertEquals(outcomes[lastOriginalIndex], restored.outcomes.last())
+    }
+
+    // FIX (owner, 2026-09-05) — Snapshot.lastScanInfo, the "Last scan"
+    // line's durable data.
+
+    @Test
+    fun `round-trips a snapshot carrying a lastScanInfo entry byte-identically`() {
+        val original = snapshot(lastScanInfo = LastScanLine.Entry(origin = "state.gov", reason = LastScanLine.Reason.DELIVERED, threshold = 18, overThreshold = true))
+        val restored = ReportLogStore.fromJson(ReportLogStore.toJson(original))
+        assertEquals(original, restored)
+    }
+
+    @Test
+    fun `round-trips a null lastScanInfo as null`() {
+        val original = snapshot(lastScanInfo = null)
+        val restored = ReportLogStore.fromJson(ReportLogStore.toJson(original))
+        assertEquals(null, restored.lastScanInfo)
+    }
+
+    @Test
+    fun `an OLD persisted file written before lastScanInfo existed (no last_scan_info key at all) still loads, with lastScanInfo null`() {
+        val json = """{"version":1,"entries":[{"text":"09:00:00 · site-a.test\n\nResult    ok","expanded":false,"outcome":"PASS"}],"last_text":"last report text"}"""
+        val restored = ReportLogStore.fromJson(json)
+        assertEquals(null, restored.lastScanInfo)
+        assertEquals(listOf("09:00:00 · site-a.test\n\nResult    ok"), restored.entries)
+        assertEquals("last report text", restored.lastText)
+    }
+
+    // Owner refinement (2026-09-05) — handoffGeneration/lastScanGeneration,
+    // the "Last scan" staleness counters.
+
+    @Test
+    fun `round-trips non-zero handoffGeneration and lastScanGeneration byte-identically`() {
+        val original = snapshot(handoffGeneration = 3, lastScanGeneration = 2)
+        val restored = ReportLogStore.fromJson(ReportLogStore.toJson(original))
+        assertEquals(original, restored)
+    }
+
+    @Test
+    fun `an OLD persisted file written before the generation counters existed still loads, both defaulting to 0`() {
+        val json = """{"version":1,"entries":[{"text":"09:00:00 · site-a.test\n\nResult    ok","expanded":false,"outcome":"PASS"}],"last_text":"last report text"}"""
+        val restored = ReportLogStore.fromJson(json)
+        assertEquals(0, restored.handoffGeneration)
+        assertEquals(0, restored.lastScanGeneration)
     }
 }

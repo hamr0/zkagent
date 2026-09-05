@@ -44,12 +44,25 @@ object ReportLogStore {
 
     /** Everything [ReportLog] exposes that needs to survive process death —
      * the disk-shaped sibling of the Bundle keys `MainActivity` already
-     * saves in `onSaveInstanceState`. */
+     * saves in `onSaveInstanceState`.
+     *
+     * @param lastScanInfo (owner FIX, 2026-09-05) the "Last scan" line's
+     *   data — see [ReportLog.lastScanInfo]/[LastScanLine.Entry]'s doc.
+     *   Defaults to null so every existing positional/named construction
+     *   (including [EMPTY]) keeps compiling unchanged.
+     * @param handoffGeneration @param lastScanGeneration (owner refinement,
+     *   2026-09-05) the staleness counters — see
+     *   [ReportLog.handoffGeneration]/[ReportLog.lastScanGeneration]'s doc.
+     *   Both default to 0, same backward-compatibility reasoning as
+     *   [lastScanInfo]. */
     data class Snapshot(
         val entries: List<String>,
         val expanded: List<Boolean>,
         val outcomes: List<ReportLog.Outcome>,
         val lastText: String?,
+        val lastScanInfo: LastScanLine.Entry? = null,
+        val handoffGeneration: Int = 0,
+        val lastScanGeneration: Int = 0,
     ) {
         companion object {
             val EMPTY = Snapshot(emptyList(), emptyList(), emptyList(), null)
@@ -70,6 +83,18 @@ object ReportLogStore {
         root.put("version", SCHEMA_VERSION)
         root.put("entries", entriesArray)
         root.put("last_text", snapshot.lastText ?: JSONObject.NULL)
+        // FIX (owner, 2026-09-05): nested object, or JSONObject.NULL when
+        // there is no "Last scan" line yet — an OLD file written before
+        // this field existed simply lacks this key entirely, which
+        // `fromJson`'s `optJSONObject` already reads back as null (see its
+        // doc) with no special-case code needed for backward compatibility.
+        root.put("last_scan_info", LastScanLine.toJsonObject(snapshot.lastScanInfo) ?: JSONObject.NULL)
+        // Owner refinement (2026-09-05) — the staleness counters, persisted
+        // alongside last_scan_info so a restart cannot forget a handoff was
+        // captured after the last scan. Old files simply lack these keys —
+        // fromJson's optInt(..., 0) below already reads that back as 0.
+        root.put("handoff_generation", snapshot.handoffGeneration)
+        root.put("last_scan_generation", snapshot.lastScanGeneration)
         return root.toString()
     }
 
@@ -96,6 +121,16 @@ object ReportLogStore {
                     .getOrDefault(ReportLog.Outcome.FAIL)
             }
             val lastText = if (root.isNull("last_text")) null else root.optString("last_text").ifEmpty { null }
+            // FIX (owner, 2026-09-05): optJSONObject returns null for both
+            // an explicit JSON null AND a wholly absent key — the exact
+            // backward-compatibility behaviour an OLD file (written before
+            // this field existed) needs, with no version check required.
+            val lastScanInfo = LastScanLine.fromJsonObject(root.optJSONObject("last_scan_info"))
+            // Owner refinement (2026-09-05) — optInt's default (0) is
+            // exactly the backward-compatible value an old file (missing
+            // both keys entirely) needs — no version check required.
+            val handoffGeneration = root.optInt("handoff_generation", 0)
+            val lastScanGeneration = root.optInt("last_scan_generation", 0)
             // D59: the cap is re-enforced on load, not just on append —
             // keep the newest MAX_ENTRIES, oldest-first (same shape as
             // ReportLog.append's own eviction).
@@ -107,7 +142,7 @@ object ReportLogStore {
                     outcomes.removeAt(0)
                 }
             }
-            Snapshot(entries, expanded, outcomes, lastText)
+            Snapshot(entries, expanded, outcomes, lastText, lastScanInfo, handoffGeneration, lastScanGeneration)
         } catch (e: Exception) {
             Log.w(TAG, "M2 stage: persisted log file is corrupt/unparseable — starting with an empty log (${e.javaClass.simpleName}: ${e.message})")
             Snapshot.EMPTY

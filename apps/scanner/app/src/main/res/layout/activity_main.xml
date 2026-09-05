@@ -92,14 +92,15 @@
              unmovable part") — REVERTED to a plain ScrollView (was briefly
              split into a scrollable top half + a pinned, non-scrolling
              report_view sibling; that pinning permanently ate screen
-             space). report_view is back INSIDE the scroll content, directly
-             under the Scan/Verify button (see report_view below). S3's
+             space). FIX (owner, 2026-09-05): report_view itself is now
+             REMOVED — replaced by the one-line last_scan_view directly
+             under the Scan/Verify button (see last_scan_view below). S3's
              "fixed position" goal is now met a different way: every element
              ABOVE the button that could vary in height (question_line,
-             the paste row, handoff_status) is capped/floored — see each
-             one's own comment — so the button and report_view stay put
-             across ordinary handoff-state changes without a pinned
-             footer. -->
+             the paste row, handoff_status) is capped/floored, and
+             last_scan_view is itself capped to one line — see each one's
+             own comment — so the button and last_scan_view stay put across
+             ordinary handoff-state changes without a pinned footer. -->
         <ScrollView
             android:id="@+id/main_layout"
             android:layout_width="match_parent"
@@ -355,37 +356,39 @@
                         android:layout_marginBottom="@dimen/activity_vertical_margin"
                         android:text="@string/button_lock_and_scan" />
 
-                    <!-- §6.5 S3 (D75) pane-order item (4) — value-free
-                         verdict/report screen (§6.2 item 5): verdict, step
-                         names, counts, hashes, timings, algorithm names
-                         only. Never a DG1/MRZ/personal field. Safe to
-                         screenshot. Device fix (2026-09-05): back INSIDE the
-                         scroll content, directly under the button — see
-                         main_layout's own comment above for why the
-                         earlier pinned-sibling approach was reverted; the
-                         elements above this point are now capped/floored
-                         instead, so this does not jump around under
-                         ordinary handoff-state changes. -->
+                    <!-- FIX (owner, 2026-09-05, verbatim): "remove it from
+                         scan, you can keep summary of last scan below scan
+                         button to know, just the last one. last scan:
+                         state.gov, > 18: true + checkmark". Replaces the
+                         full report_view block that used to render here
+                         (§6.2 item 5's value-free verdict screen) — the Log
+                         and Diagnostics tabs remain the only full-detail
+                         readers. ONE line, from LastScanLine.render — see
+                         MainActivity.applyLastScanLine. maxLines/ellipsize
+                         cap this at a fixed one-line height (S3's "the
+                         button stays put" rule), same discipline as
+                         handoff_status/question_line above. -->
                     <TextView
-                        android:id="@+id/report_view"
+                        android:id="@+id/last_scan_view"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/activity_vertical_margin"
                         android:layout_marginBottom="@dimen/activity_vertical_margin"
-                        android:fontFamily="monospace"
-                        android:textIsSelectable="true"
                         android:textSize="12sp"
-                        android:text="" />
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        tools:text="Last scan: state.gov, over 18: true ✓" />
 
                 </LinearLayout>
 
         </ScrollView>
 
         <!-- §6.2 item 16 (D44) — the log tab: an additional CONSUMER of the
-             same value-free content emitReport() already writes to
-             report_view (MainActivity.emitReport), never a second write
-             site. Hidden unless the "Log" tab is selected. Same value-free
-             invariant as report_view — safe to screenshot. -->
+             same value-free content emitReport() already writes to ReportLog
+             (MainActivity.emitReport), never a second write site. Hidden
+             unless the "Log" tab is selected. FIX (owner, 2026-09-05):
+             now the ONLY full-detail scan reader in the Scan/Log/Diagnostics
+             set below report_view's removal — same value-free invariant as
+             before, safe to screenshot. -->
         <ScrollView
             android:id="@+id/log_layout"
             android:layout_width="match_parent"
@@ -431,9 +434,10 @@
              pane (owner: "text that still appears between verify... run
              masterlist... run device key self" cluttered the area right
              below the main button). Output keeps going where it went
-             before (report_view/log — MainActivity.runMasterlistProbe /
-             .runDeviceKeyProbe are unchanged, only their trigger buttons
-             moved). Hidden unless the "Diagnostics" tab is selected. -->
+             before (diagnostics_report_view / the Log tab —
+             MainActivity.runMasterlistProbe / .runDeviceKeyProbe are
+             unchanged, only their trigger buttons moved). Hidden unless the
+             "Diagnostics" tab is selected. -->
         <ScrollView
             android:id="@+id/diagnostics_layout"
             android:layout_width="match_parent"
@@ -469,12 +473,11 @@
                 <!-- Device fix (2026-09-05, round 4, "yield nothing when
                      pressed") — both probes RAN (confirmed in logcat) but
                      their output had nowhere to show on THIS tab: it went
-                     only to report_view (scan pane) / the log. This is a
-                     SECOND PROJECTION TARGET of the same reportLog.lastText
-                     MainActivity.applyReportText already writes to
-                     report_view — never a second writer of the scan-pane
-                     report. Same value-free rules as report_view/log_view:
-                     verdict, step names, counts, hashes, timings only. -->
+                     only to the Log tab. This is a SECOND PROJECTION TARGET
+                     of the same reportLog.lastText MainActivity.applyReportText
+                     writes here — never a second writer of the Diagnostics
+                     report. Same value-free rules as log_view: verdict, step
+                     names, counts, hashes, timings only. -->
                 <TextView
                     android:id="@+id/diagnostics_report_view"
                     android:layout_width="match_parent"

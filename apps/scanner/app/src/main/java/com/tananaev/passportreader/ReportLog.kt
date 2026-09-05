@@ -115,6 +115,33 @@ class ReportLog {
      */
     enum class Outcome { PENDING, PASS, FAIL }
 
+    /** §6.5 S4 device fix (2026-09-05, findings.md — "diagnosis result at
+     * Diagnostics tab still shows in Scan tab"): the two report categories
+     * this app ever emits through `MainActivity.emitReport` — a scan/
+     * handoff outcome (the MRZ+NFC pipeline, mode A/B) or a Diagnostics-tab
+     * probe (masterlist / device-key self-test). Before this fix,
+     * `MainActivity.applyReportText` wrote [lastText] to BOTH
+     * `MainActivity.reportView` (Scan tab) and
+     * `MainActivity.diagnosticsReportView` (Diagnostics tab) unconditionally,
+     * regardless of which one actually produced it — a probe's output
+     * leaked into the Scan tab and a scan's report leaked into the
+     * Diagnostics tab. [lastChannel] is set ONCE per [append] call, from
+     * the caller's own [Channel] argument — never guessed from [text]'s
+     * content (no reserved marker would make that safe or maintainable; see
+     * [targetsDiagnosticsView], the pure routing decision
+     * `MainActivity.applyReportText` now dispatches on instead).
+     *
+     * FIX (owner, 2026-09-05): `MainActivity.reportView` (the Scan tab's own
+     * full-detail TextView) is REMOVED — the Scan pane now shows only the
+     * one-line "Last scan: ..." summary ([LastScanLine]), never the full
+     * report. A SCAN-channel entry's full text still surfaces in full,
+     * unconditionally, via the Log tab's `logView` (`rendered()` already
+     * renders every entry regardless of channel — this was never routed by
+     * [Channel] and needs no new routing function now that its Scan-pane
+     * sibling is gone); only [Channel.DIAGNOSTICS] still needs an explicit
+     * routing check, since `diagnosticsReportView` is Diagnostics-only. */
+    enum class Channel { SCAN, DIAGNOSTICS }
+
     /**
      * The plain-language, value-free disclosure summary for one log entry
      * (D46). Built by [MainActivity] at the same call site that already
@@ -242,6 +269,55 @@ class ReportLog {
     var lastText: String? = null
         private set
 
+    /** §6.5 S4 device fix (2026-09-05) — [Channel] of the entry [lastText]
+     * currently mirrors, set by the SAME [append] call that sets [lastText]
+     * itself, never independently. Defaults to [Channel.SCAN] (a fresh
+     * `ReportLog` instance has never seen a report yet, and every pre-fix
+     * call site is a scan/handoff report) so `MainActivity.applyReportText`
+     * keeps routing to the Scan tab exactly as before this fix for every
+     * caller that does not pass a [Channel] explicitly. */
+    var lastChannel: Channel = Channel.SCAN
+        private set
+
+    /** FIX (owner, 2026-09-05, "Last scan" line): the most recent
+     * SCAN-channel entry's [LastScanLine.Entry] — null before any SCAN
+     * entry has ever been appended or restored, or right after [clear].
+     * Written ONLY by a SCAN-channel, non-pending [append] (a Diagnostics
+     * probe, or the transient "In progress" entry a mint attempt shows
+     * while awaiting biometric authorization, must never feed this line —
+     * see [append]'s own doc for both exclusions) — [MainActivity]'s
+     * `LastScanLine.render(...)` is the ONE reader (of this, [lastScanGeneration],
+     * and [handoffGeneration] together — see those two fields' own docs for
+     * the staleness guard [LastScanLine.render] applies). */
+    var lastScanInfo: LastScanLine.Entry? = null
+        private set
+
+    /** Owner refinement (2026-09-05) to the "Last scan" line — staleness: a
+     * plain monotonic counter, bumped ONLY by [noteNewHandoffCaptured] (one
+     * caller: `MainActivity.handleIncomingIntent`'s av:// intent path, at
+     * its own "pendingHandoff captured from av:// intent" log line — never
+     * the pasted-link path, per the owner's own scoping). Never a
+     * timestamp. [lastScanGeneration] is the value this counter held the
+     * moment [lastScanInfo] was last written — [LastScanLine.isStale]
+     * compares the two. */
+    var handoffGeneration: Int = 0
+        private set
+
+    /** The [handoffGeneration] value stamped onto [lastScanInfo] at the
+     * moment it was last written by [append] — see that field's own doc.
+     * 0 before any SCAN entry has ever been appended or restored. */
+    var lastScanGeneration: Int = 0
+        private set
+
+    /** Bumps [handoffGeneration] — see that field's doc. Called once per
+     * NEW av:// handoff capture; never called for a pasted/QR-sourced
+     * handoff (the owner's own scoping — a paste is a deliberate user
+     * action inside the SAME session, not a fresh link that should hide a
+     * still-relevant "Last scan" line). */
+    fun noteNewHandoffCaptured() {
+        handoffGeneration++
+    }
+
     // §6.2 item 16 (2026-09-01 real-device fix, "the stale in-progress
     // entry"): which stored index (if any) currently holds an unresolved
     // in-progress entry for a given attempt id. A scan's mint pipeline
@@ -285,10 +361,35 @@ class ReportLog {
      *   non-pending call site that forgets to classify its own outcome
      *   explicitly (never a guessed PASS — the same "unclassified falls to
      *   the safe bucket" discipline [FailureTransition] already uses).
+     * @param channel (§6.5 S4, 2026-09-05) which report TextView this entry
+     *   belongs to — see [Channel]'s doc. Defaults to [Channel.SCAN],
+     *   matching every pre-fix call site; `MainActivity`'s two Diagnostics-
+     *   tab probes are the only callers that pass [Channel.DIAGNOSTICS].
+     * @param lastScanInfo (owner FIX, 2026-09-05) the "Last scan" line's
+     *   data for THIS entry — see [LastScanLine.Entry]'s doc. Null (the
+     *   default) falls back to a generic [LastScanLine.Reason.REFUSED]
+     *   entry (built from [summary]'s own site, never a second field
+     *   [MainActivity] would have to keep in lockstep) for every
+     *   SCAN-channel call site that has no better data to offer — every one
+     *   of those IS, in fact, some kind of refusal before any read/mint
+     *   could complete; only the handful of call sites that have a more
+     *   specific [LastScanLine.Reason] (a DeliveryResult branch, a mint-gate
+     *   "nothing to mint" outcome, a read failure) pass one explicitly.
+     *   Ignored entirely for a [Channel.DIAGNOSTICS] append, and for a
+     *   [pending] SCAN append (the transient "In progress" entry must never
+     *   overwrite the LAST completed scan's own line while it waits on
+     *   biometric authorization) — see [lastScanInfo]'s own doc.
      * @param nowMillis defaults to the real clock; a test may pass a fixed
      *   value so the timestamp is deterministic without sleeping. */
-    fun append(text: String, summary: DisclosureSummary, attemptId: String? = null, pending: Boolean = false, outcome: Outcome = Outcome.FAIL, nowMillis: Long = System.currentTimeMillis()) {
+    fun append(text: String, summary: DisclosureSummary, attemptId: String? = null, pending: Boolean = false, outcome: Outcome = Outcome.FAIL, channel: Channel = Channel.SCAN, lastScanInfo: LastScanLine.Entry? = null, nowMillis: Long = System.currentTimeMillis()) {
         lastText = text
+        lastChannel = channel
+        if (channel == Channel.SCAN && !pending) {
+            this.lastScanInfo = lastScanInfo ?: LastScanLine.Entry(origin = summary.site, reason = LastScanLine.Reason.REFUSED)
+            // Owner refinement (2026-09-05): stamp the generation IN EFFECT
+            // right now — see [lastScanGeneration]/[handoffGeneration]'s doc.
+            this.lastScanGeneration = handoffGeneration
+        }
         val timestamp = TIMESTAMP_FORMAT.format(Date(nowMillis))
         // item 22: PENDING always wins while [pending] is true — see the
         // @param doc above.
@@ -349,6 +450,11 @@ class ReportLog {
         pendingIndexByAttempt.clear()
         expandedFlags.clear()
         outcomes.clear()
+        // FIX (owner, 2026-09-05): "Clear log" clears the Last scan line too.
+        // handoffGeneration is deliberately NOT reset — it tracks av://
+        // intent captures, unrelated to the user clearing the log.
+        lastScanInfo = null
+        lastScanGeneration = 0
     }
 
     /** Immutable snapshot, OLDEST first — [MainActivity]'s
@@ -411,8 +517,21 @@ class ReportLog {
      *   "unclassified never guesses PASS" fallback [append]'s own default
      *   uses, for a caller (or an old persisted file predating this field)
      *   that restores entries with no outcome data at all. Same mismatched-
-     *   size fallback as [expanded]. */
-    fun restore(saved: List<String>, lastText: String? = null, expanded: List<Boolean>? = null, outcomes: List<Outcome>? = null) {
+     *   size fallback as [expanded].
+     * @param lastScanInfo (owner FIX, 2026-09-05) the "Last scan" line's
+     *   sibling restore value — see [lastScanInfo]'s own doc. Defaults to
+     *   null: an ordinary restore that supplies only [saved] (or an old
+     *   persisted file predating this field) leaves it null, never
+     *   re-derived from [saved]'s rendered text.
+     * @param handoffGeneration (owner refinement, 2026-09-05) the staleness
+     *   counter's own restore value — see [handoffGeneration]'s doc.
+     *   Defaults to 0 (an old persisted file, or a fresh Bundle, predating
+     *   this field — no av:// handoff has been captured as far as this
+     *   restore is concerned).
+     * @param lastScanGeneration the sibling restore value for
+     *   [lastScanGeneration] — see its own doc. Defaults to 0, same
+     *   reasoning as [handoffGeneration]. */
+    fun restore(saved: List<String>, lastText: String? = null, expanded: List<Boolean>? = null, outcomes: List<Outcome>? = null, lastScanInfo: LastScanLine.Entry? = null, handoffGeneration: Int = 0, lastScanGeneration: Int = 0) {
         entries.clear()
         entries.addAll(saved)
         pendingIndexByAttempt.clear()
@@ -421,6 +540,9 @@ class ReportLog {
         expandedFlags.addAll(expanded?.takeIf { it.size == saved.size } ?: List(saved.size) { false })
         this.outcomes.clear()
         this.outcomes.addAll(outcomes?.takeIf { it.size == saved.size } ?: List(saved.size) { Outcome.FAIL })
+        this.lastScanInfo = lastScanInfo
+        this.handoffGeneration = handoffGeneration
+        this.lastScanGeneration = lastScanGeneration
     }
 
     /** The log view's full text, NEWEST entry first (2026-09-01 real-device
@@ -574,6 +696,20 @@ class ReportLog {
             Outcome.FAIL -> "✗ " // ✗
             Outcome.PENDING -> "… " // …
         }
+
+        /** §6.5 S4 device fix (2026-09-05), FIX (2026-09-05, `report_view`
+         * removal) — whether a report on [channel] belongs in the
+         * Diagnostics tab's `MainActivity.diagnosticsReportView`. The single
+         * place this decision is made; `MainActivity.applyReportText`
+         * dispatches on this rather than ever string-matching the report
+         * text itself. Its former SCAN-side counterpart, `targetsScanView`,
+         * is gone along with `MainActivity.reportView` (the Scan pane's own
+         * full-detail TextView) — a SCAN-channel entry's full text still
+         * surfaces via `logView`, which already renders every entry
+         * unconditionally regardless of channel (see [Channel]'s own doc)
+         * and needs no per-channel gate of its own. Not private — exposed
+         * so a caller/test can pin the mapping directly. */
+        fun targetsDiagnosticsView(channel: Channel): Boolean = channel == Channel.DIAGNOSTICS
 
         private fun renderEntry(timestamp: String, summary: DisclosureSummary, text: String, outcome: Outcome): String {
             val lines = mutableListOf<String>()

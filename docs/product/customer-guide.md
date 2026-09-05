@@ -36,9 +36,9 @@ The verdict is a separate fact that reaches the page later, by the page polling 
 EU Age Verification Blueprint-shaped handoff zkagent follows (origin-bound request/response, per
 `docs/wiki/decisions.md` D37; `av://` + `direct_post` as the primary handoff, milestones.md item 8).
 Device-confirmed 2026-09-05 (`docs/logs/M3-POC-EVIDENCE-2026-09-04.md`): a reinstalled app showed
-"ID scanned successfully" — a true statement about delivery — at the exact moment the page showed
-a refusal (`ok=true allowed=false reason=attester_key_mismatch`) — an equally true statement about
-the verdict. Neither reading was wrong; they were answers to two different questions. **The app
+"Delivered — the website shows the result." — a true statement about delivery — at the exact
+moment the page showed a refusal (`ok=true allowed=false reason=attester_key_mismatch`) — an
+equally true statement about the verdict. Neither reading was wrong; they were answers to two different questions. **The app
 cannot tell you the site's decision. Read the page.**
 
 ## 2. Glossary
@@ -177,7 +177,7 @@ kill-and-restart; zktags unchanged across the restart.
 | Step | You do | Page shows | App shows | Verifier logs |
 |---|---|---|---|---|
 | 1 | Uninstall, then reinstall the scanner app | Unaffected until next scan | Fresh install: no saved device keys, no per-origin threshold lock, empty log | Nothing yet |
-| 2 | Scan the same document at a site where you had already registered (tier B) | **"Not allowed — key mismatch"** (`ok=true allowed=false reason=attester_key_mismatch`) | **"ID scanned successfully"** — same document, new PIN prompt, but the phone's device key is brand new (Keystore state is per-install) | **Device-confirmed 2026-09-05:** the zktag computed from the document is identical to before (it's derived from the chip, not stored on the phone), but the site's original binding was to the OLD key, so this presentation is refused rather than being silently re-recognised — there is no re-enrolment path today (open question) |
+| 2 | Scan the same document at a site where you had already registered (tier B) | **"Not allowed — key mismatch"** (`ok=true allowed=false reason=attester_key_mismatch`) | **"Delivered — the website shows the result."** — same document, new PIN prompt, but the phone's device key is brand new (Keystore state is per-install) | **Device-confirmed 2026-09-05:** the zktag computed from the document is identical to before (it's derived from the chip, not stored on the phone), but the site's original binding was to the OLD key, so this presentation is refused rather than being silently re-recognised — there is no re-enrolment path today (open question) |
 
 Both readings are correct at once, and neither is a bug: the app's dialog reports delivery only
 ("your presentation reached the verifier"), while the page reports the verifier's separate verdict
@@ -309,7 +309,7 @@ again on the next scan, exactly like a genuine first-time visit.
 |---|---|---|
 | S1 | Fixed preset threshold list (15/16/18/21/60/65), locked per site on first ask, named exceptions (§5) | Planned, scanner-side |
 | S2 | Shows the exact question ("This website asks if you are over 18") on-screen before you tap the scan button (§5) | Planned, scanner-side |
-| S3 | Scan-pane cleanup: dedicated "Paste link" button, dimmed and disabled mid-scan instead of today's plain field | Planned, scanner-side |
+| S3 | Scan-pane cleanup: dedicated "Paste link" button, dimmed and disabled mid-scan instead of today's plain field; below the button, a one-line "Last scan: `<site>`, over `<age>`: true/false, delivered ✓/refused ✗" summary replaces the full report view (D79) | Planned, scanner-side |
 | M3b | Tier C: attributed disclosure (e.g. name match, expiry-bucket booleans), pinned to approved issuers only | Not started — blocked on several open design questions |
 | Play Store track | Closed-testing upload of the scanner app; a showcase track only, doesn't change how the demo is reached | Not started — opens after a separate proof-of-concept passes |
 
