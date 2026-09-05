@@ -5,6 +5,84 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-05
+
+Lockstep release (D72): `packages/chiproof` and `apps/scanner` move 0.5.0 →
+0.6.0 together, one CHANGELOG section per release. chiproof code is
+unchanged since 0.5.0 — republished anyway under the lockstep rule, same as
+0.5.0's own note. `apps/scanner` moves versionName 0.5.0 → 0.6.0,
+versionCode 2 → 3. Covers M3's §6.5 scanner follow-ups S1–S3 (all now
+CLOSED), the D79 delivery-wording rework (closes finding #22), and
+`apps/demo`'s move from `spikes/m2-handoff` with a JSON file store and page
+pass.
+
+- **`apps/scanner` — §6.5 S1 (D74), commit `def7b64`.** `ThresholdPolicy`:
+  the age threshold is chosen from a fixed preset list (`{15,16,18,21,60,65}`)
+  rather than accepted verbatim from the verifier; the app locks the
+  first-seen threshold per origin (keyed by exact hostname, no wildcards)
+  and refuses a different threshold from the same hostname thereafter, with
+  the lock persisted in the existing log store. `NAMED_EXCEPTIONS` (the
+  exact-hostname allowlist for a second threshold) ships empty. Device-
+  confirmed 2026-09-05 — `docs/logs/M3-SCANNER-S1-EVIDENCE-2026-09-05.md`.
+- **`apps/scanner` — §6.5 S2/S3 (D75), commit `d50d5de`.** S2: a pre-tap
+  question line stating the origin and threshold before the user acts. S3:
+  scan-pane cleanup — the "Paste link" button (D75: deliberate clear/reset
+  on tap, dimmed with a hint while locked/reading, no bare-field auto-reset)
+  replaces the earlier inline paste field; a Diagnostics tab takes probe
+  output out of the scan pane; D79a's one-line last-scan summary
+  (`Last scan: <origin>, over <threshold>: <true|false>, delivered ✓ /
+  refused ✗ / not sent ✗ / read failed ✗`) replaces the old full
+  `report_view` dump in the scan pane itself (the full report/log text is
+  unaffected). Device-confirmed via three rounds covering wrong-details,
+  card-lift, stale-link and expired-link negatives —
+  `docs/logs/M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md`,
+  `docs/logs/M3-POC-EVIDENCE-2026-09-04.md` session 3.
+- **`apps/scanner` — D79b delivery wording, closes finding #22, commit
+  `aca234b`.** The raw report/log `"verdict:"` line is now derived by a
+  single pure `DeliveryVerdictLine` for every `DeliveryResult` variant
+  instead of one hardcoded `"verdict: PASS (...)"` string that previously
+  printed on every outcome regardless of what actually happened: `Accepted`
+  → `"verdict: DELIVERED (<what was sent>)"` (was `PASS`);
+  `RefusedHonestUnderThreshold` → `"verdict: REFUSED — under threshold,
+  nothing sent"`; `RefusedOtherReason` → `"verdict: REFUSED — <reason>,
+  nothing sent"`; `Rejected` (a non-2xx `direct_post` response, `Verifier
+  Refusal`, e.g. HTTP 409 `already_responded`) → its own classified reason,
+  never `PASS`; `NoResponseUri`/`TransportFailed` → `"verdict: NOT SENT —
+  ..."`. The user-facing outcome dialog (`MINT_CONFIRMED_MESSAGE`) changed
+  from "ID scanned successfully" to "Delivered — the website shows the
+  result." for both tiers — the dialog states delivery status only, never
+  the site's own verdict. Regression-proofed: `DeliveryVerdictLine` was
+  temporarily stubbed back to the old always-PASS text and 5 of 8
+  `DeliveryVerdictLineTest` cases failed against it before the real fix was
+  restored. `VerifierRefusal`/`VerifierRefusalTest` cover the 409 case
+  specifically; wrong-details re-entry and Diagnostics-tab routing fixed in
+  the same commit.
+- **`apps/demo` moved from `spikes/m2-handoff` (D73), commit `619af83`,
+  with a JSON file store, tier-B already-registered handling, and LAN bind
+  (commit `5f0cdd2`).** Duplicate-zktag rejection now persists across a
+  server restart (the opening M3 POC's riskiest assumption) instead of
+  living only in memory. M3 page pass (`aec100e`): layout, tier-A
+  comparison table, threshold 18 hardcoded, README, customer guide, and a
+  top-level `README.md` rewrite (version badge reads
+  `packages/chiproof/package.json`, unaffected by this bump). PRD history
+  v1.59–v1.62 recorded D76 (M3 origin fixed to
+  `http://127.0.0.1:8787` via `adb reverse tcp:8787 tcp:8787`, Q50 Play HTTPS
+  parked), D77 (tier-A "differs" column is nonce + challenge timestamps
+  only, no signature — by design, D27), D78 (client trust list, FR10, moved
+  to §6.5 S4 pending an attestation plug), and the S1/S1-evidence/exit-row
+  updates above.
+- **PRD (`docs/wiki/milestones.md`) §6.3 exit-criteria item 13** ("no
+  scanner changes") is flagged as a real, unresolved exit-criterion gap:
+  the M3 evidence gathered since S1–S3/D79 ran against a debug build
+  carrying those scanner-side changes, not the released `v0.5.0` APK. This
+  release is the owner's answer — option (a), cut a new release
+  incorporating §6.5 S1–S3/D79 and re-baseline M3's "released APK" to
+  `v0.6.0` — rather than option (b), re-running the M3-specific exit rows
+  against the untouched `v0.5.0` APK. **Item 13's own row is not marked
+  passed by this release**: cutting `v0.6.0` only gives M3 a released build
+  to re-run its exit rows against next; the re-run itself is unfinished
+  work, tracked separately.
+
 ## [0.5.0] — 2026-09-03
 
 First lockstep release (D72): from this release, `packages/chiproof` and
