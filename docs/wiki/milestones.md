@@ -461,6 +461,9 @@ Node process has no public HTTPS origin, and D76 rejected zkagent hosting one it
 — is not solved by M3 and is parked as **Q50** (questions.md), open. Owner, 2026-09-04:
 "playstore will be clearer when we get to it."
 
+Item ordering: item 7 (release-signing keystore) precedes item 1 (first upload) — the Play
+upload key is derived from the local keystore, so the keystore must exist first.
+
 1. First upload goes to a **closed testing track**, never production, using the current release
    line (v0.5.0 or later under D72 lockstep). Production is a separate, later owner decision.
 2. Deliverable 1: the **Play App Signing certificate digest**. Rationale: FR10 makes the scanner's
@@ -479,6 +482,27 @@ Node process has no public HTTPS origin, and D76 rejected zkagent hosting one it
    zero-knowledge (NO-GO #7, D1); no PII in screenshots (use the demo's value-free report view).
 6. Riskiest assumption to test first: that a passport-NFC-reading app with no backend passes
    closed-track review at all.
+7. **Release-signing keystore (D80).** Android APK signing uses a Java keystore (`.jks`/`.p12`)
+   holding ONE key pair plus a self-signed X.509 certificate; APK signature schemes support RSA,
+   DSA, and EC P-256 — NOT Ed25519. Scope: one key per app identity (package), not per device or
+   user; every update must be signed by the same key or Android refuses the install; losing the
+   key means the installed app can never be updated, only replaced under a new package name. Why
+   it matters: the SHA-256 of that certificate is the app's identity — the "package + cert digest"
+   of FR10/D17 that a verifier trust list pins under §6.5 S4; every debug build so far is signed
+   with the SDK's throwaway debug key, so its digest is meaningless; v0.6.0's
+   `assembleRegularRelease` produced only `app-regular-release-unsigned.apk` because no keystore
+   exists anywhere (recorded in `docs/logs/M3-EXIT-ROWS-v0.6.0-2026-09-05.md`). Play App Signing:
+   Google holds the app-signing key, the developer keeps an upload key; the Play-distributed APK
+   carries Google's digest, which is why item 2 above says the Play digest is unknown until a real
+   upload. Requirements (MUST): generate one EC P-256 keystore with `keytool`; store it under the
+   already-gitignored `secrets/` directory (`.gitignore` line 13) with an offline backup; feed it
+   to the build only via the existing `KEYSTORE_FILE`/`KEYSTORE_PASSWORD`/`KEY_ALIAS`/
+   `KEY_PASSWORD` env vars (`apps/scanner/app/build.gradle.kts` `signingConfigs`, unchanged); never
+   commit the keystore or passwords; record the local cert digest in the evidence log and PRD when
+   generated; from the next release, `assembleRegularRelease` MUST produce a signed APK, and the
+   release evidence MUST record the digest. This local key is distinct from the Play upload key
+   (item 2) and from the device attester keys in AndroidKeyStore (D38) — three different keys,
+   three different purposes. Status: PRD-gated, not built.
 
 ## 7. Riskiest-assumption register (what M0 must answer)
 
