@@ -85,20 +85,22 @@ cannot tell you the site's decision. Read the page.**
 | B | Tier A's bit, plus "have I seen this document at my site before" (the zktag) | Your name, birthdate, or any document field; anything that links you across two different sites | Must be explicitly requested by the site — never inferred or defaulted |
 | C | Booleans over identifying fields, from a published verb list (candidates named so far: name-match, expiry-bucket booleans; vocabulary not yet finalized) | Similarity scores, ever; any predicate off the published list | Refused outright unless the requesting site's issuer key is pinned in advance; the scanner refuses any tier-C request today; requires a future build (M3b) that is not started and is blocked on which verbs the vocabulary will contain |
 
-## 5. Preset age thresholds and per-site locking (planned)
+## 5. Preset age thresholds and per-site locking
 
 The published policy for which ages a site may ask about, and how it's locked once asked:
 
 | Rule | Detail |
 |---|---|
-| Preset list | A fixed, published set of allowed ages: 15, 16, 18, 21, 60, 65. A site must request exactly one of these; anything else is refused loudly, no scan sent |
-| Per-origin lock | The app locks onto the FIRST age it sees requested by a given site; a later request from that SAME site for a DIFFERENT age is refused — the site is told nothing about why |
-| Named exceptions | A small, app-side allowlist of exact website addresses (no wildcards) permitted to ask more than one age — membership is the app's decision, never the site's own choice |
+| Supported thresholds | A fixed, published set of allowed ages: 15, 16, 18, 21, 60, 65. A site must request exactly one of these; anything else is refused loudly, no scan sent |
+| One threshold per site | A site gets one threshold per hostname, locked the first time it's seen (first-seen). A later request from that SAME site for a DIFFERENT threshold is refused on the phone — the site learns nothing about why |
+| Two thresholds, two hostnames | A site that legitimately needs two different thresholds must use two separate hostnames — one threshold per hostname is the rule, with no exception by default |
+| Named exceptions | A small, app-side allowlist of exact website addresses (no wildcards) permitted to ask more than one threshold at a single hostname — membership is the app's own decision, never the site's; ships empty today |
 | Pre-tap question | Before you tap the scan/verify button, the app shows the exact question being asked (e.g. "This website asks if you are over 18"), read from the site's signed request, never a generic string |
-| Today | The current demo requests age 18 only — there is no age picker yet |
+| Reinstalling resets it | Reinstalling the app resets the per-site lock along with everything else in §10 — a fresh install remembers nothing |
+| Today | The current demo requests age 18 by default; a test-only override lets an operator try the other preset values (and one deliberately-unsupported value) for testing, without changing the page's own default |
 
-**Status: planned, not yet built** (scanner-side items S1 and S2). Reinstalling the app resets
-the per-site lock along with everything else in §10.
+**Status: built and device-confirmed, 2026-09-05** (scanner-side item S1;
+`docs/logs/M3-SCANNER-S1-EVIDENCE-2026-09-05.md`).
 
 ## 6. Scenarios
 
@@ -307,11 +309,13 @@ again on the next scan, exactly like a genuine first-time visit.
 
 | Item | What it will do | Status |
 |---|---|---|
-| S1 | Fixed preset threshold list (15/16/18/21/60/65), locked per site on first ask, named exceptions (§5) | Planned, scanner-side |
-| S2 | Shows the exact question ("This website asks if you are over 18") on-screen before you tap the scan button (§5) | Planned, scanner-side |
-| S3 | Scan-pane cleanup: dedicated "Paste link" button, dimmed and disabled mid-scan instead of today's plain field; below the button, a one-line "Last scan: `<site>`, over `<age>`: true/false, delivered ✓/refused ✗" summary replaces the full report view (D79) | Planned, scanner-side |
 | M3b | Tier C: attributed disclosure (e.g. name match, expiry-bucket booleans), pinned to approved issuers only | Not started — blocked on several open design questions |
 | Play Store track | Closed-testing upload of the scanner app; a showcase track only, doesn't change how the demo is reached | Not started — opens after a separate proof-of-concept passes |
+
+(§6.5 items S1, S2, and S3 — the preset threshold list/lock, the pre-tap question line, and the
+scan-pane cleanup — are all built and device-confirmed; see §5 above and §3's status row. Item S4
+(client trust list via an attestation plug) remains not built, blocked on an attestation plug —
+`docs/wiki/milestones.md` §6.5.)
 
 ---
 
