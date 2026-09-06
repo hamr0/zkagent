@@ -375,3 +375,67 @@ existing S1/D74 behaviour already device-confirmed in an earlier session.
 **No PII values appear anywhere above.** The document used in the device round is referred to only
 as "one real document," per the task boundary for this file; no MRZ field, name, date of birth, or
 document number appears.
+
+---
+
+## Device results (evening 2026-09-06)
+
+Orchestrator + owner, Pixel 6a, debug builds of `23c5adc` (stamped `23c5adc-dirty` for the rounds
+where `operator.json` was temporarily edited; the file was restored and the tree confirmed clean
+after each such build), `apps/demo` restarted from this branch's `server.mjs` on
+`127.0.0.1:8787` (`LINK_SCHEME=av`) via `adb reverse tcp:8787 tcp:8787`, so the `request_uri GET`
+log line added in the G1 fix was live for this run. One real document throughout.
+
+### G1 recheck (allowlist, pre-fetch gate) — PASSED
+
+Config `verifiers: ["example.invalid"]`. Owner tapped the tier-A button twice and the resulting
+page link. Verifier stdout: `tx created E6blK6Iqw605Ab-3`, `tx created W9R2Lyty2N0AmlFb`, and NO
+`request_uri GET` line for either transaction at that time — confirming the pre-fetch gate holds:
+the fix from the earlier validation pass (`f9ddcb9`) is device-proven, not just unit-proven.
+Device report log: `20:03:05` and `20:03:13`, both "Refused — This site (127.0.0.1) is not on
+this app's approved verifier list — refused.", "nothing left this device".
+
+**Observation for the ledger (cosmetic, not a blocker)**: both entries' header reads "Local scan
+(no site)" instead of "127.0.0.1:8787" — because the pre-fetch refusal fires before the origin is
+verified, while the entry's body names 127.0.0.1 regardless. Header and body disagree on whether a
+site is known at refusal time; left for a later pass to reconcile, not fixed here.
+
+### G3 (tier mode B) — PASSED both halves
+
+Config `tiers: "B"`, `verifiers` at the reference value. Tier-A tap: device `20:06:58` "Refused —
+This site asked for tier A, which this operator does not allow (tier B only) — refused.",
+"nothing left this device"; verifier shows a `request_uri GET` for that transaction (expected —
+tier is only known after the fetch, and the host itself is on the allowlist) and no verdict line.
+Tier-B tap, full scan: device `20:08:10` "Verified — the site accepted you", "a site-only
+pseudonym + a signed claim (age > 18: true)"; verifier `verdict transactionId=aWA0L6jl2_vkbSzE
+tier=B threshold=18 ok=true allowed=true reason=evidence-verified evidence=["sig-p256/1"]
+attester=matched`. Both halves of the G3 device procedure above are now closed; no device gap
+remains for tier mode.
+
+### G4 (multi_threshold_verifiers) — PASSED both halves, no scan needed
+
+Origin `127.0.0.1` was already locked at threshold 18 from earlier scans, so both halves used the
+demo's TEST-ONLY `?threshold=` override (`apps/demo/server.mjs` ~496-519) rather than a fresh
+scan: `curl -X POST 'http://127.0.0.1:8787/ui/presentations?threshold=21' -d '{"mode":"A"}'`,
+dispatching the resulting `app_link_av` with `adb shell am start -a android.intent.action.VIEW -d`.
+
+- (a) Config `multi_threshold_verifiers: ["127.0.0.1"]`: the app displayed the question line
+  "This website asks if you are over 21" with the document form — accepted, the exemption lifting
+  the per-origin lock as D74 rule 3 specifies.
+- (b) Reference config (`multi_threshold_verifiers: []`): logcat `20:11:50` `handoff REFUSED by
+  threshold policy (S1, D74) — host=127.0.0.1 threshold=21`, blocking notice "This site asked for
+  over 21, but it first asked for over 18 — refused.", a matching report-log entry at `20:11:50`.
+  Verifier: `tx created W5vV1wj7TnHubDxq mode=A threshold=18 embedded_threshold=21`, a
+  `request_uri GET` for it, no verdict line.
+
+Both halves of the G4 device procedure above are now closed; no device gap remains for
+multi-threshold origins.
+
+**Observation (pre-existing, not introduced by this branch — ledger candidate)**: at `20:12:04`
+the app fetched and verified `W9R2Lyty2N0AmlFb` (created `20:03:xx` during the G1 recheck above,
+`ttlMs=120000`) and displayed "over 18" — apparently the owner tapping the still-open round-2 page
+link from the G1 recheck. A transaction roughly 9 minutes past its stated TTL still had its
+`request_uri` served and its request object verified; expiry appears to be enforced only at
+`direct_post`, not at the `request_uri` fetch. Prior M3 device sessions tested expired links only
+at the post step. Whether the request fetch should also refuse on an expired `ttlMs` is a question
+for review — not asserted or fixed here.

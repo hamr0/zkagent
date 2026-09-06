@@ -28,7 +28,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   `NAMED_EXCEPTIONS` and the `app_name` resource now come from this config
   (single writer each) instead of hardcoded values. Device-verified
   2026-09-06 (evidence log:
-  `docs/logs/M3-S67-POC-EVIDENCE-2026-09-06.md`).
+  `docs/logs/M3-S67-POC-EVIDENCE-2026-09-06.md`). G1/G3/G4 device-confirmed
+  same evening.
 - **Docs.** PRD (`docs/wiki/decisions.md` D84, `milestones.md` §6.7.3–§6.7.7,
   `questions.md` Q52, `history.md` v1.75): owner rulings on the four §6.7
   decision points — `verifiers` hostname-only; reference `operator.json`
