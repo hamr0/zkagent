@@ -112,7 +112,24 @@ run_case "wildcard-hostname" "rule 4" '{
   "strings": {"app_name": "x"}
 }'
 
-# 5. Empty thresholds (rule 3)
+# 5. Port-suffixed verifiers entry (rule 4) — G6 (2026-09-06 validation
+# pass): confirms a real-origin-shaped entry like "127.0.0.1:8787" (the
+# exact string M3's dev origin looks like) is rejected at BUILD time, not
+# just at runtime match time (OperatorPolicyTest's
+# "a port-suffixed hostname never matches a bare allowlist entry").
+run_case "port-suffixed-verifier" "rule 4" '{
+  "schema_version": 1,
+  "operator": {"name": "x", "contact_url": "https://x.example"},
+  "tiers": "A+B",
+  "thresholds": [18],
+  "verifiers": ["127.0.0.1:8787"],
+  "multi_threshold_verifiers": [],
+  "evidence_plug": "none",
+  "tier_c_verifiers": [],
+  "strings": {"app_name": "x"}
+}'
+
+# 6. Empty thresholds (rule 3)
 run_case "empty-thresholds" "rule 3" '{
   "schema_version": 1,
   "operator": {"name": "x", "contact_url": "https://x.example"},

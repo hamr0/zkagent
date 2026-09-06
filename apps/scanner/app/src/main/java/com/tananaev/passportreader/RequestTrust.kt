@@ -405,5 +405,98 @@ object RequestTrust {
     sealed class Outcome {
         data class Verified(val request: VerifiedRequest) : Outcome()
         data class Refused(val reason: String) : Outcome()
+
+        /** G1 fix (2026-09-06) — [OperatorPolicy.gateMessageFor] refused
+         * [gateHostname] BEFORE [HandoffClient.fetchRequestRaw] was ever
+         * called (the request_uri host is parsed straight from the
+         * unverified `request_uri` string — that parse needs no network
+         * call and no JWS verification to be trustworthy, since it is
+         * simply the host this app is ABOUT to contact, not a claim about
+         * who signed anything). Distinct from [Refused] so
+         * `MainActivity.applyHandoffVerificationOutcome` can report this
+         * with the same operator-policy wording/report-log shape the
+         * post-verification gate uses, not the generic
+         * "request could not be verified" wording. */
+        data class PolicyRefused(val gateHostname: String?, val gateMessage: String) : Outcome()
+    }
+
+    // ------------------------------------------------- verifyHandoff (G1 fix)
+
+    /**
+     * G1 fix (2026-09-06, orchestrator gap list) — the full item-14
+     * pre-mint verification pipeline, extracted here (out of
+     * `MainActivity.verifyPendingHandoff`) so it is a plain, Activity-free
+     * function a JVM unit test can drive directly (AGENT_RULES: "Activities
+     * thin, logic in pure classes" — this function reads no Activity
+     * field). [resolveKey] and [fetchRaw] are injected — production callers
+     * pass [resolveVerifierKey]/[HandoffClient.fetchRequestRaw]; a test can
+     * pass a lambda that fails the test if invoked, proving the pre-fetch
+     * operator-policy gate below never reaches the network for a refused
+     * host.
+     *
+     * Order, in order: (1) `client_id`/`request_uri` origin match; (2) the
+     * §6.7 verifier-hostname allowlist gate
+     * ([OperatorPolicy.gateMessageFor]) — BEFORE [fetchRaw] or even
+     * [resolveKey] is called, so an unlisted host is never contacted at
+     * all (the bug this fix closes: previously this gate only ran
+     * post-verification, in `MainActivity.applyHandoffVerificationOutcome`,
+     * by which point the request_uri GET below had already reached the
+     * unlisted host); (3) resolve a trusted key for the origin; (4) fetch
+     * and verify the request object's ES256 JWS against that key; (5) the
+     * verified payload's own `response_uri` must resolve to the SAME
+     * origin as (1). Any failure refuses.
+     */
+    fun verifyHandoff(
+        handoff: HandoffClient.PendingHandoff,
+        resolveKey: (String) -> ResolvedKey?,
+        fetchRaw: (String) -> HandoffClient.RawFetch,
+    ): Outcome {
+        val requestUriOrigin = originOf(handoff.requestUri)
+            ?: return Outcome.Refused("request_uri has no parseable origin: ${handoff.requestUri}")
+        val clientIdOrigin = handoff.clientId?.let {
+            originOf(it) ?: return Outcome.Refused("client_id has no parseable origin: $it")
+        }
+        if (clientIdOrigin != null && clientIdOrigin != requestUriOrigin) {
+            return Outcome.Refused("origin mismatch: client_id=$clientIdOrigin request_uri=$requestUriOrigin")
+        }
+        val origin = requestUriOrigin
+
+        // G1 fix — pre-fetch gate. Same pure function
+        // (OperatorPolicy.gateMessageFor) the post-verification
+        // defence-in-depth check in MainActivity re-runs — one refusal
+        // wording, not two copies.
+        val gateHostname = ThresholdPolicy.hostnameOf(origin)
+        val gateMessage = OperatorPolicy.gateMessageFor(gateHostname)
+        if (gateMessage != null) {
+            return Outcome.PolicyRefused(gateHostname, gateMessage)
+        }
+
+        val key = resolveKey(origin)
+            ?: return Outcome.Refused("no trusted request-signer key resolvable for origin $origin")
+
+        val raw = try {
+            fetchRaw(handoff.requestUri)
+        } catch (e: HandoffClient.HandoffHttpException) {
+            return Outcome.Refused("request_uri fetch failed: HTTP ${e.httpStatus}: ${e.message}")
+        } catch (e: Exception) {
+            return Outcome.Refused("request_uri fetch failed: ${e.javaClass.simpleName}: ${e.message}")
+        }
+
+        val verified = verifyRequestObject(raw.body, key)
+        val payload = verified.payload
+        if (!verified.ok || payload == null) {
+            return Outcome.Refused("JWS verification failed: ${verified.reason}")
+        }
+
+        val responseUriStr = payload.optString("response_uri", "").ifEmpty { null }
+            ?: return Outcome.Refused("verified request object carries no response_uri")
+        val responseUriOrigin = originOf(responseUriStr)
+            ?: return Outcome.Refused("response_uri has no parseable origin: $responseUriStr")
+        if (responseUriOrigin != origin) {
+            return Outcome.Refused("origin mismatch: response_uri=$responseUriOrigin request_uri=$requestUriOrigin")
+        }
+
+        Log.i(TAG, "M2 stage: handoff request object verified — origin=$origin signature_verified=true key_kind=${if (key.isDev) "dev-pinned" else "well-known"}")
+        return Outcome.Verified(VerifiedRequest(payload, origin))
     }
 }

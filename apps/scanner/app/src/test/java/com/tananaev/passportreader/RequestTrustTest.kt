@@ -383,4 +383,80 @@ class RequestTrustTest {
     fun `thresholdOf - a large in-range Long value round-trips correctly`() {
         assertEquals(1000, RequestTrust.thresholdOf(requestWithThreshold(1000L)))
     }
+
+    // ------------------------------------------ verifyHandoff pipeline (G1)
+
+    // Fails the test if invoked — the whole point of these two negative
+    // tests is proving the pre-fetch operator-policy gate returns BEFORE
+    // either of these would ever run for a refused hostname. No mock
+    // framework: a plain lambda that throws.
+    private val refusingResolveKey: (String) -> RequestTrust.ResolvedKey? =
+        { throw AssertionError("resolveKey must not be called for a gate-refused host") }
+    private val refusingFetchRaw: (String) -> HandoffClient.RawFetch =
+        { throw AssertionError("fetchRaw must not be called for a gate-refused host") }
+
+    @Test
+    fun `verifyHandoff - G1, unlisted hostname is refused BEFORE resolveKey or fetchRaw is ever called`() {
+        // This build's committed reference operator.json declares
+        // verifiers=["127.0.0.1"] (D84 point 2) — "evil.example" is not on
+        // it.
+        val handoff = HandoffClient.PendingHandoff(clientId = null, requestUri = "http://evil.example/request")
+        val outcome = RequestTrust.verifyHandoff(handoff, refusingResolveKey, refusingFetchRaw)
+        assertTrue(outcome is RequestTrust.Outcome.PolicyRefused)
+        val refused = outcome as RequestTrust.Outcome.PolicyRefused
+        assertEquals("evil.example", refused.gateHostname)
+        assertTrue(refused.gateMessage.contains("evil.example"))
+        // (no assertion needed beyond the lambdas above never throwing —
+        // AssertionError would have propagated out of verifyHandoff and
+        // failed this test already if either had been invoked.)
+    }
+
+    @Test
+    fun `verifyHandoff - G1, listed hostname proceeds past the gate to resolveKey and fetchRaw`() {
+        var resolveKeyCalled = false
+        var fetchRawCalled = false
+        val handoff = HandoffClient.PendingHandoff(clientId = null, requestUri = "http://127.0.0.1:4173/request.jwt/xyz")
+        val outcome = RequestTrust.verifyHandoff(
+            handoff,
+            resolveKey = { origin -> resolveKeyCalled = true; RequestTrust.resolveVerifierKey(origin) },
+            fetchRaw = { fetchRawCalled = true; HandoffClient.RawFetch(GOOD_JWS, 200) },
+        )
+        assertTrue("expected resolveKey to be called for an allowed host", resolveKeyCalled)
+        assertTrue("expected fetchRaw to be called for an allowed host", fetchRawCalled)
+        assertTrue("expected Verified, got $outcome", outcome is RequestTrust.Outcome.Verified)
+    }
+
+    // -------------------------------------------- verifyHandoff origin-bind (G5)
+
+    @Test
+    fun `verifyHandoff - G5, a verified request whose response_uri origin differs from request_uri origin is refused`() {
+        // GOOD_JWS's payload (decoded, see class doc) carries
+        // response_uri=http://127.0.0.1:4173/wallet/direct_post — this
+        // handoff's request_uri deliberately uses a DIFFERENT port
+        // (9999), so its origin (http://127.0.0.1:9999) cannot match.
+        // 127.0.0.1 stays on the allowlist regardless of port (§6.7's
+        // hostname-only allowlist), so this exercises RequestTrust's own
+        // origin-binding check, not the §6.7 gate.
+        val handoff = HandoffClient.PendingHandoff(clientId = null, requestUri = "http://127.0.0.1:9999/request.jwt/xyz")
+        val outcome = RequestTrust.verifyHandoff(
+            handoff,
+            resolveKey = { origin -> RequestTrust.resolveVerifierKey(origin) },
+            fetchRaw = { HandoffClient.RawFetch(GOOD_JWS, 200) },
+        )
+        assertTrue("expected Refused, got $outcome", outcome is RequestTrust.Outcome.Refused)
+        val refused = outcome as RequestTrust.Outcome.Refused
+        assertTrue(refused.reason.startsWith("origin mismatch: response_uri="))
+    }
+
+    @Test
+    fun `verifyHandoff - G5 positive control, matching request_uri and response_uri origins verify`() {
+        val handoff = HandoffClient.PendingHandoff(clientId = null, requestUri = "http://127.0.0.1:4173/request.jwt/xyz")
+        val outcome = RequestTrust.verifyHandoff(
+            handoff,
+            resolveKey = { origin -> RequestTrust.resolveVerifierKey(origin) },
+            fetchRaw = { HandoffClient.RawFetch(GOOD_JWS, 200) },
+        )
+        assertTrue("expected Verified, got $outcome", outcome is RequestTrust.Outcome.Verified)
+        assertEquals("http://127.0.0.1:4173", (outcome as RequestTrust.Outcome.Verified).request.origin)
+    }
 }

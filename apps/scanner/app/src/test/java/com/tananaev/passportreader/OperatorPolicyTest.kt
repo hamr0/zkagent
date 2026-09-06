@@ -37,7 +37,31 @@ class OperatorPolicyTest {
 
     @Test
     fun `a port-suffixed hostname never matches a bare allowlist entry`() {
+        // G6 (2026-09-06 validation pass) — "127.0.0.1:8787" is the exact
+        // shape M3's real dev origin looks like as a string; this is what
+        // explains the device round-1 admit (verifiers=["127.0.0.1"]) by
+        // code, not luck: ThresholdPolicy.hostnameOf strips the port BEFORE
+        // this comparison ever sees it, so isVerifierAllowed itself never
+        // has to.
         assertFalse(OperatorPolicy.isVerifierAllowed("127.0.0.1:8787", setOf("127.0.0.1")))
+    }
+
+    @Test
+    fun `leading and trailing whitespace on the hostname is trimmed before matching`() {
+        // G6: this side is untrimmed operator input (or a hostname a
+        // caller failed to trim) — allowedHosts is already trimmed at
+        // OperatorPolicy.parseHostnameList time, so this asserts the OTHER
+        // side, the [hostname] argument.
+        assertTrue(OperatorPolicy.isVerifierAllowed("  127.0.0.1  ", setOf("127.0.0.1")))
+        assertTrue(OperatorPolicy.isVerifierAllowed("127.0.0.1", setOf("  127.0.0.1  ")))
+    }
+
+    @Test
+    fun `mixed-case hostname matches regardless of which side is uppercase`() {
+        // G6: an IDN/mixed-case variant, beyond the single-word
+        // "hostname matching is case-insensitive" case above.
+        assertTrue(OperatorPolicy.isVerifierAllowed("StAtE.GoV", setOf("state.gov")))
+        assertTrue(OperatorPolicy.isVerifierAllowed("state.gov", setOf("StAtE.GoV")))
     }
 
     @Test
@@ -51,6 +75,31 @@ class OperatorPolicyTest {
         val allowlist = setOf("example.com")
         assertFalse(OperatorPolicy.isVerifierAllowed("sub.example.com", allowlist))
         assertFalse(OperatorPolicy.isVerifierAllowed("xexample.com", allowlist))
+    }
+
+    // -------------------------------------------------- gateMessageFor (G1)
+
+    @Test
+    fun `gateMessageFor - null hostname is refused`() {
+        assertEquals(
+            "This site's origin could not be resolved to a hostname — refused.",
+            OperatorPolicy.gateMessageFor(null),
+        )
+    }
+
+    @Test
+    fun `gateMessageFor - listed hostname admits (null message)`() {
+        // gateMessageFor's one-arg form reads THIS build's committed
+        // reference operator.json (verifiers=["127.0.0.1"], D84 point 2).
+        assertEquals(null, OperatorPolicy.gateMessageFor("127.0.0.1"))
+    }
+
+    @Test
+    fun `gateMessageFor - unlisted hostname is refused, naming the hostname`() {
+        assertEquals(
+            "This site (evil.example) is not on this app's approved verifier list — refused.",
+            OperatorPolicy.gateMessageFor("evil.example"),
+        )
     }
 
     // ---------------------------------------------------- isTierAllowed

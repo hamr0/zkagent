@@ -79,6 +79,27 @@ object OperatorPolicy {
     fun isVerifierAllowed(hostname: String, allowedHosts: Set<String>): Boolean =
         allowedHosts.any { it.trim().lowercase() == hostname.trim().lowercase() }
 
+    /** G1 fix (2026-09-06, orchestrator gap list): the ONE pure function
+     * both call sites use for the verifier-hostname-allowlist refusal —
+     * the pre-fetch dispatch check (`MainActivity.verifyPendingHandoff`,
+     * BEFORE [HandoffClient.fetchRequestRaw] ever contacts an unlisted
+     * host) and the post-verification Verified-branch check
+     * (`MainActivity.applyHandoffVerificationOutcome`, defence in depth —
+     * [RequestTrust]'s origin-consistency check already binds
+     * `response_uri`==`request_uri`'s origin, but re-checking here costs
+     * nothing and survives a future change to that binding). Exactly ONE
+     * refusal wording lives here — neither call site spells its own
+     * message. [hostname] null means "could not resolve a hostname from
+     * the origin" (refused, never implicitly allowed); returns null when
+     * [hostname] is allowed (nothing to refuse). */
+    fun gateMessageFor(hostname: String?): String? = if (hostname == null) {
+        "This site's origin could not be resolved to a hostname — refused."
+    } else if (!isVerifierAllowed(hostname)) {
+        "This site ($hostname) is not on this app's approved verifier list — refused."
+    } else {
+        null
+    }
+
     /** Convenience overload reading this build's [TIERS]. */
     fun isTierAllowed(tier: String): Boolean = isTierAllowed(tier, TIERS)
 

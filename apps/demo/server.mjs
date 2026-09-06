@@ -592,6 +592,15 @@ export function createApp() {
       const requestId = path.slice('/wallet/request.jwt/'.length);
       const tx = byRequestId.get(requestId);
       if (!tx) { sendJson(res, 404, { error: 'unknown_request' }); return; }
+      // G1 fix (2026-09-06, orchestrator gap list) — the scanner's §6.7
+      // hostname allowlist gate now refuses an unlisted verifier BEFORE
+      // this GET is ever made; this log line lets a device run PROVE that
+      // absence by showing no line appears here for a refused link, the
+      // same way it showed one DID appear for round 1 of the original POC
+      // run. Value-free: transactionId + user-agent only, never the
+      // requestId/challenge/nonce.
+      // eslint-disable-next-line no-console
+      console.log(`[apps/demo] request_uri GET transactionId=${tx.transactionId} ua=${req.headers['user-agent'] ?? 'unknown'}`);
       // ES256-signed request object (JAR, RFC 9101) — matches the EU reference
       // verifier's sign-by-default. Claims = exactly the request-object JSON;
       // typ per the OpenID4VP request-object convention (oauth-authz-req+jwt).

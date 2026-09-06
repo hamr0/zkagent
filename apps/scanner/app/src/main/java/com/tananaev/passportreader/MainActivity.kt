@@ -1212,50 +1212,27 @@ abstract class MainActivity : AppCompatActivity() {
     }
 
     /** §6.2 item 14 (D34/D37), in order: (1) `client_id`/`request_uri` origin
-     * match, before anything else; (2) resolve a trusted key for that
-     * origin (dev-pinned for `http://127.0.0.1`/`localhost`, well-known
-     * fetch otherwise); (3) GET the request object and verify its ES256 JWS
-     * against that key; (4) the verified payload's OWN `response_uri` must
-     * resolve to the SAME origin as (1). Any failure refuses — see class doc. */
-    private fun verifyPendingHandoff(handoff: HandoffClient.PendingHandoff): RequestTrust.Outcome {
-        val requestUriOrigin = RequestTrust.originOf(handoff.requestUri)
-            ?: return RequestTrust.Outcome.Refused("request_uri has no parseable origin: ${handoff.requestUri}")
-        val clientIdOrigin = handoff.clientId?.let {
-            RequestTrust.originOf(it) ?: return RequestTrust.Outcome.Refused("client_id has no parseable origin: $it")
-        }
-        if (clientIdOrigin != null && clientIdOrigin != requestUriOrigin) {
-            return RequestTrust.Outcome.Refused("origin mismatch: client_id=$clientIdOrigin request_uri=$requestUriOrigin")
-        }
-        val origin = requestUriOrigin
-
-        val key = RequestTrust.resolveVerifierKey(origin)
-            ?: return RequestTrust.Outcome.Refused("no trusted request-signer key resolvable for origin $origin")
-
-        val raw = try {
-            HandoffClient.fetchRequestRaw(handoff.requestUri)
-        } catch (e: HandoffClient.HandoffHttpException) {
-            return RequestTrust.Outcome.Refused("request_uri fetch failed: HTTP ${e.httpStatus}: ${e.message}")
-        } catch (e: Exception) {
-            return RequestTrust.Outcome.Refused("request_uri fetch failed: ${e.javaClass.simpleName}: ${e.message}")
-        }
-
-        val verified = RequestTrust.verifyRequestObject(raw.body, key)
-        val payload = verified.payload
-        if (!verified.ok || payload == null) {
-            return RequestTrust.Outcome.Refused("JWS verification failed: ${verified.reason}")
-        }
-
-        val responseUriStr = payload.optString("response_uri", "").ifEmpty { null }
-            ?: return RequestTrust.Outcome.Refused("verified request object carries no response_uri")
-        val responseUriOrigin = RequestTrust.originOf(responseUriStr)
-            ?: return RequestTrust.Outcome.Refused("response_uri has no parseable origin: $responseUriStr")
-        if (responseUriOrigin != origin) {
-            return RequestTrust.Outcome.Refused("origin mismatch: response_uri=$responseUriOrigin request_uri=$requestUriOrigin")
-        }
-
-        Log.i(TAG, "M2 stage: handoff request object verified — origin=$origin signature_verified=true key_kind=${if (key.isDev) "dev-pinned" else "well-known"}")
-        return RequestTrust.Outcome.Verified(RequestTrust.VerifiedRequest(payload, origin))
-    }
+     * match, before anything else; (2) G1 fix (2026-09-06) — the §6.7
+     * verifier-hostname allowlist gate ([OperatorPolicy.gateMessageFor]),
+     * BEFORE any network call, so an unlisted host is never even GETed
+     * (previously this check only ran post-verification, in
+     * applyHandoffVerificationOutcome's Verified branch, by which point
+     * fetchRequestRaw had already contacted the unlisted host); (3) resolve
+     * a trusted key for that origin (dev-pinned for
+     * `http://127.0.0.1`/`localhost`, well-known fetch otherwise); (4) GET
+     * the request object and verify its ES256 JWS against that key; (5) the
+     * verified payload's OWN `response_uri` must resolve to the SAME origin
+     * as (1). Any failure refuses — see class doc.
+     *
+     * Thin Activity wrapper (AGENT_RULES: "Activities thin, logic in pure
+     * classes") — the actual pipeline is [RequestTrust.verifyHandoff], a
+     * plain JVM-testable function with [RequestTrust.resolveVerifierKey]/
+     * [HandoffClient.fetchRequestRaw] injected as the real implementations,
+     * so a unit test can substitute lambdas that fail the test if called,
+     * proving the pre-fetch gate never reaches the network for an unlisted
+     * host. */
+    private fun verifyPendingHandoff(handoff: HandoffClient.PendingHandoff): RequestTrust.Outcome =
+        RequestTrust.verifyHandoff(handoff, RequestTrust::resolveVerifierKey, HandoffClient::fetchRequestRaw)
 
     /** Applies [outcome] on the UI thread. A superseded in-flight
      * verification (a newer handoff replaced [pendingHandoff] before this
@@ -1291,44 +1268,37 @@ abstract class MainActivity : AppCompatActivity() {
                 // hostname is refused loudly before any chip read can
                 // happen — no mint, nothing left this device, same shape as
                 // every other admission refusal in this branch.
+                //
+                // G1 fix (2026-09-06): this is now DEFENCE IN DEPTH — the
+                // primary hostname-allowlist check runs pre-fetch, in
+                // verifyPendingHandoff, and surfaces as
+                // RequestTrust.Outcome.PolicyRefused (handled below, same
+                // [refuseByOperatorPolicy] helper). By the time a Verified
+                // outcome reaches here, [outcome.request.origin] has
+                // already passed that pre-fetch gate AND RequestTrust's own
+                // origin-consistency check (response_uri==request_uri) — so
+                // this re-check only matters if a future change breaks
+                // that binding; it costs nothing to keep.
                 val gateHostname = ThresholdPolicy.hostnameOf(outcome.request.origin)
-                val gateMessage = if (gateHostname == null) {
-                    // outcome.request.origin already parsed successfully in
-                    // verifyPendingHandoff (RequestTrust.originOf), so this
-                    // is not expected to happen — refuse rather than treat
-                    // an unresolvable hostname as implicitly allowed.
-                    "This site's origin could not be resolved to a hostname — refused."
-                } else if (!OperatorPolicy.isVerifierAllowed(gateHostname)) {
-                    "This site ($gateHostname) is not on this app's approved verifier list — refused."
-                } else {
-                    val tier = RequestTrust.tierOf(outcome.request.json)
-                    // §6.7 item 1 — tier-mode gate. Only tier "A" is judged
-                    // here; tier "C" stays refused outright by the existing
-                    // tierOutcomeFor path (item 13), and an absent/invalid
-                    // tier is likewise left to that existing fail-loud
-                    // check at lock time — this gate has nothing new to say
-                    // about either case.
-                    if (tier == "A" && !OperatorPolicy.isTierAllowed("A")) {
-                        "This site asked for tier A, which this operator does not allow (tier B only) — refused."
-                    } else null
-                }
+                val gateMessage = OperatorPolicy.gateMessageFor(gateHostname)
                 if (gateMessage != null) {
-                    Log.e(TAG, "M2 stage: handoff REFUSED by operator policy (§6.7 POC) — host=$gateHostname")
-                    pendingHandoff = null
-                    verifiedRequest = null
-                    emitReport(
-                        "handoff: REFUSED — operator policy (§6.7): $gateMessage",
-                        ReportLog.DisclosureSummary(
-                            site = siteTitleFor(outcome.request.origin),
-                            result = "Refused — $gateMessage",
-                            sent = "nothing left this device",
-                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
-                        ),
-                        // item 22: a refusal — see ReportLog.Outcome's doc.
-                        outcome = ReportLog.Outcome.FAIL,
+                    refuseByOperatorPolicy(siteTitleFor(outcome.request.origin), gateHostname, gateMessage)
+                    return
+                }
+
+                val tier = RequestTrust.tierOf(outcome.request.json)
+                // §6.7 item 1 — tier-mode gate. Only tier "A" is judged
+                // here; tier "C" stays refused outright by the existing
+                // tierOutcomeFor path (item 13), and an absent/invalid
+                // tier is likewise left to that existing fail-loud
+                // check at lock time — this gate has nothing new to say
+                // about either case.
+                if (tier == "A" && !OperatorPolicy.isTierAllowed("A")) {
+                    refuseByOperatorPolicy(
+                        siteTitleFor(outcome.request.origin),
+                        gateHostname,
+                        "This site asked for tier A, which this operator does not allow (tier B only) — refused.",
                     )
-                    refreshSessionDisplay()
-                    showBlockingNotice(gateMessage)
                     return
                 }
 
@@ -1446,7 +1416,48 @@ abstract class MainActivity : AppCompatActivity() {
                 // immediately — see showBlockingOutcomeDialog's doc.
                 showBlockingOutcomeDialog("Handoff refused: ${outcome.reason}", isAccessEstablishmentFailure = false)
             }
+            is RequestTrust.Outcome.PolicyRefused -> {
+                // G1 fix (2026-09-06) — the pre-fetch hostname-allowlist
+                // gate (verifyPendingHandoff, before fetchRequestRaw ever
+                // ran) refused before the request object's JWS was even
+                // fetched/verified. Same §6.7 wording/report-log shape as
+                // the post-verification defence-in-depth check above — see
+                // [refuseByOperatorPolicy]. §6.2 item 16 (D46): the origin
+                // was never verified here (nothing was fetched, let alone
+                // signature-checked), so SITE_NO_HANDOFF is used, exactly
+                // like the plain [RequestTrust.Outcome.Refused] branch
+                // above — never [siteTitleFor], which would show an
+                // unconfirmed origin as though it were trusted.
+                refuseByOperatorPolicy(SITE_NO_HANDOFF, outcome.gateHostname, outcome.gateMessage)
+            }
         }
+    }
+
+    /** G1 fix (2026-09-06) — the ONE place a §6.7 operator-policy refusal
+     * (hostname allowlist or tier mode) is logged, reported, and shown to
+     * the user, shared between [RequestTrust.Outcome.PolicyRefused]
+     * (pre-fetch gate) and the [RequestTrust.Outcome.Verified] branch's
+     * defence-in-depth checks above — one refusal path, not per-call-site
+     * copies. [site] is the report's site label: [siteTitleFor] for a
+     * confirmed origin (post-verification), [SITE_NO_HANDOFF] for the
+     * pre-fetch case where nothing has been verified yet (D46). */
+    private fun refuseByOperatorPolicy(site: String, gateHostname: String?, gateMessage: String) {
+        Log.e(TAG, "M2 stage: handoff REFUSED by operator policy (§6.7 POC) — host=$gateHostname")
+        pendingHandoff = null
+        verifiedRequest = null
+        emitReport(
+            "handoff: REFUSED — operator policy (§6.7): $gateMessage",
+            ReportLog.DisclosureSummary(
+                site = site,
+                result = "Refused — $gateMessage",
+                sent = "nothing left this device",
+                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+            ),
+            // item 22: a refusal — see ReportLog.Outcome's doc.
+            outcome = ReportLog.Outcome.FAIL,
+        )
+        refreshSessionDisplay()
+        showBlockingNotice(gateMessage)
     }
 
     /** §6.2 item 6: MRZ is kept on an access-establishment failure OR
