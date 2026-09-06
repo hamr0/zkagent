@@ -310,6 +310,80 @@ This local release-signing key, a Play upload key (if you list on Play), and the
 `AndroidKeyStore` attester keys (D38) are three different keys for three different purposes —
 keep that distinction; see PRD §6.6 item 7 and `docs/wiki/decisions.md` D38/D80/D81.
 
+## 7.2 Operator config (`operator.json`)
+
+What it is: `apps/scanner/operator.json`, one JSON file at the module root, next to
+`apps/scanner/README.md`. It is how an operator adjusts the knobs listed in §7 above without
+forking or editing source (D81, D82) — the file, not the code, carries your verifier allowlist,
+your threshold list, and your app's display name.
+
+**Build-time only, never fetched at runtime.** Gradle reads and validates the file when you run a
+build (`app/build.gradle.kts`, configure time), and bakes the validated values into
+`BuildConfig`/`R.string` constants inside the APK. The app never re-reads the file, and never
+fetches it — or anything like it — from a server while running. This is deliberate: a
+runtime-fetched config would reintroduce a hosted dependency and a remotely-controllable
+allowlist, which is exactly what NO-GO #3 rules out. Changing a knob means editing the file and
+rebuilding; there is no over-the-air knob update.
+
+**Knobs, allowed values, and what a bad value does:**
+
+| Knob | Allowed values | If wrong |
+|---|---|---|
+| `schema_version` | Must be `1` | Build fails, names the missing/wrong value |
+| `tiers` | `"A+B"` or `"B"` (exact string) | Build fails |
+| `thresholds` | Non-empty subset of the fixed, published list `{15, 16, 18, 21, 60, 65}` (D74) | Build fails, names the offending value — you cannot add a threshold outside this list |
+| `verifiers` | Non-empty array of bare hostnames — no scheme, no port, no wildcard | Build fails, names the bad entry (e.g. a wildcard or a `host:port` string) |
+| `multi_threshold_verifiers` | Array of bare hostnames, same shape rule as `verifiers`; default `[]` | Build fails on the same shape violations as `verifiers` |
+| `evidence_plug` | `"none"` only, today | Build fails if it names anything else — no attestation plug ships in this repo yet |
+| `tier_c_verifiers` | Must stay `[]` | Build fails if non-empty |
+| `strings.app_name` | Any string | N/A — this is the only free-text knob |
+| any unknown key, at the top level or under `strings` | — | Build fails (typo/scope-creep protection; nothing is silently ignored) |
+| the file itself | Must exist | Build fails if missing, unless you're building the repo's own committed reference config |
+
+**Verifier hostnames.** `verifiers` is your allowlist of sites the scanner will accept a request
+from — hostnames only, matching the app's existing D74/D38 host-only convention: no `https://`,
+no port. The local M3 dev origin `http://127.0.0.1:8787` is written as `"127.0.0.1"` in this
+field. If a site isn't on this list, the app refuses the request before doing anything else — see
+below for exactly what that looks like.
+
+**`multi_threshold_verifiers`.** This is D74 rule 2's named-exceptions list, exposed as a knob —
+the same list `ThresholdPolicy.NAMED_EXCEPTIONS` already carries in code, ships empty by default.
+Under the default policy, a site locks its threshold on the first question it ever asks and is
+refused if it later asks a different one (D74 rule 1); listing a hostname here is how an operator
+grants that one site permission to ask more than one threshold. It is not a general escape hatch —
+membership is the operator's call, never the site's own.
+
+**`tier_c_verifiers`.** Reserved for a future milestone (M3b) and must stay `[]` today. A
+non-empty list fails the build — tier C isn't built yet (D73), so there is nothing for this field
+to enable.
+
+**`strings.app_name` is the only string knob.** You can rename the app; you cannot change the
+question the app asks before a scan. The disclosure sentence ("This website asks if you are over
+N") is computed in code, not read from this file, in every schema version — D74 rule 3 makes its
+exact wording a user-protection requirement, not branding, so it stays out of operator control by
+design.
+
+**Signing is not in this file.** Your release keystore is a separate build input, supplied via
+environment variables (§7.1) — `operator.json` never references or contains key material.
+
+**Sanity-checking your file.** `apps/scanner/scripts/operator-json-negative.sh` runs a set of
+deliberately-bad `operator.json` variants against `:app:assembleRegularDebug` and confirms each
+one fails the build while naming the violated rule, then restores your real file and confirms a
+clean build succeeds again. Run it after editing the validator itself, or any time you want to
+confirm the build-fails-closed behavior on your own machine.
+
+**What a refused site's users see.** If a site isn't in `verifiers`, the app shows an in-app
+refusal naming the unlisted hostname — before any read or mint happens. The site itself receives
+no request at all; it has no way to tell the difference between "the user declined" and "the
+operator's allowlist doesn't include me."
+
+**Verifier-side (`apps/demo`) config is a later round.** This file only configures the scanner
+app. The demo verifier's own knobs (link scheme, threshold, scope domain, signer keys) are still
+env-var driven and untouched by this schema — deferred to a later round (D84 point 4).
+
+See `docs/wiki/milestones.md` §6.7 for the full schema and the nine build-time validation rules,
+and `docs/wiki/decisions.md` D74, D81, D82, D84 for the decisions behind them.
+
 ## 8. Default signing and trust
 
 What's actually checked, and what isn't yet:

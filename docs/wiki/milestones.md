@@ -701,8 +701,8 @@ exactly as built — the config only supplies which values are legal, never how 
 Q52 stays deferred (D84; multi-threshold-per-registrable-domain is an allowlist-authoring
 pattern, not a schema change). The owner's own showcase build becomes just one `operator.json`
 among many (D81) — its `thresholds`/`verifiers` are today's hardcoded values, committed as the
-reference config (D84 point 2). `docs/product/customer-guide.md` §7 gets a `operator.json`
-walkthrough once this is built, not now.
+reference config (D84 point 2). `docs/product/customer-guide.md` §7.2 now carries the
+`operator.json` walkthrough.
 
 ### 6.7.7 Decided (D84)
 
@@ -717,8 +717,12 @@ walkthrough once this is built, not now.
    round is already big" — §6.7 stays scanner-scoped; the demo's env-var knobs are untouched.
 
 **Status: POC + validation pass device-verified 2026-09-06 (G1 pre-fetch gate, G3 tier mode, G4
-multi-threshold all confirmed on device against apps/demo; evidence log). Remaining:
-release-signed gated build at next `/release`; apps/demo operator config deferred (D84).**
+multi-threshold all confirmed on device against apps/demo; evidence log). Close-out pass the same
+evening: accept (delivered) path device-confirmed on the fixed build for the first time; the
+`DroppedOutcomeRelay` duplicate-notice fix stays unit-proven only, not device-reproduced post-fix
+(0 of 14 cold launches triggered the platform double-instance relaunch); the negative script now
+covers all 9 validation rules; customer-guide §7.2 written. Remaining: release-signed gated build
+at next `/release`; apps/demo operator config deferred (D84).**
 
 See `docs/logs/M3-S67-POC-EVIDENCE-2026-09-06.md`.
 

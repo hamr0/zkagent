@@ -1121,3 +1121,37 @@ JUnit XML, not from a device run.
   errors / 0 skipped, up from 383 by the 15 new cases this session's three fixes added combined (not
   isolated per-fix in this count). Status stays CLOSED — this is the wording note's own resolution,
   not a new finding.
+
+### 2026-09-06 — #23: a malformed `av://` VIEW intent (missing `request_uri`) launches the app with no log line and no user-facing notice
+
+- **Source**: device run (S67-POC close-out pass, orchestrator, honesty-audit-triggered device
+  round)
+- **Anchor**: `apps/scanner/app/src/main/java/com/tananaev/passportreader/MainActivity.kt`, the
+  `onCreate`/`onNewIntent` `av://` intent-parsing path — anchored at working-tree state on
+  `feat/s67-poc` `0366a21` plus this session's uncommitted relay/negative-script/docs changes;
+  re-anchor on read.
+- **Finding**: an `av://` VIEW intent whose data URI lacks a `request_uri` parameter (produced
+  here by an unquoted `&` inside an `adb shell am start` command, which the device shell split on)
+  launches the app successfully but silently — no `Log` call fires for the malformed intent, and
+  no notice reaches the user. The app simply shows "Local scan (no site)", the same screen it
+  shows when launched with no handoff offered at all, so a malformed link and no link look
+  identical to the user and to the log.
+- **Status**: OPEN. Question for review: should a malformed `av://` link log and/or say something,
+  rather than reading as if the link had simply never been tapped?
+
+### 2026-09-06 — #24: a stale recents task can resurface an old intent as if it were fresh, under scripted `adb install -r` / `am start` device testing
+
+- **Source**: device run (S67-POC close-out pass, orchestrator, same round as #23)
+- **Anchor**: test procedure only, not app code — `apps/scanner`'s `singleTask` launch mode
+  (Finding #19, D63) interacting with `adb install -r` + `am start` scripting.
+- **Finding**: `adb install -r` leaves the scanner's task sitting in recents. A following `am
+  start … -a android.intent.action.VIEW` whose data is malformed reports `"Activity not started,
+  its current task has been brought to the front"` and the app re-processes the task's OLD root
+  intent instead of the new one — observed here as the previous session's threshold-21 link
+  resurfacing at 21:30:44 looking like a fresh refusal, with the verifier's own log showing no
+  fetch for it at all. A plain `force-stop` before every scripted launch avoids this; it is a
+  test-tooling hazard, not an app defect, but it is easy to mistake for one when reading a device
+  log after the fact.
+- **Status**: OPEN (test-procedure note, not a code fix candidate) — recorded so a future device
+  round doesn't misread a stale-task replay as a new result. `force-stop` before every scripted
+  `am start` is the mitigation, already applied for the rest of this session's own device runs.

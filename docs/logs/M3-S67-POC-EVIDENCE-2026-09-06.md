@@ -551,3 +551,123 @@ link from the G1 recheck. A transaction roughly 9 minutes past its stated TTL st
 `direct_post`, not at the `request_uri` fetch. Prior M3 device sessions tested expired links only
 at the post step. Whether the request fetch should also refuse on an expired `ttlMs` is a question
 for review — not asserted or fixed here.
+
+## Close-out pass (evening 2026-09-06, 21:20–22:10) — gaps found by the orchestrator's own honesty audit before review
+
+### Audit findings that triggered this pass
+
+Before proposing review, the orchestrator re-read the "Orchestrator + owner re-verification"
+section above against what it actually showed and found five gaps and one reviewer-shaped
+question that section's own close had glossed over:
+
+1. All four post-fix "4/4 reproductions" logged above took the `onNewIntent`/same-instance variant
+   (the pre-existing supersede-guard, already correctly absorbed before this fix). Zero of the four
+   exercised `DroppedOutcomeRelay` itself — the destroy-and-recreate path the fix actually changes.
+   The earlier close's "confirmed on screen" is true of the race in general, not of the relay path
+   specifically, and overstated the coverage.
+2. No ACCEPT (delivered) handoff had been run at all on the fixed build (`e0eaea4`). The device
+   report log's last 20 entries were all FAIL; the last delivered run on record predated the fix.
+3. `scripts/operator-json-negative.sh` exercised rules 3, 4, 7, 8 only. Rules 1, 2, 5, 6, 9 were
+   code-inspected against `OperatorConfig`'s validator, never actually run through a build.
+4. PRD §6.7.6's line promising a `docs/product/customer-guide.md` §7 `operator.json` walkthrough
+   "once this is built, not now" was never followed up — §6.7.5's POC has been built and
+   device-verified since v1.76; the walkthrough was still unwritten.
+5. `docs/index.md` listed this file at 441 lines — stale as of the "Root cause + fix" section
+   above.
+6. A reviewer-shaped question the earlier close did not ask: does a stashed relay message from a
+   losing sibling pop as a duplicate notice on the SURVIVING sibling's own next, unrelated
+   `onResume` (backgrounding/return, a biometric prompt callback) — i.e. is the fix's "shown
+   exactly once" guarantee actually "shown exactly once," or "shown once per instance"?
+
+### Fixes made (uncommitted at time of writing)
+
+**Negative script, 6→12 cases + a restore-and-rebuild check.** Added `bad-schema-version` (rule
+1), `invalid-tiers` (rule 2), `port-suffixed-multi-threshold-verifier` (rule 5, the
+`multi_threshold_verifiers` sibling of the existing rule-4 hostname-shape check), `unknown-evidence-plug`
+(rule 6), `unknown-strings-key` (rule 8's nested shape, distinct from the existing top-level-key
+case), and `missing-file` (rule 9 — a new `run_case_missing_file` helper deletes `operator.json`
+entirely, confirms the build fails, then restores it from the same backup every other case uses,
+so a later case never starts from a missing file). All 12 cases plus the existing restore-and-rebuild
+check: 13 PASS lines, exit 0.
+
+**Relay duplicate — REAL, not hypothetical.** Traced: the dying instance (A) starts verifying
+first; its sibling (B) is created ~150–300ms later by the platform's own relaunch and reaches its
+own `onResume` almost immediately — well before A's async verification lands — so B's `consume()`
+finds nothing pending. A then lands, its fence already closed, and stashes. B's OWN independent
+verification of the same handoff reaches its own conclusion and shows its OWN dialog directly (B's
+fence is still open). A's stash is now stale and sits in `DroppedOutcomeRelay` with nothing to
+clear it — it would pop as a genuine duplicate on B's next unrelated `onResume`.
+
+Fix: `DroppedOutcomeRelay.clear()` (new) is called in both `showBlockingNotice` and
+`showBlockingOutcomeDialog`, immediately before a live instance shows its own dialog. Tradeoff,
+stated plainly: a live instance about to show any dialog of its own now unconditionally discards
+whatever a sibling stashed, even if that stash was for an unrelated, later event landing in the
+same narrow window. In the only known producer of a stash today — the same-intent double-instance
+race this fix's parent section describes — both instances independently verify the SAME handoff
+and reach the SAME conclusion, so the discard is the intended dedupe, not a loss. No other producer
+of a stash exists in this codebase today.
+
+`DroppedOutcomeRelayTest` grew from 4 to 7 cases. New: `"clear discards a pending message without
+returning it"`, `"clear is a no-op when nothing is pending"`, `"a sibling's stash after this
+instance already cleared is not discarded retroactively"` (pins that `clear()` only discards what
+is pending AT THE TIME it runs — a message stashed afterward is a separate event and must still
+surface once, per the base contract).
+
+**Customer guide.** §7.2 "Operator config (`operator.json`)" written (74 lines) — what the file
+is, build-time-only/never-fetched, the full knob table with allowed values and build-fail
+behaviour, verifier hostnames, `multi_threshold_verifiers`, `tier_c_verifiers`,
+`strings.app_name`, signing exclusion, how to run the negative script, and what a refused site's
+users see. §6.7.6 repointed from "gets a walkthrough once this is built, not now" to "now carries
+the `operator.json` walkthrough."
+
+**Orchestrator-run counts (JUnit XML parsed, not agent prose).** `testRegularDebugUnitTest`:
+tests=484, failures=0, errors=0, skipped=0 (up from the prior session's 481 by exactly the 3 new
+`DroppedOutcomeRelayTest` cases). `assembleRegularDebug`: exit 0. `scripts/operator-json-negative.sh`:
+exit 0, 13 PASS lines.
+
+### Device results on the new debug build (relay `clear()` + 6 negative cases; reference `operator.json`; Pixel 6a; `apps/demo` on `127.0.0.1:8787` via `adb reverse`)
+
+**ACCEPT PATH — PASSED.** 21:42:41, tier-A bare presentation. App: `"verdict: DELIVERED (bare
+presentation sent)"`, `"terminal outcome dialog shown: Delivered — the website shows the
+result."`. Verifier log: `verdict transactionId=YSZO8KWj8H1WgpGN tier=A threshold=18 ok=true
+allowed=true reason=no-evidence-required`. Device report log's newest entry: PASS, "Verified —
+sent without identity", chip auth verified. Owner read the page directly: proved over 18. This is
+the first delivered handoff run on a post-`e0eaea4` build.
+
+**THRESHOLD-21 REFUSAL, cold launches — 6/6 correct.** 21:43:32–21:44:10, via `force-stop` + `adb
+shell am start`. Each run: 1 capture, 1 `"REFUSED by threshold policy … threshold=21"`, 1
+`"blocking notice shown"`.
+
+**RELAY PATH — NOT REPRODUCED.** The platform relaunch line
+(`TaskLaunchParamsModifier: ... activity-requested-portrait`) fired 0 times across 6 `adb` cold
+launches plus 8 owner browser-tap cold launches (Chrome → demo page → button → tap the rendered
+`av://` link, app force-stopped before each, 22:07–22:09). Every one of these 14 launches was
+single-instance. The relay fix remains unit-proven (7 `DroppedOutcomeRelayTest` cases) and
+code-traced only — it was NOT exercised on device this round. Stated plainly as this round's one
+open device gap, not papered over: the race is non-deterministic by the parent section's own
+measurement (0 of one batch, 2 of 14 another) and was seen once this same evening, at 20:11:50,
+but not again in the 14 launches run for this pass.
+
+### Two new observations (ledger candidates, not fixed)
+
+**(a) A malformed `av://` VIEW intent is silently ignored.** An intent whose data lacks
+`request_uri` — produced here by an unquoted `&` inside an `adb shell am start` command, which the
+device shell splits on — launches the app with NO log line and NO user-facing notice; the app just
+shows "Local scan (no site)" as though no handoff had ever been offered. Question for review:
+should a malformed `av://` link log and/or say something, rather than reading as if the link had
+simply never been tapped?
+
+**(b) Test-tooling: a stale task can resurface an old intent as if it were fresh.** `adb install -r`
+leaves the scanner's task in recents. A following `am start … VIEW` whose data is malformed reports
+`"Activity not started, its current task has been brought to the front"` and the app re-processes
+the task's OLD root intent instead — observed here as the previous session's threshold-21 link
+resurfacing at 21:30:44 as what looked like a fresh refusal, with the verifier seeing no fetch at
+all for it. Force-stop before every scripted launch avoids this; it is a test-procedure hazard, not
+an app defect. Also noted: the phone doze mid-run twice during this pass; `svc power stayon usb`
+was set for the browser-tap runs and reverted after.
+
+### Environment
+
+`JAVA_HOME` as in the §6.7 device-procedure notes above. The device shell eats a bare `&` —quote
+the whole `am start` command string. The demo page's button only creates the `av://` link; the app
+launches from tapping the rendered link, not from the button press itself.
