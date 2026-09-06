@@ -28,6 +28,10 @@ export JAVA_HOME=$HOME/opt/jdk-21.0.12.1+1 ANDROID_HOME=$HOME/Android/Sdk
 ./gradlew :app:assembleRegularRelease    # release — NO cleartext exception anywhere (unsigned unless KEYSTORE_FILE etc. are set)
 ```
 
+For a signed release build (per-operator keystore, `KEYSTORE_FILE`/`KEYSTORE_PASSWORD`/
+`KEY_ALIAS`/`KEY_PASSWORD`), see the recipe in
+`docs/product/customer-guide.md` §7.1.
+
 ## Unit tests (no device needed)
 
 ```

@@ -516,6 +516,8 @@ questions.md Q51; decisions.md D81, D82.
    env-var procedure above, followed by each operator for their own build/keystore/fingerprint)
    and (b) the owner's own showcase keystore, generated the same way — neither is a shared
    secret; the requirements above (MUST) apply to whoever runs them, operator or owner.
+   Status update: part (a) recipe written — `docs/product/customer-guide.md` §7.1 (commit,
+   `feat/keystore-recipe`); part (b), the owner's own showcase keystore, is still pending.
 
 ## 6.7 Operator knobs (D81, scoped by D82) — PRD-gated for BUILD
 

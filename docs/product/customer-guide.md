@@ -219,6 +219,91 @@ What "attestation" means here, and how much of it an operator can change:
 | Store choice | The demo uses one flat JSON file as its persistent store; a real deployment supplies its own; zkagent's own code stores nothing |
 | Fail-closed | No store is ever allowed to fall back to an in-memory-only mode once running for real — a broken store refuses, it does not silently forget |
 
+## 7.1 Building and signing your own release (per-operator recipe)
+
+zkagent is distributed as one upstream Apache-2.0 repository, not as a hosted service (see §7):
+each operator builds and signs their own copy of the scanner app, under their own package
+identity, with their own keystore. There is no shared zkagent signing key, and there never will
+be — the owner's own showcase build (Google Play, closed testing) uses a separate keystore of
+its own, generated the same way as below.
+
+**Why this matters.** Android requires every APK to carry a certificate, and the SHA-256 digest
+of that certificate is the app's identity — the "package + cert digest" pair that FR10/D17 has a
+verifier's trust list pin under §6.5 S4. One keystore holds one key pair for the life of your
+package: every update you ship must be signed by the same key, or Android refuses the install,
+and if you lose the key, your app can never be updated again under that package name — only
+replaced under a new one, which every existing verifier trust-list entry would then need to
+re-pin. Generate it once, back it up offline, and treat it as the one truly un-losable asset in
+this whole recipe.
+
+1. **Generate the keystore.** EC P-256, in a PKCS12 container, stored under the already-gitignored
+   `secrets/` directory (`.gitignore` line 13):
+
+   ```
+   mkdir -p secrets
+   keytool -genkeypair -v -keystore secrets/<name>.p12 -storetype PKCS12 \
+     -alias <alias> -keyalg EC -groupname secp256r1 -sigalg SHA256withECDSA \
+     -validity 10950 -dname "CN=<operator>"
+   ```
+
+   `keytool` prompts for the keystore password interactively — type it there; never pass a
+   password on the command line, where it would land in shell history and process listings.
+
+2. **Read the certificate digest.** This digest is public — it's an identity, not a secret — and
+   is what goes into a verifier's trust list and your own evidence log:
+
+   ```
+   keytool -list -v -keystore secrets/<name>.p12 -alias <alias> | grep -A1 'SHA256'
+   ```
+
+   The keystore file and its passwords, by contrast, are secrets: never commit them, never put
+   them in CI logs.
+
+3. **Build a signed release.** From `apps/scanner`, feed the keystore to the build only through
+   the existing environment variables — `apps/scanner/app/build.gradle.kts`'s `signingConfigs`
+   reads these and is otherwise unchanged:
+
+   ```
+   KEYSTORE_FILE=$PWD/secrets/<name>.p12 KEYSTORE_PASSWORD=… KEY_ALIAS=<alias> KEY_PASSWORD=… \
+     ./gradlew assembleRegularRelease
+   ```
+
+   You may need `JAVA_HOME` pointed at a JDK 17 for this — Gradle's own provisioned one under
+   `~/.gradle/jdks/` works. Output lands at
+   `app/build/outputs/apk/regular/release/app-regular-release.apk`. **Without `KEYSTORE_FILE` set,
+   the build emits `app-regular-release-unsigned.apk` instead — that's by design, not an error:**
+   it's how every build before a keystore existed produced only an unsigned APK.
+
+4. **Verify the signature and digest independently of the keystore**, straight off the built APK,
+   using `apksigner` from the Android SDK build-tools (path pattern
+   `$ANDROID_HOME/build-tools/<version>/apksigner`):
+
+   ```
+   apksigner verify --print-certs app-regular-release.apk
+   ```
+
+   Confirm the SHA-256 it prints matches step 2's reading.
+
+5. **Back up and keep it out of git.** Keep an offline backup of the `.p12` file and its
+   passwords — there is no recovery path if both are lost. Confirm the file is actually ignored
+   before trusting that: `git check-ignore -v secrets/<name>.p12`. Never let the keystore or its
+   passwords appear in a CI environment log. Rotating this key is not a maintenance step — it
+   creates a new app identity, so don't do it unless you mean to.
+
+6. **If you upload to Google Play:** Play App Signing re-signs your APK with Google's own key —
+   your local key becomes only the "upload key" (see §6.6 item 2 in `docs/wiki/milestones.md`
+   for the owner's own showcase-listing deliverables, which are not required of operators). Any
+   verifier pinning your Play-distributed build must pin Google's digest instead of (or alongside)
+   your local one — record that digest only after a real upload, never guess it in advance.
+
+7. **Where the digest goes.** Your own verifier's trust list (§6.5 S4's pin), and your own
+   evidence log. For the owner's own showcase build specifically, the digest is recorded in
+   `docs/logs/` and the PRD once that build exists — not part of this generic recipe.
+
+This local release-signing key, a Play upload key (if you list on Play), and the device's own
+`AndroidKeyStore` attester keys (D38) are three different keys for three different purposes —
+keep that distinction; see PRD §6.6 item 7 and `docs/wiki/decisions.md` D38/D80/D81.
+
 ## 8. Default signing and trust
 
 What's actually checked, and what isn't yet:
