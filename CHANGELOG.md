@@ -5,6 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs.** PRD (`docs/wiki/decisions.md`, `questions.md`, `milestones.md`,
+  `history.md` v1.69), commit `aed1be8`: D82 — (a) Q51 point 3 closed, the
+  owner builds and lists the showcase scanner on Google Play, closed testing
+  track only, so §6.6 is live with item 7 (release-signing keystore, D80)
+  first; (b) §6.7 operator knobs scoped as one build-time `config.json`
+  bundled into the APK, never fetched at runtime (NO-GO #3) — tier mode,
+  exact-hostname allowlist, threshold subset, evidence plug, reserved tier-C
+  hostnames, wording/branding; signing stays a build input, not a knob; the
+  `av://` link format is chiproof's, not an operator knob; (c) Q52
+  multi-threshold origins DEFERRED — one question per hostname under D74,
+  no new knob, follows broad adoption.
+
 ## [0.6.1] — 2026-09-05
 
 Lockstep patch release (D72): `packages/chiproof` and `apps/scanner` move
