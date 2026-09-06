@@ -70,6 +70,41 @@ No drift between JSDoc, `.d.ts`, and CI **iff all five hold**:
 Layout (where `.d.ts` land, build-hook name) does **not** affect drift — #2 + #4
 do. Recommended default: emit to `./types` (keeps `src/` free of build output).
 
+### Four authoring traps that reach adopters
+
+The contract above stops JSDoc and `.d.ts` from disagreeing. It does **not** stop
+the JSDoc from being confidently wrong. These four are the ones that have
+actually shipped:
+
+1. **`@returns {object}` gives an adopter nothing.** A bare `object` accepts no
+   property access, so `const page = await connect()` cannot read `page.serial`
+   without a cast. Either annotate the real shape, or — usually better — **drop
+   the annotation** and let `tsc` infer it structurally from the object literal
+   you return, then re-export that with
+   `@typedef {Awaited<ReturnType<typeof connect>>} Page` so adopters have a name
+   to import. Inference cannot drift from the literal; a hand-written interface
+   can.
+2. **A wrapper that forwards an optional argument without restating the default
+   declares it required.** `async swipe(x1,y1,x2,y2,duration)` delegating to
+   `swipe(x1,y1,x2,y2,duration = 300)` works perfectly at runtime — `undefined`
+   triggers the callee's default — and generates a declaration that forces the
+   caller to supply a duration. Restate the default in the wrapper.
+3. **A cast that silences `tsc` locally propagates a lie outward.** An `exec()`
+   typed `Promise<string>` for the convenience of its many string callers, with
+   `/** @type {string} */ (stdout)` papering over the one caller that passes
+   `encoding: 'buffer'`, hands adopters `screenshot(): Promise<string>` for a
+   function that returns a `Buffer`. A cast to quiet a checker is a claim; make
+   it at the boundary where it is true.
+4. **One factory, two shapes → export a UNION, never an intersection.** When
+   `connect()` branches into two differently-shaped objects (two engines, two
+   protocols), an intersection is unsound — it claims one object has both sets of
+   escape hatches, so `page.bidi` compiles against a Chromium page and crashes —
+   and un-annotatable, since neither arm is assignable to it. A union is sound:
+   shared methods dereference freely, engine-specific ones come via narrowing
+   (`if ('cdp' in page) page.cdp.send(...)`). Measured in barebrowse v0.20.0.
+   (An intersection is defensible *internally*, as a local cast where runtime
+   branching keeps it honest — but it must never reach the published surface.)
+
 ### Recipe
 
 1. `npm install -D typescript @types/node` (dev-only).
@@ -176,6 +211,84 @@ not adopters. The adopter's complete picture is README + `context.md`.
   end-state rather than trusting npm's exit code. Authenticates with npm
   **trusted publishing (OIDC)** — no `NPM_TOKEN` — and is **manual**
   (`workflow_dispatch`): you publish when you want, not on every tag or merge.
+
+**Four properties of the adopter gate are load-bearing and easy to "fix" into
+uselessness** — each was measured, not assumed:
+
+- **The consumer tsconfig must NOT set `skipLibCheck`.** Your library's own
+  tsconfig sets it (§2) and should; the consumer's must not. A package whose
+  shipped `.d.ts` is genuinely broken compiles **clean** under
+  `skipLibCheck: true` and publishes. That asymmetry is the whole reason the
+  gate catches what `npm run typecheck` cannot.
+- **Pin `@types/node` to the major the package builds against.** Unpinned, it
+  floats to the newest major, and a stricter `@types/node` release fails a
+  shipped `.d.ts` for reasons unrelated to the commit being published — a red
+  publish gate at DefinitelyTyped's schedule, not yours. Test forward-compat in
+  `ci.yml`, where failing doesn't block shipping. Pin `typescript@5` in the same
+  install, for the same reason.
+- **Install the tarball with `--ignore-scripts`.** In `publish.yml` this install
+  runs inside the job holding `id-token: write` — the OIDC credential that can
+  publish the package — so without the flag every install script in the
+  tarball's transitive dependency tree executes beside a live publish
+  capability, in the one workflow whose purpose is to put bytes on the registry.
+  The gate only runs `tsc`, which reads `.d.ts` and nothing else, so nothing
+  there needs building: measured on a native-addon package, the addon is **not**
+  compiled under the flag and the type check still passes, while a broken
+  dereference still fails. **Do not drop the flag to "fix" a native repo** — if a
+  package truly needs its addon compiled to type-check, that's a bug in its
+  `.d.ts`, not a reason to run untrusted scripts next to a publish credential.
+  (Related but not the same: §2's preference for deps that ship prebuilt
+  binaries with no install script at all.)
+- **If `exports` has subpaths, the quickstart must import at least one.** A
+  root-only quickstart on a multi-subpath package tests a fraction of the
+  surface. A subpath that ships no `.d.ts` fails (`TS7016`) only once imported,
+  in any layout. A subpath merely missing its `types` condition depends on where
+  the declarations live: with a separate `types/` dir it breaks, while
+  co-located `.d.ts` still resolve via the sibling file. Co-located layouts are
+  more forgiving — not a reason to skip the subpath import, since the
+  unshipped-`.d.ts` case bites either way.
+
+And the quickstart must **dereference** what the API returns (`res.ok`,
+`res.reason`), not merely call it: a call-only check still compiles when a
+return is annotated as a bare `object`, which is precisely the bug class the
+gate exists to catch.
+
+**But dereferencing is necessary, not sufficient — a quickstart SAMPLES the
+surface, it cannot cover it.** Measured, baremobile v0.11.1: a quickstart
+extended to dereference the object `connect()` returns ran green, and §2 trap 2
+shipped anyway — it called `tap`, `type`, `snapshot`, `screenshot` and
+`findByText`, and never called `swipe`. Enumerating every method by hand does
+not scale and rots the day someone adds one.
+
+**So also assert a PROPERTY of the whole surface**, in a script over the
+generated `.d.ts` using the TypeScript compiler API (already a devDep — no new
+dependency, and it beats hand-parsing declarations). Two rules, each validated
+by running it against the real pre-fix commit and watching it fire:
+
+- **No exported function returns a bare `object`** — §2 trap 1, caught at the
+  source, with no quickstart needed to call anything.
+- **Where the library ships two implementations of one API** (two platforms,
+  engines, backends), every method they BOTH declare must agree on
+  required-parameter count and declared return type. A divergence means one side
+  forces an argument the other defaults (§2 trap 2), or is wrong about what it
+  returns (§2 trap 3).
+
+Calibration, learned by measuring the rules on a real tree — and after loosening
+any rule, mutation-test it back to failing, or you have tuned it into a
+rubber stamp:
+
+- **Normalise `Buffer` against `Buffer<ArrayBuffer>`.** Observed: the same type
+  reaches `typeToString()` in both forms, so comparing raw strings is a
+  guaranteed false positive.
+- **Skip any comparison where either side is `any`.** `any` is loose, not wrong;
+  it makes no claim to contradict. Gating on it fails the build on pre-existing
+  looseness rather than a defect — which is how a gate gets switched off.
+- **Exit 2 when the declarations were never built**, distinct from 1 for a real
+  finding, so a misconfigured step cannot look like a pass.
+
+Known gap, stated rather than papered over: the parity rule compares the two
+implementations against **each other**, so a declaration wrong on both in the
+same way is invisible to it. It catches divergence, not agreed-upon error.
 
 The canonical workflow is [`PUBLISH_TEMPLATE.yml`](PUBLISH_TEMPLATE.yml) — copy
 it to `.github/workflows/publish.yml`. (Configure the trusted publisher at

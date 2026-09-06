@@ -571,6 +571,36 @@ recipe get written into the PRD before anything is built (NO-GO #10). ENHANCEMEN
 sequenced after §6.6 items 7/1 unless the owner reorders. See decisions.md D81, D82; questions.md
 Q51, Q52.
 
+## 6.8 Android release list (complements CI/publish) — owner-approved 2026-09-06, ENHANCEMENT
+
+`ci.yml`/`publish.yml` (LIBRARY_CONVENTIONS §5) gate only `packages/chiproof`; neither runs
+`apps/scanner` or `apps/demo`. This list covers what those two workflows do not, until CI is
+extended to them (candidate rows below, PRD-gated for BUILD and requiring owner sign-off on any
+`.github/` edit per AGENT_RULES). Run by hand as part of Phase 1 of `/release`.
+
+1. Scanner unit tests green: `JAVA_HOME=<JDK17> ./gradlew :app:testRegularDebugUnitTest`; parse
+   the pass/fail count from the JUnit XML output, never from prose.
+2. Demo tests green: `apps/demo && npm test`; same caveat.
+3. Lockstep version (D72): `packages/chiproof/package.json` + lockfile, `apps/demo`'s lockfile,
+   scanner `versionCode`/`versionName`, and one `CHANGELOG.md` section all agree.
+4. Signed release APK: `assembleRegularRelease` with the four env vars from `pass`
+   (`KEYSTORE_FILE`/`KEYSTORE_PASSWORD`/`KEY_ALIAS`/`KEY_PASSWORD`); output MUST be
+   `app-regular-release.apk`, never `-unsigned.apk` (D80 MUST).
+5. Digest check: `apksigner verify --print-certs` digest ==
+   `1f6bceae0ffe9c2b326f2aab2202f0bdf3df7e5bdd8fac50aba2e1d318407264` (showcase cert, customer-guide
+   §7.1; `M3-KEYSTORE-EVIDENCE-2026-09-06.md`). A mismatch is a **STOP** — wrong keystore means an
+   un-updatable install.
+6. Release evidence row: tag, APK sha256, digest, test counts — recorded in `docs/logs/` or the
+   release's `CHANGELOG.md` section, matching how v0.6.1's release recorded its own evidence.
+7. Play (once §6.6 item 1 has run): AAB via `bundleRegularRelease`, uploaded to closed testing
+   only; the Play App Signing digest is recorded separately (§6.6 item 2), never assumed equal to
+   row 5's local digest.
+
+(a) This list is run by hand inside `/release` until CI covers rows 1–2 and 4–5. (b) Owner intent:
+once the Android use case has succeeded (a Play-distributed build exists), fold this into
+LIBRARY_CONVENTIONS as a new section for app packages — a hamr0-repo change, not zkagent's; noted
+here only, not actioned.
+
 ## 7. Riskiest-assumption register (what M0 must answer)
 
 1. **Issuer-free derivation works** — chip's stable data is readable, verifiable against a public masterlist, yields the same secret every scan. Checked 2026-08-30: issuer-free ZK proofs over passport SODs are published and shipping elsewhere; what's novel is only the combination with zkagent's disclosure/tier model. (zkagent-prd.md:1684)

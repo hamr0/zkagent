@@ -37,6 +37,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   §6.6 item 7, D80, and the evidence log. Play-distributed digest remains
   unknown pending §6.6 item 1 (real upload); no trust-list pin slot exists
   yet in `apps/demo`/`chiproof` to enter this digest into (D78, unchanged).
+- **Docs.** `docs/wiki/milestones.md` (new §6.8), `history.md` v1.71:
+  Android release list, an ENHANCEMENT (owner-approved 2026-09-06) — a 7-row
+  hand-run checklist covering what `ci.yml`/`publish.yml` do not (they gate
+  only `packages/chiproof`): scanner unit tests, demo tests, D72 lockstep
+  version check, signed release APK per D80's MUST, digest check against the
+  showcase cert `1f6bceae0ffe9c2b326f2aab2202f0bdf3df7e5bdd8fac50aba2e1d318407264`,
+  a release-evidence row, and the eventual Play/AAB row. Run by hand inside
+  `/release` until CI is extended to `apps/scanner`/`apps/demo` (candidate
+  rows, requiring owner sign-off on any `.github/` edit per AGENT_RULES).
+- **Docs.** `.claude/remember/LIBRARY_CONVENTIONS.md` synced verbatim from
+  the hamr0 source (238→351 lines): the repo copy was stale, missing §2's
+  "Four authoring traps" and §5's adopter-gate load-bearing-properties
+  sections. Diffed first for zkagent-specific local edits — none found — so
+  nothing zkagent-specific was dropped by the overwrite.
 
 ## [0.6.1] — 2026-09-05
 
