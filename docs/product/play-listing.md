@@ -7,6 +7,13 @@ sources: [docs/wiki/milestones.md §6.6, docs/wiki/decisions.md D1/D17/D38/D74/D
 
 # zkagent Scanner — Play Console Crib Sheet
 
+> **REFERENCE ONLY (D83, 2026-09-06).** The owner's Play developer account was closed for
+> inactivity and the owner declined to open a new one — no Play listing is happening for the
+> owner's showcase build. Distribution is GitHub Releases + sideload instead (see
+> `docs/wiki/decisions.md` D83, `docs/wiki/milestones.md` §6.6/§6.8). This document is kept for
+> any operator who chooses to list their own build on a store. Its "VERIFY" items were never
+> checked against a live console — nothing in this doc was validated by a real upload.
+
 **Internal document — for the owner filling out the Google Play Console.**
 Not user-facing, never linked from the store listing itself. Prerequisite
 work for PRD §6.6 item 1 (closed-testing upload). Google's own console UI

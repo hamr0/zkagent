@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D82
+title: zkagent — owner decisions D1–D83
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D82
+# Owner decisions D1–D83
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -240,3 +240,40 @@ Owner, 2026-09-05, recorded to satisfy the scope gate (NO-GO #10) ahead of the c
 (c) **Q52 (multi-threshold origins) — DEFERRED, not resolved by a new knob; D74 unchanged.** Owner's use case: one operator such as `state.gov` serving seniors (65+) and issuing IDs for minors (16+). D74 locks the first-seen threshold per origin and refuses any other. Resolution: no new knob, D74 stands; the pattern is one question per hostname — e.g. `seniors.state.gov` / `minors.state.gov`, each listed separately in the exact-hostname allowlist, each locking its own threshold. Reasoning: D74 closes single-origin age-narrowing by repeated asks; two hostnames can only narrow the same person if the site links them across hostnames, which it already can via its own login and which any two colluding sites can do — D74 never claimed to stop collusion; each threshold costs the user a separate consented scan whose question line names the threshold (D74 rule 3), so exposure is bounded by the fixed list and equals that of unrelated sites; tier-A presentations stay unlinkable across hostnames and tier-B zktags are per-origin. Owner's ruling on scope: "park the subdomain for now … i generally think it will be a minor case for the future … the whole thing is just av for now and nothing else besides, the absolute domain multiple ask follows broad adoption." Q52 is DEFERRED (follows broad adoption), not OPEN and not scheduled. See questions.md Q52; milestones.md §6.7 (future operator guide item).
 
 Owner, 2026-09-06. See milestones.md §6.6, §6.7; questions.md Q51, Q52.
+
+**D83 (2026-09-06, owner) — Play track parked; distribution is GitHub Releases + sideload.**
+
+The Play developer account referenced by D82 was closed for inactivity in the interim. Owner,
+verbatim, declining to open a new one: "i could create a new gmail account but it's a fucking
+hassle and privacy shit for no use and it will be closed again after 1 year of inactivity, the
+value is in the oss and the sideloading, no point of playstore and whoever publishes it if a gov
+adopts it they have way more power to go through the store and make these things pass" and
+"building adb sideloading is so easy and any dev knows how to do that." Orchestrator agreed;
+consequence accepted: the showcase audience becomes people who can sideload; non-technical users
+wait for an operator's own listing.
+
+(a) **Supersedes D82(a)** (Q51 point 3 was "yes, closed testing"): now **NO Play listing** by the
+owner. §6.6 items 1–6 are **PARKED indefinitely** (not deleted — an operator, or a future owner
+decision, may revive them). Item 7 (release-signing keystore, D80) stays **DONE** and remains
+load-bearing: it signs the GitHub-released APK.
+
+(b) **Distribution channel: GitHub Releases + sideload.** Each release tag `vX.Y.Z` gets the
+signed `app-regular-release.apk` attached as a GitHub Release asset, plus its sha256 and the
+signing-cert digest `1f6bceae0ffe9c2b326f2aab2202f0bdf3df7e5bdd8fac50aba2e1d318407264` recorded in
+the release notes, so installers can verify with `apksigner verify --print-certs`. Install path:
+`adb install` or any sideload. Note: under model A (D81) operators list their own build wherever
+they choose — the store question is theirs, unaffected by this ruling.
+
+(c) **Q50 CLOSED by D83 (moot).** How a Play-installed user reaches a verifier no longer applies
+to the owner's build, since there is no Play-installed owner's build.
+
+(d) **§6.6 item 2's Play App Signing second-digest problem disappears** for the owner's build —
+GitHub Releases carries exactly one digest, the local showcase keystore's.
+
+(e) `docs/product/privacy-policy.md` is **KEPT** as the honest data-handling statement for the
+reference build, and is now linked from `README.md`. `docs/product/play-listing.md` is kept as
+**REFERENCE ONLY** for operators who do choose to list on a store — banner added at its top
+stating this and that its "VERIFY" items were never checked against a live console.
+
+Owner, 2026-09-06. See milestones.md §6.6, §6.8; questions.md Q50, Q51; docs/product/privacy-policy.md,
+docs/product/play-listing.md.

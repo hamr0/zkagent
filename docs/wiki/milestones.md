@@ -452,14 +452,23 @@ alongside M3b without a further gate check.
 
 Play Store listing: see §6.6.
 
-## 6.6 Play Store closed-testing track (owner-approved 2026-09-03, D75) — its own item, not M3/M3b; opens after §6.3 item 10's POC passes
+## 6.6 Play Store closed-testing track — **PARKED (D83, 2026-09-06)**
+
+**Superseded by D83:** the Play developer account referenced below was closed for inactivity,
+and the owner declined to open a new one ("no point of playstore ... building adb sideloading
+is so easy and any dev knows how to do that"). Items 1–6 below are PARKED indefinitely — not
+deleted, kept as a record and as a path an operator or a future owner decision may revive. Item
+7 (release-signing keystore) stays **DONE** and remains load-bearing: it now signs the
+GitHub-released APK instead (see §6.8 row 7). Distribution is GitHub Releases + sideload. See
+decisions.md D83.
 
 This track remains **showcase-only** (not M3's reachability answer): M3 reaches the scanner via
 `adb reverse` against a sideloaded debug build (D76), and nothing here changes that. How a
 Play-installed (non-sideloaded) user would reach a verifier over HTTPS at all — the demo's plain
 Node process has no public HTTPS origin, and D76 rejected zkagent hosting one itself (NO-GO #3)
-— is not solved by M3 and is parked as **Q50** (questions.md), open. Owner, 2026-09-04:
-"playstore will be clearer when we get to it."
+— is not solved by M3 and was parked as **Q50** (questions.md), now CLOSED by D83 (moot — there
+is no Play-installed owner's build). Owner, 2026-09-04: "playstore will be clearer when we get
+to it."
 
 Item ordering: item 7 (release-signing keystore) precedes item 1 (first upload) — the Play
 upload key is derived from the local keystore, so the keystore must exist first. **D81
@@ -475,11 +484,14 @@ questions.md Q51; decisions.md D81, D82.
 
 1. First upload goes to a **closed testing track**, never production, using the current release
    line (v0.5.0 or later under D72 lockstep). Production is a separate, later owner decision.
-   **Status: prerequisites drafted: privacy-policy.md, play-listing.md (commit).** The public
-   privacy policy (`docs/product/privacy-policy.md`) and the owner's internal Play Console crib
-   sheet (`docs/product/play-listing.md`, data safety form reasoning, permission justifications,
-   store listing text, screenshot rule, post-upload recording checklist) are written; the actual
-   console upload has not happened yet.
+   **Status: PARKED (D83, 2026-09-06)** — the Play developer account was closed for inactivity
+   and the owner declined to open a new one; no upload happens. The public privacy policy
+   (`docs/product/privacy-policy.md`) and the owner's internal Play Console crib sheet
+   (`docs/product/play-listing.md`, data safety form reasoning, permission justifications, store
+   listing text, screenshot rule, post-upload recording checklist) were already written and are
+   kept — the privacy policy as the reference build's honest data-handling statement (now linked
+   from README.md), the crib sheet as reference-only material for an operator who does list on a
+   store (banner added, D83(e)). The console upload never happened.
 2. Deliverable 1: the **Play App Signing certificate digest**. Rationale: FR10 makes the scanner's
    signing-cert digest its identity in every verifier's trust list (D17); Play App Signing
    re-signs the APK, so the Play-distributed build has a DIFFERENT digest from local builds —
@@ -597,9 +609,11 @@ extended to them (candidate rows below, PRD-gated for BUILD and requiring owner 
    un-updatable install.
 6. Release evidence row: tag, APK sha256, digest, test counts — recorded in `docs/logs/` or the
    release's `CHANGELOG.md` section, matching how v0.6.1's release recorded its own evidence.
-7. Play (once §6.6 item 1 has run): AAB via `bundleRegularRelease`, uploaded to closed testing
-   only; the Play App Signing digest is recorded separately (§6.6 item 2), never assumed equal to
-   row 5's local digest.
+7. **GitHub Release (D83 — §6.6 PARKED, Play superseded):** attach the signed APK, its sha256,
+   and the cert digest to the `vX.Y.Z` release; installers verify with `apksigner`. Run by hand
+   inside `/release`'s hand-back sequence (the sequence is push, tag, publish.yml, then
+   `gh release create vX.Y.Z app-regular-release.apk --notes …` — not run as part of writing
+   this doc).
 
 (a) This list is run by hand inside `/release` until CI covers rows 1–2 and 4–5. (b) Owner intent:
 once the Android use case has succeeded (a Play-distributed build exists), fold this into

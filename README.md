@@ -63,6 +63,7 @@ Beyond the yes/no age gate: KYC checks for banks, government services gated by a
 - `spikes/` — riskiest-assumption proofs of concept, one per milestone.
 - `docs/product/zkagent-prd.md` — the PRD: architecture, milestones, NO-GO table, owner decisions. Start here.
 - `docs/product/customer-guide.md` — what the app does, screen by screen.
+- `docs/product/privacy-policy.md` — the reference build's data-handling statement.
 
 ## License
 

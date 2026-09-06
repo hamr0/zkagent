@@ -5,6 +5,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs.** PRD (`docs/wiki/decisions.md`, `questions.md`, `milestones.md`,
+  `history.md` v1.73): D83 — Play track PARKED, the owner's Play developer
+  account was closed for inactivity and the owner declined to open a new
+  one; distribution moves to GitHub Releases + sideload (signed APK + sha256
+  + cert digest attached to each `vX.Y.Z` release, verified with
+  `apksigner`). Supersedes D82(a); §6.6 items 1–6 PARKED (not deleted), item
+  7 (keystore) stays DONE and now signs the GitHub-released APK; §6.8 row 7
+  replaced (Play/AAB row → GitHub Release row). Q50 CLOSED (moot); Q51
+  point 3 reverted to "no Play listing." `docs/product/privacy-policy.md`
+  kept and linked from `README.md`; `docs/product/play-listing.md` kept
+  as reference-only for operators, with a banner added.
 - **Docs.** `docs/product/privacy-policy.md` (new) and
   `docs/product/play-listing.md` (new): §6.6 item 1 (Play closed-testing
   upload) prerequisites — the public privacy policy Google Play will link

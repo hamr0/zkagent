@@ -420,9 +420,12 @@ this is flagged in the report back to the caller.
   security config refuses both plain LAN-IP `http://` and self-signed HTTPS, and zkagent hosting
   a real verifier itself was rejected (NO-GO #3/D3, one global zktag registry across testers).
   None of that gives a Play-distributed (non-debug, non-sideloaded) install any route to a
-  verifier over HTTPS — that gap is not addressed by M3 at all. Status: OPEN, explicitly NOT
-  solved in M3. Owner, 2026-09-04: "playstore will be clearer when we get to it." See
-  milestones.md §6.3 item 7, §6.6; decisions.md D76.
+  verifier over HTTPS — that gap is not addressed by M3 at all. Status: **CLOSED by D83
+  (moot)** — the Play developer account was closed for inactivity and the owner declined to
+  open a new one; distribution moves to GitHub Releases + sideload, so there is no
+  Play-installed owner's build for this question to apply to. Owner, 2026-09-04: "playstore
+  will be clearer when we get to it." See milestones.md §6.3 item 7, §6.6, §6.8; decisions.md
+  D76, D83.
 - **Q51 (opened 2026-09-05, owner)** — Distribution model: who signs the scanner? Owner,
   verbatim: "if everyone makes their own we just give them the adb, why do i have to create and
   share sensitive details with any adopter/operator?" and, clarifying intent: "operators need to
@@ -449,7 +452,10 @@ this is flagged in the report back to the caller.
   closed point (3): the owner builds and lists the showcase scanner on Google Play, closed
   testing track only — "do we need to build ours on play anyways as a way of showcasing without
   sideloading and knowing what stores ask for?", confirmed "#2 yes." §6.6 is now LIVE (ungated).
-  See decisions.md D81, D82; milestones.md §6.6, §6.7.
+  **D82(a) superseded by D83** (2026-09-06): the Play developer account was closed for
+  inactivity and the owner declined to open a new one; §6.6 items 1–6 are now PARKED, and
+  distribution is GitHub Releases + sideload instead. Point (3) reverts to "no Play listing."
+  See decisions.md D81, D82, D83; milestones.md §6.6, §6.7, §6.8.
 - **Q52 (opened 2026-09-06, owner; DEFERRED by D82(c))** — Multi-threshold origins: one operator
   such as `state.gov` serves both seniors (65+) and minors (16+); D74 locks the first-seen
   threshold per origin and refuses any other. Resolution agreed with the owner: no new knob,
