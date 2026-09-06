@@ -330,13 +330,14 @@ rebuilding; there is no over-the-air knob update.
 | Knob | Allowed values | If wrong |
 |---|---|---|
 | `schema_version` | Must be `1` | Build fails, names the missing/wrong value |
+| `operator` | Required top-level object: `{ "name": "<string>", "contact_url": "<string>" }` — no other keys | Build fails if `operator` isn't an object, if `name` or `contact_url` isn't a string, or if any other key appears under `operator` |
 | `tiers` | `"A+B"` or `"B"` (exact string) | Build fails |
 | `thresholds` | Non-empty subset of the fixed, published list `{15, 16, 18, 21, 60, 65}` (D74) | Build fails, names the offending value — you cannot add a threshold outside this list |
 | `verifiers` | Non-empty array of bare hostnames — no scheme, no port, no wildcard | Build fails, names the bad entry (e.g. a wildcard or a `host:port` string) |
 | `multi_threshold_verifiers` | Array of bare hostnames, same shape rule as `verifiers`; default `[]` | Build fails on the same shape violations as `verifiers` |
 | `evidence_plug` | `"none"` only, today | Build fails if it names anything else — no attestation plug ships in this repo yet |
 | `tier_c_verifiers` | Must stay `[]` | Build fails if non-empty |
-| `strings.app_name` | Any string | N/A — this is the only free-text knob |
+| `strings.app_name` | Any string | N/A — this is the only free-text display-name knob (`operator.name`/`operator.contact_url` are also unrestricted strings, but identify the operator rather than the app) |
 | any unknown key, at the top level or under `strings` | — | Build fails (typo/scope-creep protection; nothing is silently ignored) |
 | the file itself | Must exist | Build fails if missing, unless you're building the repo's own committed reference config |
 
@@ -357,7 +358,14 @@ membership is the operator's call, never the site's own.
 non-empty list fails the build — tier C isn't built yet (D73), so there is nothing for this field
 to enable.
 
-**`strings.app_name` is the only string knob.** You can rename the app; you cannot change the
+**`operator`.** Two required strings, `name` and `contact_url`, identifying who operates this
+build. Gradle validates that `operator` is an object, that both fields are strings, and that no
+other key appears under it (rule 8), then bakes them into `BuildConfig.OPERATOR_NAME` and
+`BuildConfig.OPERATOR_CONTACT_URL`. As of this writing nothing in the app reads either constant —
+they exist for the operator's own records and for a future support/attribution surface, not
+today's UI.
+
+**`strings.app_name` is the only string knob that changes app behavior.** You can rename the app; you cannot change the
 question the app asks before a scan. The disclosure sentence ("This website asks if you are over
 N") is computed in code, not read from this file, in every schema version — D74 rule 3 makes its
 exact wording a user-protection requirement, not branding, so it stays out of operator control by
