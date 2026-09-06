@@ -717,9 +717,11 @@ walkthrough once this is built, not now.
    round is already big" — §6.7 stays scanner-scoped; the demo's env-var knobs are untouched.
 
 **Status: POC PASSED 2026-09-06 (three proofs: unit table, wiring trace, real second process) —
-see evidence log; built on `feat/s67-poc` `962ac96`; remaining §6.7 items: tier-mode B device
-check, release-signed gated build at next `/release`, apps/demo verifier-side config (deferred
-D84).**
+see evidence log; built on `feat/s67-poc` `962ac96`; pre-fetch gate added `f9ddcb9` (G1 fix,
+2026-09-06 validation pass — the allowlist gate now runs before `request_uri` is ever fetched,
+not only after JWS verification); remaining §6.7 items: tier-mode B device check, multi-threshold
+device check, release-signed gated build at next `/release`, apps/demo verifier-side config
+(deferred D84).**
 
 See `docs/logs/M3-S67-POC-EVIDENCE-2026-09-06.md`.
 

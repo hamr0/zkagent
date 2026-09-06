@@ -103,11 +103,21 @@ Device report log at 15:28:48: outcome **FAIL**, "Sent: nothing left this device
 REFUSED — operator policy (§6.7)", build stamp `962ac96-dirty` (expected — `operator.json` was
 modified for this round).
 
-Verifier stdout: **no verdict line after the two tx-created lines** — nothing reached it. The
-refusal appeared before any document-details prompt, i.e. before a read/mint was attempted.
+Verifier stdout: **no verdict line after the two tx-created lines** — no verdict/presentation
+reached the verifier. The refusal appeared before any document-details prompt, i.e. before a
+read/mint was attempted.
+
+**CORRECTION (2026-09-06, validation pass, G1)**: the sentence originally here ("the site learns
+nothing") was wrong. At `962ac96` the gate ran only in
+`applyHandoffVerificationOutcome`'s Verified branch — AFTER `HandoffClient.fetchRequestRaw` had
+already GETed `request_uri` — so the unlisted host in this very round DID receive an HTTP GET
+(and saw the device's IP) before being refused; `apps/demo` had no logging on that endpoint at the
+time, so this round's own stdout could not show it either way. Correct statement: no
+verdict/presentation reached the verifier; the `request_uri` GET did (fixed in `f9ddcb9` — the
+gate now runs before that fetch, see "Validation pass (same day)" below).
 
 **Result: unlisted hostname (`example.invalid` in place of `127.0.0.1`) refuses in-app before any
-read/mint; the site learns nothing.**
+read/mint; no verdict/presentation reached the site.**
 
 Afterwards the reference build (committed `operator.json`, `verifiers: ["127.0.0.1"]`) was
 rebuilt and reinstalled; device shows `versionName 0.6.1` again.
@@ -126,10 +136,13 @@ red→green demonstrated on two independent mutations), (2) the source wiring tr
 single writer for every config-derived value and shows the gate wired at the one origin-acceptance
 site, and (3) a real second process (`apps/demo`) confirms both directions live on device — a
 listed hostname completes a handoff normally, an unlisted hostname is refused in-app before any
-read/mint with nothing reaching the verifier — plus the build-fails-on-bad-file half (5/5 negative
-cases correctly failing closed, reference file restored and building clean).
+read/mint with no verdict/presentation reaching the verifier (see the correction above — the
+`request_uri` GET itself DID reach the unlisted host at `962ac96`, fixed at `f9ddcb9`) — plus the
+build-fails-on-bad-file half (5/5 negative cases correctly failing closed, reference file restored
+and building clean).
 
-**Result: §6.7 POC PASSED, device-confirmed 2026-09-06, on `feat/s67-poc` `962ac96`.**
+**Result: §6.7 POC PASSED, device-confirmed 2026-09-06, on `feat/s67-poc` `962ac96`; the pre-fetch
+gap (G1) closed same-day at `f9ddcb9` — see "Validation pass (same day)" below.**
 
 ---
 
@@ -156,6 +169,206 @@ cases correctly failing closed, reference file restored and building clean).
   exercised today; no release-signed APK was built or tested against this gate this session.
 - `apps/demo`'s own verifier-side config — explicitly deferred (D84 point 4), untouched this
   session.
+
+---
+
+## Validation pass (same day) — G1-G8, `feat/s67-poc` `f9ddcb9`
+
+Owner instruction: "validate all and fix what passes, no regression. ALL." Eight gaps from an
+orchestrator review of the POC above, worked FIX-then-VALIDATE, on the same branch.
+
+### G1 — FIXED. Unlisted verifier was contacted before the gate.
+
+**Confirmed defect**: `HandoffClient.fetchRequestRaw` (called from
+`MainActivity.verifyPendingHandoff`) GETed `request_uri` BEFORE
+`OperatorPolicy.isVerifierAllowed` ever ran (that check lived only in
+`applyHandoffVerificationOutcome`'s Verified branch, downstream of JWS verification). An unlisted
+site's server received an HTTP GET (and saw the device's IP) before ever being refused — round 2
+above is direct evidence of this (see the correction inserted into that section).
+
+**Fix** (`f9ddcb9`): `OperatorPolicy.gateMessageFor(hostname: String?): String?` — one pure
+function, truth table (null/listed/unlisted) in `OperatorPolicyTest`. `RequestTrust.verifyHandoff`
+(the item-14 pipeline extracted out of `MainActivity.verifyPendingHandoff` into a plain
+Activity-free function, `resolveKey`/`fetchRaw` injected) calls it immediately after the
+`client_id`/`request_uri` origin match and BEFORE `resolveKey`/`fetchRaw` are ever invoked, at
+`apps/scanner/app/src/main/java/com/tananaev/passportreader/RequestTrust.kt` (the
+`verifyHandoff` function, gate block directly after `val origin = requestUriOrigin`).
+`MainActivity.applyHandoffVerificationOutcome`'s existing post-verification check now calls the
+SAME `gateMessageFor` function (defence in depth) via one shared private function,
+`MainActivity.refuseByOperatorPolicy`, used by both the new `RequestTrust.Outcome.PolicyRefused`
+branch and the Verified branch.
+
+Unit proof (`RequestTrustTest.kt`):
+- `verifyHandoff - G1, unlisted hostname is refused BEFORE resolveKey or fetchRaw is ever called`
+  — passes `resolveKey`/`fetchRaw` lambdas that throw `AssertionError` if invoked; the test would
+  fail with that error if the gate did not return first.
+- `verifyHandoff - G1, listed hostname proceeds past the gate to resolveKey and fetchRaw` — the
+  positive control, asserting both lambdas WERE called.
+
+Red→green (deliberate mutation of `OperatorPolicy.gateMessageFor`'s condition, reverted
+byte-identical afterward — diff confirmed clean via `git diff`):
+
+```
+OperatorPolicyTest > gateMessageFor - unlisted hostname is refused, naming the hostname FAILED
+OperatorPolicyTest > gateMessageFor - listed hostname admits (null message) FAILED
+OperatorPolicyTest > gateMessageFor - null hostname is refused FAILED
+RequestTrustTest > verifyHandoff - G5, a verified request whose response_uri origin differs... FAILED
+RequestTrustTest > verifyHandoff - G5 positive control... FAILED
+RequestTrustTest > verifyHandoff - G1, listed hostname proceeds past the gate... FAILED
+RequestTrustTest > verifyHandoff - G1, unlisted hostname is refused BEFORE resolveKey... FAILED
+62 tests completed, 7 failed
+```
+
+`apps/demo/server.mjs`'s `GET /wallet/request.jwt/:requestId` handler now logs
+`[apps/demo] request_uri GET transactionId=... ua=...` (value-free — transactionId + user-agent
+only) so a device re-run of round 2 can PROVE the fetch no longer happens for a refused host (see
+device procedure below). `apps/demo` test suite unaffected: 41/41, exit 0.
+
+### G2 — VALIDATED, CONFIRMED-from-source. The round-1 HTTP 409.
+
+`apps/demo/server.mjs:625`, the `POST /wallet/direct_post` handler: `if (tx.status === 'done') {
+sendJson(res, 409, { error: 'already_responded' }); return; }` — a transaction (keyed by `state`,
+the OpenID4VP `direct_post` request id) that has already received one response refuses a second
+with HTTP 409. The 15:20:43 round-1 refusal was a second tap of the SAME already-answered tier-A
+link within a minute of the first successful tap — this is exactly the already-used-transaction
+path, not a §6.7 gate result, confirming the original evidence log's read from source rather than
+inference.
+
+### G3 — VALIDATED (source), device round left to the owner. Tier mode "B" refusing tier-A.
+
+`MainActivity.kt` (applyHandoffVerificationOutcome, Verified branch): the tier-mode gate
+(`tier == "A" && !OperatorPolicy.isTierAllowed("A")`) runs immediately after the §6.7 hostname
+gate returns null (line order confirmed by reading the function directly) and BEFORE the S1
+threshold-policy check, `verifiedRequest` is ever set, or a chip read can begin — a refusal here
+takes the same `refuseByOperatorPolicy` path (report-log line, `nothing left this device`,
+`showBlockingNotice`) as the hostname gate. Reachable and correctly ordered. Device procedure
+below (G3-recheck section) for the owner to run.
+
+### G4 — VALIDATED, device-testable via an existing test-only affordance.
+
+`apps/demo/server.mjs:496-519`: `POST /wallet/authorize` accepts an optional `?threshold=` query
+param (one of the six D74 presets, TEST-ONLY, does not change the verifier's own configured
+`THRESHOLD=18` — it only overrides the VALUE embedded in the outgoing request object's
+`zkagent.challenge.threshold` field). This means asking the scanner for threshold 18 then 21 from
+the SAME origin (`127.0.0.1`) is achievable today without any apps/demo code change — device
+procedure below. Unit coverage already exists by name in `ThresholdPolicyTest.kt`: `named
+exceptions list ships empty and 127-0-0-1 is not exempt`, `an exempt hostname is admitted for a
+different preset threshold`, `shouldRecordLock is true only on first sight for a non-exempt host`.
+
+### G5 — VALIDATED, test added. Origin-binding negative.
+
+No such test existed before this pass (`RequestTrustTest.kt` had only unit tests of `originOf`
+itself, never the full pipeline's response_uri-vs-request_uri binding). Added, using the existing
+`GOOD_JWS` vector (response_uri fixed at `http://127.0.0.1:4173/wallet/direct_post` by that
+vector's signature) unmodified, with a `request_uri` deliberately pointed at a DIFFERENT port
+(`http://127.0.0.1:9999/...`) so the two origins cannot match:
+
+- `verifyHandoff - G5, a verified request whose response_uri origin differs from request_uri
+  origin is refused` — asserts `Outcome.Refused` with reason `origin mismatch: response_uri=...`.
+- `verifyHandoff - G5 positive control, matching request_uri and response_uri origins verify` —
+  same vector, `request_uri` origin matching `response_uri`'s, asserts `Outcome.Verified`.
+
+Both included in the G1 red→green run above (both listed as FAILED under the inverted-gate
+mutation is incidental — they exercise `verifyHandoff` end-to-end, which passes through the G1
+gate first; a second, gate-untouched mutation was not additionally needed since these two tests'
+own logic — the response_uri/request_uri comparison — was already covered by
+`RequestTrustTest`'s pre-existing `origin mismatch` tests at the `originOf` level; these two are
+new INTEGRATION coverage of the same invariant through the full pipeline).
+
+### G6 — VALIDATED, gaps closed. Hostname edge cases.
+
+- `"127.0.0.1:8787"` (port-suffixed, the exact shape M3's real dev origin is) was ALREADY in
+  `OperatorPolicyTest.kt` (`a port-suffixed hostname never matches a bare allowlist entry`,
+  pre-existing) — confirms the device round-1 admit is explained by
+  `ThresholdPolicy.hostnameOf` stripping the port before `isVerifierAllowed` ever sees it, by
+  code, not luck.
+- Leading/trailing whitespace and mixed-case (IDN-style) hostname matching — NOT previously
+  tested; added `leading and trailing whitespace on the hostname is trimmed before matching` and
+  `mixed-case hostname matches regardless of which side is uppercase` to `OperatorPolicyTest.kt`.
+- `verifiers` entries are validated at BUILD time (rule 4, `app/build.gradle.kts`'s
+  `isBareHostname`) — a port-suffixed ENTRY was NOT previously exercised by
+  `operator-json-negative.sh`; added case `port-suffixed-verifier` (`verifiers: ["127.0.0.1:8787"]`
+  → expects `rule 4`). All 6 negative cases now pass, exit 0 (see G8).
+
+### G7 — VALIDATED (unsigned only — owner's keystore passphrase required for a signed build).
+
+```
+env -u KEYSTORE_FILE -u KEYSTORE_PASSWORD -u KEY_ALIAS -u KEY_PASSWORD \
+  ./gradlew :app:assembleRegularRelease --offline
+```
+Exit code: **0**. Produces `app-regular-release-unsigned.apk` (no `KEYSTORE_FILE` env var set, so
+the `signingConfig` assignment in `build.gradle.kts` is skipped, matching existing behaviour —
+this is not new for §6.7). `aapt2 dump badging`: `package: name='com.zkagent.scanner'
+versionCode='4' versionName='0.6.1'`. `unzip classes*.dex` + `strings ... | grep -c OperatorPolicy`
+on `classes.dex`: **8** occurrences — the gate class is compiled into this release build. A
+release-SIGNED build with this gate still needs the owner's own `/release` pass (keystore
+passphrase).
+
+### G8 — full regression, no fixes needed beyond G1/G6 above.
+
+| Command | Exit | Result |
+|---|---|---|
+| `JAVA_HOME=$HOME/.gradle/jdks/eclipse_adoptium-17-amd64-linux.2 ./gradlew :app:testRegularDebugUnitTest --offline` | 0 | **477/0/0/0** (baseline 468, +9: 5 `OperatorPolicyTest` gateMessageFor/whitespace/case cases, 4 `RequestTrustTest` verifyHandoff cases) — parsed from JUnit XML via python3 |
+| `apps/scanner/scripts/operator-json-negative.sh` | 0 | 6/6 PASS (5 pre-existing + 1 new port-suffixed-verifier case), reference file restored, tree clean |
+| `cd apps/demo && npm test` | 0 | 41/41 (baseline 41 — unchanged; the new `request_uri` GET log line does not affect any assertion) |
+| `cd packages/chiproof && npm test` | 0 | 191/191 (baseline 191 — unchanged, no chiproof code touched this pass) |
+| `cd packages/chiproof && npm run typecheck` | 0 | clean, no errors |
+| `:app:assembleRegularDebug --offline` | 0 | unchanged debug build, gate compiled in |
+
+`git status --porcelain` confirmed empty before and after every step in this pass; `operator.json`
+byte-identical to the committed reference after the negative script's cleanup.
+
+### Device procedures (for the owner to run)
+
+**G1-recheck (round 2, again)** — expects NO `request_uri GET` log line at the verifier this time:
+1. Temporarily edit `apps/scanner/operator.json`'s `verifiers` to `["example.invalid"]` (rule 4
+   forbids an empty list).
+2. Rebuild and install: `JAVA_HOME=... ./gradlew :app:assembleRegularDebug --offline` then install
+   the APK.
+3. Restore `apps/scanner/operator.json` to the committed reference and confirm `git status
+   --porcelain` is clean for that file (the installed APK stays the modified build regardless).
+4. On the demo page (`http://127.0.0.1:8787` via `adb reverse tcp:8787 tcp:8787`), create a
+   tier-A "over 18" request and tap the resulting `av://` link on the device.
+5. Watch the verifier's own terminal output continuously from before the tap until the app shows
+   its refusal dialog.
+
+Expectations, after the list above: the app shows "This site (127.0.0.1) is not on this app's
+approved verifier list — refused." (or the `example.invalid`-configured wording, matching whatever
+hostname string was actually put in `verifiers`); the report log shows outcome FAIL, "Sent: nothing
+left this device"; the verifier's terminal shows the two `tx created` lines from page load but
+NO `[apps/demo] request_uri GET ...` line at all — proving the fetch never happened this time,
+unlike round 2 of the original POC run. Then rebuild and reinstall the reference (committed
+`operator.json`) build before continuing to any other device work.
+
+**G3 — tier mode "B" refusing a tier-A request:**
+1. Temporarily edit `apps/scanner/operator.json`'s `tiers` field from `"A+B"` to `"B"`.
+2. Rebuild and install: `JAVA_HOME=... ./gradlew :app:assembleRegularDebug --offline`, install.
+3. Restore `apps/scanner/operator.json` to the committed reference; confirm `git status
+   --porcelain` clean for that file.
+4. On the demo page, create a tier-A "over 18" request and tap the resulting link on the device.
+5. Separately, create a tier-B request and tap that link on the device.
+
+Expectations, after the list above: the tier-A tap shows "This site asked for tier A, which this
+operator does not allow (tier B only) — refused." with a FAIL report-log line naming operator
+policy (§6.7); the tier-B tap proceeds through the normal flow (question line, Scan/Verify
+available) with no refusal. Rebuild and reinstall the reference build afterward.
+
+**G4 — multi_threshold_verifiers non-empty:**
+1. Temporarily edit `apps/scanner/operator.json`'s `multi_threshold_verifiers` to `["127.0.0.1"]`.
+2. Rebuild and install: `JAVA_HOME=... ./gradlew :app:assembleRegularDebug --offline`, install.
+3. On the demo page, create a tier-B request with `POST /wallet/authorize?threshold=18` (the
+   page's default button already does this) and tap the link on the device; complete the flow.
+4. Create a second, separate request with `?threshold=21` from the same page/origin and tap that
+   link on the device; complete the flow.
+5. Restore `apps/scanner/operator.json`'s `multi_threshold_verifiers` to `[]` (the committed
+   reference); confirm `git status --porcelain` clean.
+6. Rebuild and install the reference build; repeat steps 3-4 with the same two thresholds.
+
+Expectations, after the list above: with `multi_threshold_verifiers: ["127.0.0.1"]`, BOTH the
+18-ask and the 21-ask are admitted (the exemption lifts the per-origin lock, D74 rule 3); with the
+reference `[]` config, the FIRST threshold asked is admitted and locked, and the SECOND (different)
+threshold from the same origin is refused ("but it first asked for over ..."), matching the
+existing S1/D74 behaviour already device-confirmed in an earlier session.
 
 ---
 

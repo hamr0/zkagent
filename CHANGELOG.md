@@ -5,6 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Scanner.** §6.7 fix (G1, 2026-09-06 validation pass, orchestrator gap
+  list): the verifier-hostname allowlist gate now runs BEFORE
+  `HandoffClient.fetchRequestRaw`'s `request_uri` GET, not just after JWS
+  verification — previously an unlisted/disallowed site's `request_uri`
+  was fetched (learning the link was opened and the device's IP) before
+  being refused. `OperatorPolicy.gateMessageFor` is the one pure function
+  both the new pre-fetch check and the existing post-verification
+  defence-in-depth check call. The verification pipeline moved out of
+  `MainActivity` into `RequestTrust.verifyHandoff` (Activity-free, testable
+  with injected `resolveKey`/`fetchRaw` lambdas). `apps/demo/server.mjs`'s
+  `request_uri` GET is now logged so a device run can prove the fetch
+  never happened for a refused host.
 - **Scanner.** §6.7 POC (D82/D84): `apps/scanner/operator.json` — a
   committed, build-time-validated per-operator config (schema v1, nine
   validation rules enforced in `app/build.gradle.kts`, no runtime parsing,
