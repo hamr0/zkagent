@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs.** PRD (`docs/wiki/milestones.md` §6.7, `history.md` v1.74):
+  operator-knobs design — current-state table (none of the seven D82 knobs
+  are configurable in `apps/scanner` today; thresholds/branding are
+  single-writer constants, three knobs have no code path at all), a
+  build-time `operator.json` mechanism recommendation (Gradle-read into
+  `BuildConfig`/`resValue`, rejecting on-device parsing and per-operator
+  flavors), schema v1, 8 build-fails-on validation rules, a not-yet-built
+  riskiest-assumption POC, and 4 numbered owner decision points (each with
+  a recommendation, none picked silently). Still PRD-gated for BUILD
+  (NO-GO #10) — nothing built.
 - **Docs.** PRD (`docs/wiki/decisions.md`, `questions.md`, `milestones.md`,
   `history.md` v1.73): D83 — Play track PARKED, the owner's Play developer
   account was closed for inactivity and the owner declined to open a new

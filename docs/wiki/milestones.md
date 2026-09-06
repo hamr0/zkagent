@@ -583,6 +583,116 @@ question per hostname — each subdomain listed separately in knob 2's allowlist
 own threshold under D74 — not a new knob. This case is parked as Q52 (DEFERRED, follows broad
 adoption), not scoped further here.
 
+### 6.7.1 Current state (read from source, 2026-09-06)
+
+| Knob | Hardcoded today at | Writers |
+|---|---|---|
+| 1. Tier mode | Doesn't exist — `RequestTrust.tierOf`/`TierOutcome` (`MainActivity.kt:750-751`) accept "A" or "B" unconditionally; no B-only gate anywhere | 0 (no gate to own) |
+| 2. Verifier hostname allowlist | Doesn't exist as a general accept-list — any request whose JWS verifies (item 14) is accepted from any origin. The only adjacent hostname set is `ThresholdPolicy.NAMED_EXCEPTIONS` (`ThresholdPolicy.kt:46`, ships `emptySet()`), which is the *multi-threshold* exemption list (D74 rule 3), a different knob than "approved entities" | 1 writer, but wrong knob |
+| 3. Threshold list | `ThresholdPolicy.PRESETS = setOf(15,16,18,21,60,65)` — `ThresholdPolicy.kt:40` | 1 (test file independently re-spells the same six ints, per AGENT_RULES "independent expectation," not a second production writer) |
+| 4. Evidence plug selection | Doesn't exist as an operator choice. `DeviceKey.PREFERRED_EVIDENCE_TYPE = "sig-ed25519/1"` (`DeviceKey.kt:169`) is the device's own algorithm-preference order (ed25519 vs p256, a capability fallback), not a plug picker; tier A always ships bare (`evidence: []`, D27, hardcoded in `MintGate.kt`/item 9); no attestation plug (Play Integrity etc.) exists in the tree to select | 1 writer for the preference constant; the bare-vs-plug choice is hardcoded control flow, not data |
+| 5. Hostnames allowed tier C | Doesn't exist — tier C is refused outright, fail-loud, at `RequestTrust`/item 13; there is no field to reserve yet | 0 |
+| 6. Question wording | Not a stored string — computed at runtime, `SessionDisplay.kt:202`: `"This website asks if you are over ${verified.threshold}"` | 1 (the template expression) |
+| 6. Branding (app name) | `apps/scanner/app/src/main/res/values/strings.xml:5`, `app_name = "zkagent Scanner"` | 1 |
+| 7. Signing | Not a knob (by design) — `KEYSTORE_FILE`/`KEYSTORE_PASSWORD`/`KEY_ALIAS`/`KEY_PASSWORD` env vars, `apps/scanner/app/build.gradle.kts` `signingConfigs` (~line 76) | 1 |
+
+Also found, relevant to the mechanism: `buildFeatures.buildConfig = true` is already on
+(`build.gradle.kts` ~line 121); one `buildConfigField` already exists (`GIT_SHA`, item 24); one
+product flavor ("regular", `flavorDimensions`/`productFlavors` ~lines 90-95) already exists. No
+`resValue`, no per-operator flavor, no `assets/operator.json`-shaped file anywhere today.
+`apps/demo` (verifier side) reads its own knobs from env vars today (`LINK_SCHEME`, `THRESHOLD`
+hardcoded to 18, `SCOPE_DOMAIN`, attester/request-signer keys) — a separate, later
+chiproof/demo-side config concern, noted but out of §6.7's scope per this task's instructions.
+
+### 6.7.2 Mechanism
+
+**Recommend (A): `apps/scanner/operator.json`, read by Gradle at configure time, emitted as
+`buildConfigField`/`resValue` constants — no file ships inside the APK, no on-device parsing.**
+Rejected: **(B) bundled `assets/operator.json` parsed at app startup** — adds a runtime JSON
+schema-validation path (a new on-device failure surface item 4's `MasterlistVerifier`/`M0Probe`
+lesson already warns against: corrupt input must refuse, never silently default) for something
+Gradle can already resolve once, at build time, with a failed build instead of a failed boot.
+**(C) one product flavor per operator** — multiplies build variants for what is really just
+constant substitution; the existing single "regular" flavor stays, `operator.json` supplies its
+values. (A) keeps every constraint below true with the least new surface: no runtime fetch
+(NO-GO #3), one writer per knob (Gradle → `BuildConfig`/`R.string`, never re-read from a file at
+runtime), and a bad file is a build failure, never a silent default.
+
+### 6.7.3 Schema v1
+
+```json
+{
+  "schema_version": 1,
+  "operator": { "name": "Acme Verify", "contact_url": "https://acme.example/contact" },
+  "tiers": "A+B",
+  "thresholds": [15, 18, 21],
+  "verifiers": ["state.gov", "127.0.0.1"],
+  "evidence_plug": "none",
+  "tier_c_verifiers": [],
+  "strings": { "app_name": "Acme Age Check" }
+}
+```
+`tiers`: enum `"A+B" | "B"`. `thresholds`: non-empty subset of `{15,16,18,21,60,65}` (D74).
+`verifiers`: exact **hostnames**, not full origins — no scheme, no port, no wildcards; this
+matches the app's existing D74/D38 host-only key shape (`ThresholdPolicy.hostnameOf`), so
+`http://127.0.0.1:8787` (the M3 dev origin, D76) is expressed as `"127.0.0.1"`. Flagged as
+open decision point 1 below — the existing code convention argues for hostname, but nothing
+prevents a future need to distinguish origins that share a hostname on different ports.
+`evidence_plug`: enum `"none"` only today — `"sig-ed25519/1"`/`"sig-p256/1"` are device-capability
+fallbacks the app already always tries, not a build choice; no attestation plug exists in the
+repo to name as a second enum value yet, so the schema reserves the field but validates against
+a list of exactly one until one ships. `tier_c_verifiers`: MUST be `[]`; a non-empty array fails
+the build until M3b exists (D73). `strings`: `app_name` only in v1 (see decision point 3).
+Signing is **NOT** in this file (D80/D81) — it stays in `secrets/`/env vars.
+
+### 6.7.4 Validation rules (build fails on any of these)
+
+1. `schema_version` missing or not `1`. 2. `tiers` not exactly `"A+B"` or `"B"`. 3. `thresholds`
+empty, or containing a value outside `{15,16,18,21,60,65}` (D74). 4. `verifiers` empty, containing
+a wildcard, a scheme, or a port. 5. `evidence_plug` not `"none"` or a plug id that actually exists
+in `chiproof`'s registry at build time. 6. `tier_c_verifiers` non-empty. 7. Any unknown top-level
+or nested key (typo protection — never silently ignored). 8. File missing entirely, and the build
+is not explicitly the reference build's own committed default (decision point 2).
+
+### 6.7.5 Riskiest assumption + POC (not built)
+
+Candidate: *the allowlist and threshold list can be driven entirely from `BuildConfig` without
+touching `ThresholdPolicy`'s enforcement logic, and a malformed `operator.json` fails the Gradle
+build rather than shipping.* POC shape: two `operator.json` fixtures (one valid, one with an
+out-of-list threshold) → two `assembleRegularDebug` runs → `aapt2 dump badging`/`BuildConfig`
+source inspection confirms the valid file's values landed unchanged, and one existing
+`ThresholdPolicyTest` (retargeted to read `BuildConfig.THRESHOLDS` instead of the hardcoded
+`PRESETS` literal) still passes with no change to `ThresholdPolicy.evaluate`'s logic; the invalid
+fixture's build fails before `:app:compileRegularDebugKotlin`. Pass = both outcomes observed,
+`ThresholdPolicy`'s own code untouched by the POC.
+
+### 6.7.6 Interaction with existing decisions
+
+D74's lock (first-seen threshold per hostname, refuse a change) stays in `ThresholdPolicy`
+exactly as built — the config only supplies which values are legal, never how the lock behaves.
+Q52 stays deferred (multi-threshold-per-domain is an allowlist-authoring pattern, not a schema
+change). The owner's own showcase build becomes just one `operator.json` among many (D81) —
+its `thresholds`/`verifiers` are today's hardcoded values, committed as the reference config
+(decision point 2). `docs/product/customer-guide.md` §7 gets a `operator.json` walkthrough once
+this is built, not now.
+
+### 6.7.7 Open decision points for the owner
+
+1. **Origin vs. hostname in `verifiers`.** Recommend hostname-only, matching the code's existing
+   D74/D38 convention — but this cannot express two operators sharing a hostname on different
+   ports. No known need for that today; flagging rather than deciding silently.
+2. **Commit the reference `operator.json`?** Recommend yes — it is today's already-public
+   values (D74's own published list, `127.0.0.1` for the dev origin), not a secret.
+3. **`strings` in v1 or deferred to v2?** Recommend v1, `app_name` only — the question-line
+   template (item 6) is algorithmic, not a stored string, and shouldn't become one without a
+   stated reason.
+4. **Does `apps/demo` get a matching operator config this milestone, or later?** Recommend
+   later — §6.7 is scanner-scoped per this task's framing; the demo's env-var knobs are a
+   separate, smaller surface and can follow once the scanner mechanism is proven.
+
+**Status: PRD-gated for BUILD — awaiting owner approval of schema v1 and the decision points
+above.**
+
 State: still PRD-gated for BUILD — the list above is the scope; the file schema and the build
 recipe get written into the PRD before anything is built (NO-GO #10). ENHANCEMENT candidate,
 sequenced after §6.6 items 7/1 unless the owner reorders. See decisions.md D81, D82; questions.md
