@@ -32,6 +32,17 @@ For a signed release build (per-operator keystore, `KEYSTORE_FILE`/`KEYSTORE_PAS
 `KEY_ALIAS`/`KEY_PASSWORD`), see the recipe in
 `docs/product/customer-guide.md` §7.1.
 
+## Operator config
+
+`operator.json` (module root, next to this README) is read and validated by
+Gradle at configure time (`app/build.gradle.kts`, §6.7 POC, D82/D84) — no
+file ships inside the APK, and a bad file fails the build rather than
+shipping a silent default. It sets the per-deployment verifier hostname
+allowlist, the D74 threshold subset, tier mode (A+B vs B-only), and the
+`app_name` string. See `docs/wiki/milestones.md` §6.7 for the schema and the
+nine build-time validation rules; `apps/scanner/scripts/operator-json-negative.sh`
+exercises five deliberately-bad variants against `:app:assembleRegularDebug`.
+
 ## Unit tests (no device needed)
 
 ```

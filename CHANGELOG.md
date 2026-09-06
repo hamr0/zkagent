@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Scanner.** §6.7 POC (D82/D84): `apps/scanner/operator.json` — a
+  committed, build-time-validated per-operator config (schema v1, nine
+  validation rules enforced in `app/build.gradle.kts`, no runtime parsing,
+  no file in the APK). Adds the verifier-hostname allowlist that did not
+  exist before this change (any request whose JWS verified was previously
+  accepted from any origin) — `OperatorPolicy.isVerifierAllowed`, wired at
+  the one place a handoff's origin is accepted
+  (`MainActivity.applyHandoffVerificationOutcome`). `ThresholdPolicy.PRESETS`/
+  `NAMED_EXCEPTIONS` and the `app_name` resource now come from this config
+  (single writer each) instead of hardcoded values.
 - **Docs.** PRD (`docs/wiki/decisions.md` D84, `milestones.md` §6.7.3–§6.7.7,
   `questions.md` Q52, `history.md` v1.75): owner rulings on the four §6.7
   decision points — `verifiers` hostname-only; reference `operator.json`

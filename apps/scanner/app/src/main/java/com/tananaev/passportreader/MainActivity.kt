@@ -1283,6 +1283,55 @@ abstract class MainActivity : AppCompatActivity() {
         }
         when (outcome) {
             is RequestTrust.Outcome.Verified -> {
+                // §6.7 POC (D82/D84) — the verifier-hostname allowlist gate,
+                // this POC's riskiest assumption (milestones.md §6.7.5): the
+                // ONE place a request's origin is accepted for a handoff.
+                // Runs BEFORE the S1 threshold-policy check and BEFORE
+                // verifiedRequest is ever set, so an unlisted/disallowed
+                // hostname is refused loudly before any chip read can
+                // happen — no mint, nothing left this device, same shape as
+                // every other admission refusal in this branch.
+                val gateHostname = ThresholdPolicy.hostnameOf(outcome.request.origin)
+                val gateMessage = if (gateHostname == null) {
+                    // outcome.request.origin already parsed successfully in
+                    // verifyPendingHandoff (RequestTrust.originOf), so this
+                    // is not expected to happen — refuse rather than treat
+                    // an unresolvable hostname as implicitly allowed.
+                    "This site's origin could not be resolved to a hostname — refused."
+                } else if (!OperatorPolicy.isVerifierAllowed(gateHostname)) {
+                    "This site ($gateHostname) is not on this app's approved verifier list — refused."
+                } else {
+                    val tier = RequestTrust.tierOf(outcome.request.json)
+                    // §6.7 item 1 — tier-mode gate. Only tier "A" is judged
+                    // here; tier "C" stays refused outright by the existing
+                    // tierOutcomeFor path (item 13), and an absent/invalid
+                    // tier is likewise left to that existing fail-loud
+                    // check at lock time — this gate has nothing new to say
+                    // about either case.
+                    if (tier == "A" && !OperatorPolicy.isTierAllowed("A")) {
+                        "This site asked for tier A, which this operator does not allow (tier B only) — refused."
+                    } else null
+                }
+                if (gateMessage != null) {
+                    Log.e(TAG, "M2 stage: handoff REFUSED by operator policy (§6.7 POC) — host=$gateHostname")
+                    pendingHandoff = null
+                    verifiedRequest = null
+                    emitReport(
+                        "handoff: REFUSED — operator policy (§6.7): $gateMessage",
+                        ReportLog.DisclosureSummary(
+                            site = siteTitleFor(outcome.request.origin),
+                            result = "Refused — $gateMessage",
+                            sent = "nothing left this device",
+                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                        ),
+                        // item 22: a refusal — see ReportLog.Outcome's doc.
+                        outcome = ReportLog.Outcome.FAIL,
+                    )
+                    refreshSessionDisplay()
+                    showBlockingNotice(gateMessage)
+                    return
+                }
+
                 // §6.5 S1 (D74) — runs BEFORE verifiedRequest is ever set,
                 // extending item 13's fail-loudly rule from "tier
                 // absent/invalid" to "threshold not on the preset list" /

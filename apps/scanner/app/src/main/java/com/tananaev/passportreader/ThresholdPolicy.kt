@@ -34,16 +34,22 @@ import java.net.URISyntaxException
  */
 object ThresholdPolicy {
 
-    /** The fixed, published preset list (D74). Spelled out, not derived
-     * from any other constant — see [ThresholdPolicyTest] for the
-     * independent-expectation discipline this enables. */
-    val PRESETS: Set<Int> = setOf(15, 16, 18, 21, 60, 65)
+    /** The published preset list (D74) — §6.7 POC (D82/D84): sourced FROM
+     * [OperatorPolicy.THRESHOLDS] (Gradle-validated, at build time, to be a
+     * non-empty subset of the fixed six values `{15,16,18,21,60,65}` —
+     * `app/build.gradle.kts` rule 3), not hardcoded here any more. The
+     * committed reference `operator.json` declares exactly the six
+     * published values, so [ThresholdPolicyTest]'s independent-expectation
+     * discipline still holds for THIS build. */
+    val PRESETS: Set<Int> = OperatorPolicy.THRESHOLDS
 
     /** Exact-hostname exception allowlist (D74 rule 3) — no wildcards,
-     * app-side only, never the verifier's own choice. Deliberately EMPTY:
-     * `127.0.0.1` (M3's demo origin, D76) is explicitly NOT here, so the
-     * demo exercises the per-origin lock rather than being exempt from it. */
-    val NAMED_EXCEPTIONS: Set<String> = emptySet()
+     * app-side only, never the verifier's own choice. §6.7 POC (D82/D84):
+     * sourced FROM [OperatorPolicy.MULTI_THRESHOLD_VERIFIERS]. The
+     * committed reference `operator.json` ships this empty: `127.0.0.1`
+     * (M3's demo origin, D76) is explicitly NOT exempt, so the demo
+     * exercises the per-origin lock rather than being exempt from it. */
+    val NAMED_EXCEPTIONS: Set<String> = OperatorPolicy.MULTI_THRESHOLD_VERIFIERS
 
     fun isPreset(threshold: Int): Boolean = threshold in PRESETS
 
