@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — open questions Q1–Q51
+title: zkagent — open questions Q1–Q52
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# zkagent — open questions Q1–Q51
+# zkagent — open questions Q1–Q52
 
 Deduped index of PRD §11 (Open questions). Every Qn from Q1–Q48 is listed in order;
 narrative status-update chains, commit/test-count histories, and line anchors from
@@ -443,8 +443,25 @@ this is flagged in the report back to the caller.
   owner: (1) confirm (A); (2) whether "one upstream" implies an operator-config layer
   (knobs/UI as configuration rather than forking source) — that would be a new PRD item, not
   assumed here; (3) whether the owner runs the showcase Play listing at all under (A). Status:
-  PARTIALLY CLOSED by D81 (points 1 and 2); point 3 open. D81 (2026-09-05, owner): distribution
-  model (A) confirmed and an operator-configuration layer confirmed as a deliverable (knob list
-  and location PRD-gated, not decided — new PRD item required, NO-GO #10, see milestones.md
-  §6.7); point (3), whether the owner runs the showcase Play listing at all, remains OPEN. See
-  decisions.md D81; milestones.md §6.6, §6.7.
+  CLOSED (all three points). D81 (2026-09-05, owner): distribution model (A) confirmed and an
+  operator-configuration layer confirmed as a deliverable (knob list and location PRD-gated, not
+  decided — new PRD item required, NO-GO #10, see milestones.md §6.7). D82 (2026-09-06, owner)
+  closed point (3): the owner builds and lists the showcase scanner on Google Play, closed
+  testing track only — "do we need to build ours on play anyways as a way of showcasing without
+  sideloading and knowing what stores ask for?", confirmed "#2 yes." §6.6 is now LIVE (ungated).
+  See decisions.md D81, D82; milestones.md §6.6, §6.7.
+- **Q52 (opened 2026-09-06, owner; DEFERRED by D82(c))** — Multi-threshold origins: one operator
+  such as `state.gov` serves both seniors (65+) and minors (16+); D74 locks the first-seen
+  threshold per origin and refuses any other. Resolution agreed with the owner: no new knob,
+  D74 unchanged; the pattern is one question per hostname (`seniors.state.gov` /
+  `minors.state.gov`, each listed separately in the exact-hostname allowlist, each locking its
+  own threshold). Reasoning: D74 closes single-origin age-narrowing by repeated asks; two
+  hostnames can only narrow the same person if the site links them across hostnames, which it
+  already can via its own login and which any two colluding sites can do — D74 never claimed to
+  stop collusion; each threshold costs the user a separate consented scan whose question line
+  names the threshold, so exposure is bounded by the fixed list and equals that of unrelated
+  sites; tier-A presentations stay unlinkable across hostnames and tier-B zktags are per-origin.
+  Status: **DEFERRED**, not open for work — follows broad adoption, not scheduled. Owner,
+  verbatim: "park the subdomain for now … i generally think it will be a minor case for the
+  future … the whole thing is just av for now and nothing else besides, the absolute domain
+  multiple ask follows broad adoption." See decisions.md D82(c); milestones.md §6.7.

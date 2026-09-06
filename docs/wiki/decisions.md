@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D81
+title: zkagent — owner decisions D1–D82
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D81
+# Owner decisions D1–D82
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -220,3 +220,23 @@ Q51's status line updated to "PARTIALLY CLOSED by D81 (points 1 and 2); point 3 
 (d) **Scope note — S3 CLOSED.** Owner: "ok write it into S3 then S1 next, i just want to avoid the feat creep." §6.5 item 3 (S3) is CLOSED as of this amendment — no further scan-pane UI work proceeds without a new PRD entry (NO-GO #10). Next item to build is S1 (preset threshold list/lock/exceptions).
 
 Owner, 2026-09-05, recorded to satisfy the scope gate (NO-GO #10) ahead of the code that implements (a)/(b); (c) is already device-confirmed alongside the S2/S3 build. See milestones.md §6.5 item 3; customer-guide.md "Two answers, two places," §6.10; findings.md #22 (closed by (b)).
+
+**D82 (2026-09-06, owner) — Q51 point 3 CLOSED (showcase Play listing confirmed); §6.7 operator knobs scoped (build-time `config.json`); Q52 (multi-threshold origins) parked.**
+
+(a) **Q51 point 3 CLOSED: the owner builds and lists the showcase scanner on Google Play, closed testing track only.** Owner asked "do we need to build ours on play anyways as a way of showcasing without sideloading and knowing what stores ask for?" and confirmed "#2 yes." Rationale (already in §6.6 items 2, 3, 6): showcase without sideloading; learn what Google's review asks of a passport-NFC app with no backend and whether it passes at all; hit the Play App Signing digest problem before any operator does. Effect: §6.6 is now LIVE (ungated) — item 7 (release-signing keystore, D80) is the first task, then item 1 (closed-track upload), then item 2 (record the Play digest). Q51 is now fully CLOSED (all three points).
+
+(b) **§6.7 scoped: operator knobs are one build-time `config.json` (name provisional), bundled into the APK at build time — never fetched at runtime.** Owner: "this is apache (whatever it allows) open source distributed as is with some knobs and operator filling like attestation, list of approved entities, ages. operators can change knobs preferably not core code." Mechanism, owner-endorsed: changing the config means rebuilding the app; the config is NOT fetched at runtime from any server — a runtime fetch would reintroduce a hosted dependency (NO-GO #3) and a remotely-controllable allowlist. Operators edit the file, never source. The knob list (all build-time):
+
+  1. Tier mode: A+B, or B only.
+  2. Verifier hostname allowlist — exact hostnames, no wildcards (D74). This is the "list of approved entities" / "accepted av links" knob; the `av://` link FORMAT itself is defined by chiproof, versioned with it under D72 lockstep, identical for every operator, and is NOT a knob — operators pick up format changes on rebuild.
+  3. Threshold list — subset of the fixed list `{15,16,18,21,60,65}` (D74).
+  4. Attestation / evidence plug selection — which plug the build wires in; default none (the reference build ships bare, D27 unchanged). Build-time because it is code wiring and plugs like Play Integrity are per-app.
+  5. Hostnames allowed tier C — field reserved, MUST stay empty until M3b exists (D73); scoping it is M3b's job.
+  6. Question wording and branding.
+  7. Signing — NOT a config knob: the keystore is a build input the operator supplies (D80/D81); the config may reference it but it lives outside the JSON.
+
+  State: still PRD-gated for BUILD — this list is the scope; the file schema and the build recipe get written into the PRD before anything is built (NO-GO #10). ENHANCEMENT candidate; sequenced after §6.6 items 7/1 unless the owner reorders. See milestones.md §6.7.
+
+(c) **Q52 (multi-threshold origins) — DEFERRED, not resolved by a new knob; D74 unchanged.** Owner's use case: one operator such as `state.gov` serving seniors (65+) and issuing IDs for minors (16+). D74 locks the first-seen threshold per origin and refuses any other. Resolution: no new knob, D74 stands; the pattern is one question per hostname — e.g. `seniors.state.gov` / `minors.state.gov`, each listed separately in the exact-hostname allowlist, each locking its own threshold. Reasoning: D74 closes single-origin age-narrowing by repeated asks; two hostnames can only narrow the same person if the site links them across hostnames, which it already can via its own login and which any two colluding sites can do — D74 never claimed to stop collusion; each threshold costs the user a separate consented scan whose question line names the threshold (D74 rule 3), so exposure is bounded by the fixed list and equals that of unrelated sites; tier-A presentations stay unlinkable across hostnames and tier-B zktags are per-origin. Owner's ruling on scope: "park the subdomain for now … i generally think it will be a minor case for the future … the whole thing is just av for now and nothing else besides, the absolute domain multiple ask follows broad adoption." Q52 is DEFERRED (follows broad adoption), not OPEN and not scheduled. See questions.md Q52; milestones.md §6.7 (future operator guide item).
+
+Owner, 2026-09-06. See milestones.md §6.6, §6.7; questions.md Q51, Q52.

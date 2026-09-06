@@ -465,9 +465,13 @@ Item ordering: item 7 (release-signing keystore) precedes item 1 (first upload) 
 upload key is derived from the local keystore, so the keystore must exist first. **D81
 (2026-09-05, owner) closed Q51 points (1) and (2): distribution model (A) confirmed** — items
 1–4 below are the owner's own showcase-listing deliverables only, not a requirement on
-operators (who make their own listing/hosting decisions for their own package), and remain
-gated on Q51 point (3) (whether the owner runs a showcase listing at all under model (A),
-still OPEN); item 7 is reframed below. See questions.md Q51; decisions.md D81.
+operators (who make their own listing/hosting decisions for their own package). **D82
+(2026-09-06, owner) closed Q51 point (3): the owner confirmed the showcase Play listing goes
+ahead, closed testing track only** — "do we need to build ours on play anyways as a way of
+showcasing without sideloading and knowing what stores ask for?", confirmed "#2 yes." Q51 is
+now fully CLOSED and this section is **LIVE (ungated)**: item 7 (release-signing keystore) is
+the first task, then item 1 (closed-track upload), then item 2 (record the Play digest). See
+questions.md Q51; decisions.md D81, D82.
 
 1. First upload goes to a **closed testing track**, never production, using the current release
    line (v0.5.0 or later under D72 lockstep). Production is a separate, later owner decision.
@@ -513,15 +517,46 @@ still OPEN); item 7 is reframed below. See questions.md Q51; decisions.md D81.
    and (b) the owner's own showcase keystore, generated the same way — neither is a shared
    secret; the requirements above (MUST) apply to whoever runs them, operator or owner.
 
-## 6.7 Operator knobs (D81) — PRD-gated, not scoped
+## 6.7 Operator knobs (D81, scoped by D82) — PRD-gated for BUILD
 
 Purpose: an operator-configuration layer (D81 point 2) so UI/knob adjustments do not require
 forking or editing source, consistent with the one-upstream, Apache-2.0 distribution model (A)
-confirmed by D81 point 1. Candidate knobs (listed as candidates only, not decisions): the
-threshold preset list and hostname exception allowlist (today's `ThresholdPolicy` constants),
-verifier origin/scope, question-line wording, and app branding/strings. The knob list, config
-format, and location are NOT decided here — a new PRD item is required and must be owner-approved
-before any build (NO-GO #10, the scope gate). See decisions.md D81; questions.md Q51.
+confirmed by D81 point 1. Owner, D82: "this is apache (whatever it allows) open source
+distributed as is with some knobs and operator filling like attestation, list of approved
+entities, ages. operators can change knobs preferably not core code."
+
+**Mechanism (D82, owner-endorsed): one build-time `config.json` (name provisional), bundled into
+the APK at BUILD time.** Changing it means rebuilding the app; the file is NOT fetched at runtime
+from any server — a runtime fetch would reintroduce a hosted dependency (NO-GO #3) and a
+remotely-controllable allowlist. Operators edit the file, never source.
+
+**Knob list (D82; all build-time):**
+
+1. **Tier mode** — A+B, or B only.
+2. **Verifier hostname allowlist** — exact hostnames, no wildcards (D74). This is the "list of
+   approved entities" / "accepted av links" knob. The `av://` link FORMAT itself is defined by
+   chiproof, versioned with it under D72 lockstep, identical for every operator, and is NOT a
+   knob — operators pick up format changes on rebuild.
+3. **Threshold list** — subset of the fixed list `{15,16,18,21,60,65}` (D74).
+4. **Attestation / evidence plug selection** — which plug the build wires in; default none (the
+   reference build ships bare, D27 unchanged). Build-time because it is code wiring and plugs
+   like Play Integrity are per-app.
+5. **Hostnames allowed tier C** — field reserved, MUST stay empty until M3b exists (D73);
+   scoping it is M3b's job, not this item's.
+6. **Question wording and branding.**
+7. **Signing — NOT a config knob.** The keystore is a build input the operator supplies
+   (D80/D81); the config may reference it but it lives outside the JSON.
+
+Future operator guide item: where an operator needs more than one threshold at one registrable
+domain (e.g. a state government site serving both seniors and minors), the pattern is one
+question per hostname — each subdomain listed separately in knob 2's allowlist, each locking its
+own threshold under D74 — not a new knob. This case is parked as Q52 (DEFERRED, follows broad
+adoption), not scoped further here.
+
+State: still PRD-gated for BUILD — the list above is the scope; the file schema and the build
+recipe get written into the PRD before anything is built (NO-GO #10). ENHANCEMENT candidate,
+sequenced after §6.6 items 7/1 unless the owner reorders. See decisions.md D81, D82; questions.md
+Q51, Q52.
 
 ## 7. Riskiest-assumption register (what M0 must answer)
 
