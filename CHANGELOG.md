@@ -5,6 +5,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Scanner (FIX, HIGH).** S67-POC device evidence (2026-09-06): a cold
+  `av://` launch of `RegularActivity` (`singleTask`, fixed
+  `screenOrientation`) into a brand-new task can trigger the platform's
+  own duplicate `ActivityTaskManager` relaunch ("activity-requested-
+  portrait"), briefly creating a second live Activity instance while the
+  first is still mid-verification of the same handoff. A refusal computed
+  by the instance that then gets destroyed was previously discarded
+  outright — the fence check ran before the threshold/operator-policy
+  decision was even computed, so the user saw the stale question line
+  with no notice at all. New `DroppedOutcomeRelay` (process-wide, message-
+  only) plus fence-gating moved to the actual dialog-show call
+  (`showBlockingNotice`/`showBlockingOutcomeDialog`) so a dying instance's
+  decided-but-unshowable refusal is relayed to the next live instance's
+  `onResume` instead of lost. No scan-enabling state was ever found armed
+  by this race (verified: every refusal branch nulls
+  `pendingHandoff`/`verifiedRequest` on the deciding instance before any
+  UI-show attempt). See `docs/logs/M3-S67-POC-EVIDENCE-2026-09-06.md`
+  "Root cause + fix" for device before/after evidence.
 - **Scanner.** §6.7 fix (G1, 2026-09-06 validation pass, orchestrator gap
   list): the verifier-hostname allowlist gate now runs BEFORE
   `HandoffClient.fetchRequestRaw`'s `request_uri` GET, not just after JWS

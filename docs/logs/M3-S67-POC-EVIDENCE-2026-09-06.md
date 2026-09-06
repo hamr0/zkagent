@@ -423,13 +423,109 @@ dispatching the resulting `app_link_av` with `adb shell am start -a android.inte
   "This website asks if you are over 21" with the document form — accepted, the exemption lifting
   the per-origin lock as D74 rule 3 specifies.
 - (b) Reference config (`multi_threshold_verifiers: []`): logcat `20:11:50` `handoff REFUSED by
-  threshold policy (S1, D74) — host=127.0.0.1 threshold=21`, blocking notice "This site asked for
-  over 21, but it first asked for over 18 — refused.", a matching report-log entry at `20:11:50`.
-  Verifier: `tx created W5vV1wj7TnHubDxq mode=A threshold=18 embedded_threshold=21`, a
+  threshold policy (S1, D74) — host=127.0.0.1 threshold=21`, and a matching report-log entry at
+  `20:11:50`. Verifier: `tx created W5vV1wj7TnHubDxq mode=A threshold=18 embedded_threshold=21`, a
   `request_uri GET` for it, no verdict line.
 
+  **CORRECTION (2026-09-06, later same day, FIX pass on `feat/s67-poc`)**: the line above
+  originally also claimed the blocking notice ("This site asked for over 21, but it first asked for
+  over 18 — refused.") was shown on screen. It was NOT — the refusal was computed and logged in
+  code, but never reached the screen. A second, independent device capture the same day (full
+  logcat, single process pid 24247) caught the actual failure: the `RegularActivity` process was
+  created TWICE, ~220ms apart, for this ONE `av://` launch, and the notice was attempted on the
+  Activity instance that was already being torn down. See "Root cause + fix" below. (b)'s threshold
+  REFUSAL logic itself was and remains correct — this correction is about what the user actually
+  saw, not about the policy decision.
+
 Both halves of the G4 device procedure above are now closed; no device gap remains for
-multi-threshold origins.
+multi-threshold origins. The double-Activity display bug this correction describes is closed
+separately — see "Root cause + fix" below.
+
+### Root cause + fix (2026-09-06, FIX pass, HIGH severity)
+
+**Symptom**: (b) above computed the correct threshold-policy refusal in code and logged it, but
+the blocking notice never reached the screen — the owner saw the stale question line ("This
+website asks if you are over 18") with the document form still active, as though nothing had
+happened.
+
+**Root cause (device-confirmed, Phase 1-3 of `/root-cause`)**: `RegularActivity` is
+`launchMode="singleTask"` with a fixed `android:screenOrientation="portrait"` (Finding #19,
+D63). Launching it cold — into a brand-new task, from a non-Activity-context caller (a
+browser/camera tap, or `adb shell am start`, both routes this PRD documents) — can trigger the
+PLATFORM's own follow-up relaunch: `ActivityTaskManager` logs `TaskLaunchParamsModifier:
+... activity-requested-portrait`, then a SECOND `START ... with LAUNCH_SINGLE_TASK` issued by
+`com.android.systemui`, ~150-300ms after the first. This briefly creates a second live
+`RegularActivity` instance while the first is still mid-verification of the SAME `av://` handoff
+— exactly the "two live `MainActivity` instances" scenario `LifecycleFence`'s own class doc
+anticipates. Reproduced on-device (Pixel 6a, this session), pre-fix, across three separate `adb
+install -r` + `am start` batches: 2 of 14 cold launches raced. Non-deterministic and clearly
+condition-sensitive (one 6-launch batch raced zero times, a later batch on the same build raced
+2 of 5) — matching the original report's own observation that "the same tier-A refusal in an
+earlier round WAS seen — so recreation is not deterministic." A plain `adb shell am force-stop` +
+`am start` (task already exists, no reinstall) never raced in 12 attempts — the race needs a
+genuinely NEW task, which `adb install -r` reliably produces but a mere force-stop does not.
+`android:resizeableActivity="false"` was tried and REFUTED as a fix (still raced at a comparable
+rate, tested with a controlled single-variable A/B: 1 of 5 reinstall-launches raced with it set,
+matching the ~1-in-5 to ~2-in-14 rate without it).
+
+`LifecycleFence` already did its one job correctly: the dying instance's late-landing outcome
+never touched its own torn-down window directly (no crash observed in this session's captures).
+But "never touch this instance's UI" meant, before this fix, that a REFUSAL the user must be told
+about was simply discarded — the dying instance's own `showBlockingNotice` call was skipped
+outright (fence check ran BEFORE the threshold decision was even computed), and no other instance
+ever learned what it had decided.
+
+**Fix** (`apps/scanner/app/src/main/java/com/tananaev/passportreader/DroppedOutcomeRelay.kt`,
+new; `MainActivity.kt` — `beginHandoffVerification`'s fenced landing, `showBlockingNotice`,
+`showBlockingOutcomeDialog`, `onResume`): the fenced landing now ALWAYS runs
+`applyHandoffVerificationOutcome` (state mutation, log, report-log persistence, and view-text
+writes are all safe on an already-destroyed instance — none of them attach a new window). The one
+genuinely unsafe operation, opening a NEW `AlertDialog` window, is now fence-gated at the point it
+would actually show: when the owning instance's fence has already retired, the message is stashed
+in `DroppedOutcomeRelay` (a small process-wide relay, deliberately NOT a wider promotion of
+`pendingHandoff`/`verifiedRequest` to companion scope) instead of shown; `MainActivity.onResume`
+on the next live instance consumes and shows it exactly once. No in-flight verification is
+cancelled; scan-enabling state (`pendingHandoff`/`verifiedRequest`) is nulled on refusal exactly as
+before, on whichever instance decided it — nothing is left armed.
+
+**Device re-verification (this session, fixed build)**: a 12-launch `adb install -r` + `am start`
+batch reproduced SOME form of the double-dispatch on 12 of 12 launches (the rate rose sharply in
+this later batch — condition-sensitive, as above, not a regression introduced by the fix: the fix
+does not touch launch/task behaviour at all, only what happens once a second instance exists).
+Both known variants appeared: the exact race shape matching the original bug (two onCreate calls
+~150-220ms apart, first instance destroyed mid-flight, 1 of 12) and the same-instance variant
+where the platform's second `START` is redelivered to the SAME still-live instance via the
+pre-existing `pendingHandoff !== handoff` supersede-guard (11 of 12, correctly absorbed with no
+dialog ever lost — this variant was never broken). In the one destroy-and-recreate capture
+destroy-and-recreate captures, the logcat now reads:
+```
+M2 lifecycle: fence closed — outcome still applied, UI relayed if user-facing
+M2 stage: handoff REFUSED by threshold policy (S1, D74) — host=127.0.0.1 threshold=21
+...
+M2 stage: blocking notice shown: This site asked for over 21, but it first asked for over 18 — refused.
+M2 lifecycle: fence closed — relaying blocking notice to next live instance
+```
+— the refusal is now always computed, logged, and either shown directly or relayed, never silently
+lost. The surviving second instance's own independent verification of the same intent also reaches
+the same REFUSED conclusion and shows its own notice.
+
+**Q3 (scan-enabling state left armed?)**: NOT observed and not possible by construction — every
+branch that computes a refusal (threshold policy, operator-policy hostname/tier gate, and the
+generic `Outcome.Refused` path) nulls `pendingHandoff`/`verifiedRequest` on the SAME instance that
+computed it, before any UI-show attempt; the relay carries only the already-decided, value-free
+message text, never a handoff object, so a second instance can never resume or arm a scan from a
+relayed message.
+
+**Regression**: `testRegularDebugUnitTest` 481/0/0 (baseline 477/0/0 + 4 new
+`DroppedOutcomeRelayTest` cases, JUnit XML parsed directly, not agent prose), `assembleRegularDebug`
+green, `scripts/operator-json-negative.sh` all 7 cases PASS, `LifecycleFenceTest`'s forced-recreation
+cases still green and unchanged.
+
+**Note on the earlier "over 18" observation above** (20:12:04, this same file): that was
+independently explained by the pre-existing "Observation" note immediately below the (now
+corrected) G4 entry — the owner re-tapping a stale, ~9-minutes-expired round-2 browser tab, an
+UNRELATED transaction (`W9R2Lyty2N0AmlFb`) fetched and verified fresh. It is not a symptom of the
+double-Activity race this fix closes.
 
 **Observation (pre-existing, not introduced by this branch — ledger candidate)**: at `20:12:04`
 the app fetched and verified `W9R2Lyty2N0AmlFb` (created `20:03:xx` during the G1 recheck above,

@@ -647,9 +647,27 @@ abstract class MainActivity : AppCompatActivity() {
      * a terminal outcome of the CURRENT locked session (an unrelated bad
      * paste, or a foreign handoff's admission refusal). Logged like every
      * other user-facing status write in this file (an unlogged UI-only
-     * write hid real M2 failures — see [emitReport]'s doc). */
+     * write hid real M2 failures — see [emitReport]'s doc).
+     *
+     * S67-POC FIX (2026-09-06, device evidence) — [fence]-gated: every
+     * call site reachable from [beginHandoffVerification]'s fenced landing
+     * can run on an instance whose window is already torn down (the
+     * platform's own duplicate-launch race — see [DroppedOutcomeRelay]'s
+     * doc). Opening a NEW `AlertDialog` window there is the one genuinely
+     * unsafe operation (device evidence: a `WindowManager`-rejected/
+     * `BadTokenException`-shaped stack at this exact call). When
+     * [fence] has already retired, this relays [message] instead of
+     * calling `.show()` — [MainActivity.onResume] on the next live
+     * instance shows it exactly once. A caller with no fence concern
+     * (nothing reachable from an async landing) still just sees its
+     * dialog shown normally, since its own instance's fence is alive. */
     private fun showBlockingNotice(message: String) {
         Log.i(TAG, "M2 stage: blocking notice shown: $message")
+        if (!fence.passes()) {
+            Log.i(TAG, "M2 lifecycle: fence closed — relaying blocking notice to next live instance")
+            DroppedOutcomeRelay.stash(message)
+            return
+        }
         AlertDialog.Builder(this)
             .setMessage(message)
             .setCancelable(false)
@@ -949,6 +967,13 @@ abstract class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (lockedMode != null) armNfcDispatch() // e.g. returning from the biometric prompt / a backgrounding
+        // S67-POC FIX (2026-09-06, device evidence) — the ONE place a
+        // message relayed by [DroppedOutcomeRelay] (a sibling instance's
+        // outcome that could not show its own dialog because ITS window
+        // was already gone) gets shown, on whichever instance is next to
+        // resume — see that object's class doc. `consume()` clears it, so
+        // a message is shown exactly once even across several resumes.
+        DroppedOutcomeRelay.consume()?.let { showBlockingNotice(it) }
     }
 
     override fun onPause() {
@@ -1199,12 +1224,29 @@ abstract class MainActivity : AppCompatActivity() {
                 RequestTrust.Outcome.Refused("verification threw ${e.javaClass.simpleName}: ${e.message}")
             }
             // FIX pass (findings.md #5): fenced — see [LifecycleFence]'s
-            // class doc. Verification itself is not cancelled; only this
-            // landing drops if the Activity that started it is destroyed.
+            // class doc. Verification itself is not cancelled.
+            //
+            // S67-POC FIX (2026-09-06, device evidence — see
+            // [DroppedOutcomeRelay]'s doc): this landing is NO LONGER
+            // dropped outright when [fence] has already retired.
+            // [applyHandoffVerificationOutcome] and everything it calls
+            // (state fields, [emitReport]/`persistLog`, view-text writes)
+            // are all safe to run on an already-destroyed instance — none
+            // of them attach a new window. The ONE genuinely unsafe
+            // operation reachable from here is opening a NEW `AlertDialog`
+            // window ([showBlockingNotice]/[showBlockingOutcomeDialog]),
+            // which is what previously either silently failed
+            // (`WindowManager` rejecting an invalid token) or — the actual
+            // bug this fix closes — simply never told the user a refusal
+            // had happened, because the whole landing was dropped BEFORE
+            // that decision was even computed. Those two functions now
+            // fence-gate themselves (see their own docs) and relay their
+            // message via [DroppedOutcomeRelay] instead of showing when
+            // this instance is already destroyed — [MainActivity.onResume]
+            // is where the next live instance picks it up.
             runOnUiThread {
                 if (!fence.passes()) {
-                    Log.i(TAG, "M2 lifecycle: fence closed — dropped handoff verification outcome")
-                    return@runOnUiThread
+                    Log.i(TAG, "M2 lifecycle: fence closed — outcome still applied, UI relayed if user-facing")
                 }
                 applyHandoffVerificationOutcome(handoff, outcome)
             }
@@ -1891,8 +1933,25 @@ abstract class MainActivity : AppCompatActivity() {
      * caller-supplied text — a dialog shown before any mode was ever
      * locked carries no sentence. The composed text is also `Log.i`'d
      * here, at the same call site that shows the dialog — never a
-     * UI-only write (the standing rule this whole cluster follows). */
+     * UI-only write (the standing rule this whole cluster follows).
+     *
+     * S67-POC FIX (2026-09-06, device evidence) — same [fence] guard as
+     * [showBlockingNotice], same reason: several call sites reach this
+     * function from a fenced async landing (handoff verification, chip
+     * read, biometric prompt callbacks — see [LifecycleFence]'s own list),
+     * any of which can run on an instance whose window is already torn
+     * down. When [fence] has already retired, this relays [message]
+     * (mode-sentence applied, matching what would have been shown) via
+     * [DroppedOutcomeRelay] instead of opening a new dialog window; the
+     * dismiss-time state mutation below is skipped along with it — safe,
+     * since it only ever touched THIS (already-destroyed, about-to-be
+     * garbage) instance's own fields, never shared state. */
     private fun showBlockingOutcomeDialog(message: String, isAccessEstablishmentFailure: Boolean, isTransientChipCommunicationFailure: Boolean = false) {
+        if (!fence.passes()) {
+            Log.i(TAG, "M2 lifecycle: fence closed — relaying terminal outcome dialog to next live instance")
+            DroppedOutcomeRelay.stash(OutcomeText.withModeSentence(message, lockedModeForDisplay()))
+            return
+        }
         val keepMrzAndMode = FailureTransition.keepsMrzAndMode(isAccessEstablishmentFailure, isTransientChipCommunicationFailure)
         // Owner device fix (2026-09-05, findings.md — "wrong details entry
         // still doesn't reset to re-enter"): decoupled from [keepMrzAndMode]
