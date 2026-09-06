@@ -521,6 +521,22 @@ relayed message.
 green, `scripts/operator-json-negative.sh` all 7 cases PASS, `LifecycleFenceTest`'s forced-recreation
 cases still green and unchanged.
 
+**Orchestrator + owner re-verification (20:47–20:52)**: on commit `e0eaea4`, the orchestrator
+re-ran the full regression suite (`testRegularDebugUnitTest` — JUnit XML parsed directly, 481/0/0/0;
+`assembleRegularDebug` — exit 0; `scripts/operator-json-negative.sh` — exit 0), then reproduced the
+cold-launch race four times: `adb install -r`, then `adb shell am start` with a fresh `?threshold=21`
+`av://` link (reference config, origin already locked at 18). All four runs hit the race — each
+logged `pendingHandoff captured from av:// intent` TWICE, followed by exactly one `handoff REFUSED
+by threshold policy (S1, D74) — host=127.0.0.1 threshold=21` and exactly one `blocking notice
+shown`; zero runs needed `DroppedOutcomeRelay` (the same-instance/`onNewIntent` variant, already
+correctly absorbed by the pre-existing supersede-guard, was the one that landed all four times —
+see "Device re-verification" above for why that variant dominates once the device is warmed up).
+Screenshots of the app are black (the app forbids screen capture, expected — no PII/session-state
+surface is ever screenshottable by design), so the fourth run (20:51:31–20:52) was instead
+confirmed by the OWNER reading the live device screen directly, verbatim: "this site asked for
+over 21 but it first asked for over 18 - refused." G4(b) is now PASSED on screen, not only in the
+log — closing the correction recorded earlier in this section.
+
 **Note on the earlier "over 18" observation above** (20:12:04, this same file): that was
 independently explained by the pre-existing "Observation" note immediately below the (now
 corrected) G4 entry — the owner re-tapping a stale, ~9-minutes-expired round-2 browser tab, an
