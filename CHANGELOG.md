@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs.** `docs/product/privacy-policy.md` (new) and
+  `docs/product/play-listing.md` (new): §6.6 item 1 (Play closed-testing
+  upload) prerequisites — the public privacy policy Google Play will link
+  to, and the owner's internal Play Console crib sheet (data safety form
+  reasoning, permission justifications, screenshot rule, store listing
+  text, post-upload recording checklist). No "zero-knowledge"/"ZK" wording
+  in either doc's actual policy/listing text (NO-GO #7, D1); no PII in
+  screenshots (§6.6 item 5).
 - **Docs.** PRD (`docs/wiki/decisions.md`, `questions.md`, `milestones.md`,
   `history.md` v1.69), commit `aed1be8`: D82 — (a) Q51 point 3 closed, the
   owner builds and lists the showcase scanner on Google Play, closed testing

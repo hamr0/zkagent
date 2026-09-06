@@ -475,6 +475,11 @@ questions.md Q51; decisions.md D81, D82.
 
 1. First upload goes to a **closed testing track**, never production, using the current release
    line (v0.5.0 or later under D72 lockstep). Production is a separate, later owner decision.
+   **Status: prerequisites drafted: privacy-policy.md, play-listing.md (commit).** The public
+   privacy policy (`docs/product/privacy-policy.md`) and the owner's internal Play Console crib
+   sheet (`docs/product/play-listing.md`, data safety form reasoning, permission justifications,
+   store listing text, screenshot rule, post-upload recording checklist) are written; the actual
+   console upload has not happened yet.
 2. Deliverable 1: the **Play App Signing certificate digest**. Rationale: FR10 makes the scanner's
    signing-cert digest its identity in every verifier's trust list (D17); Play App Signing
    re-signs the APK, so the Play-distributed build has a DIFFERENT digest from local builds —
