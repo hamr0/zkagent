@@ -248,6 +248,9 @@ this whole recipe.
 
    `keytool` prompts for the keystore password interactively — type it there; never pass a
    password on the command line, where it would land in shell history and process listings.
+   **Gotcha for agent-driven shells**: this step needs a real interactive terminal for the
+   passphrase prompts — an agent's own non-interactive shell can't supply them (it will hand
+   `keytool` empty input and get "Too many failures"); run this step yourself, directly.
 
 2. **Read the certificate digest.** This digest is public — it's an identity, not a secret — and
    is what goes into a verifier's trust list and your own evidence log:
@@ -282,7 +285,10 @@ this whole recipe.
    apksigner verify --print-certs app-regular-release.apk
    ```
 
-   Confirm the SHA-256 it prints matches step 2's reading.
+   Confirm the SHA-256 it prints matches step 2's reading. Note the format difference: `keytool`
+   prints the digest colon-separated uppercase hex (`1F:6B:CE:…`), `apksigner` prints it as
+   unbroken lowercase hex (`1f6bce…`) — same 32 bytes, same digest, just two conventional
+   renderings; don't read a format mismatch as a verification failure.
 
 5. **Back up and keep it out of git.** Keep an offline backup of the `.p12` file and its
    passwords — there is no recovery path if both are lost. Confirm the file is actually ignored

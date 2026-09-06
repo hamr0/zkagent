@@ -516,8 +516,19 @@ questions.md Q51; decisions.md D81, D82.
    env-var procedure above, followed by each operator for their own build/keystore/fingerprint)
    and (b) the owner's own showcase keystore, generated the same way — neither is a shared
    secret; the requirements above (MUST) apply to whoever runs them, operator or owner.
-   Status update: part (a) recipe written — `docs/product/customer-guide.md` §7.1 (commit,
-   `feat/keystore-recipe`); part (b), the owner's own showcase keystore, is still pending.
+   **Status: DONE, both parts.** Part (a) recipe written — `docs/product/customer-guide.md` §7.1
+   (`35013fa`). Part (b) — the owner generated the showcase keystore 2026-09-06
+   (`secrets/zkagent-showcase.p12`, EC P-256, alias `zkagent-showcase`, gitignored), read its
+   certificate digest (`1f6bceae0ffe9c2b326f2aab2202f0bdf3df7e5bdd8fac50aba2e1d318407264`), ran
+   `assembleRegularRelease --offline` to produce the project's first **signed** release APK
+   (`app-regular-release.apk`, `com.zkagent.scanner` versionCode 4 / versionName 0.6.1), and
+   independently verified the signature and digest with `apksigner verify` — both readings agree.
+   See `docs/logs/M3-KEYSTORE-EVIDENCE-2026-09-06.md`. This obligation now carries forward as a
+   standing MUST on `/release`: **from the next release, `assembleRegularRelease` MUST produce a
+   signed APK and release evidence MUST record the digest** — no dedicated release-checklist doc
+   exists in this repo to also carry that MUST (checked: no `RELEASING`/`CONTRIBUTING` doc, no
+   checklist section in `CHANGELOG.md` or `docs/wiki/history.md`), so it stands recorded here, in
+   D80, and in the evidence log only.
 
 ## 6.7 Operator knobs (D81, scoped by D82) — PRD-gated for BUILD
 
