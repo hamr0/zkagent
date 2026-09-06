@@ -660,7 +660,15 @@ abstract class MainActivity : AppCompatActivity() {
      * calling `.show()` — [MainActivity.onResume] on the next live
      * instance shows it exactly once. A caller with no fence concern
      * (nothing reachable from an async landing) still just sees its
-     * dialog shown normally, since its own instance's fence is alive. */
+     * dialog shown normally, since its own instance's fence is alive.
+     *
+     * S67-POC FIX round 2 (2026-09-06, duplicate-notice hazard) —
+     * [DroppedOutcomeRelay.clear] before showing here: a dying sibling
+     * verifying the SAME handoff can have already stashed a message (it
+     * started first, see that object's doc); if this live instance is
+     * about to show its own dialog for the same conclusion, the sibling's
+     * stash is now stale and must not resurface as a duplicate on some
+     * later, unrelated resume. */
     private fun showBlockingNotice(message: String) {
         Log.i(TAG, "M2 stage: blocking notice shown: $message")
         if (!fence.passes()) {
@@ -668,6 +676,7 @@ abstract class MainActivity : AppCompatActivity() {
             DroppedOutcomeRelay.stash(message)
             return
         }
+        DroppedOutcomeRelay.clear()
         AlertDialog.Builder(this)
             .setMessage(message)
             .setCancelable(false)
@@ -1945,13 +1954,18 @@ abstract class MainActivity : AppCompatActivity() {
      * [DroppedOutcomeRelay] instead of opening a new dialog window; the
      * dismiss-time state mutation below is skipped along with it — safe,
      * since it only ever touched THIS (already-destroyed, about-to-be
-     * garbage) instance's own fields, never shared state. */
+     * garbage) instance's own fields, never shared state.
+     *
+     * S67-POC FIX round 2 (2026-09-06, duplicate-notice hazard) — same
+     * [DroppedOutcomeRelay.clear] before showing as [showBlockingNotice],
+     * same reason: see that function's doc. */
     private fun showBlockingOutcomeDialog(message: String, isAccessEstablishmentFailure: Boolean, isTransientChipCommunicationFailure: Boolean = false) {
         if (!fence.passes()) {
             Log.i(TAG, "M2 lifecycle: fence closed — relaying terminal outcome dialog to next live instance")
             DroppedOutcomeRelay.stash(OutcomeText.withModeSentence(message, lockedModeForDisplay()))
             return
         }
+        DroppedOutcomeRelay.clear()
         val keepMrzAndMode = FailureTransition.keepsMrzAndMode(isAccessEstablishmentFailure, isTransientChipCommunicationFailure)
         // Owner device fix (2026-09-05, findings.md — "wrong details entry
         // still doesn't reset to re-enter"): decoupled from [keepMrzAndMode]

@@ -50,4 +50,39 @@ class DroppedOutcomeRelayTest {
         assertEquals("second refusal", DroppedOutcomeRelay.consume())
         assertNull(DroppedOutcomeRelay.consume())
     }
+
+    /**
+     * S67-POC FIX round 2 (2026-09-06, duplicate-notice hazard) — pins
+     * [DroppedOutcomeRelay.clear]'s exactly-once-across-the-pair contract:
+     * a dying sibling's stash must not resurface once a live instance has
+     * already shown its own dialog for the same run and called [clear].
+     * Expected values here are written independently of the production
+     * code's own behaviour, not copied from it.
+     */
+    @Test
+    fun `clear discards a pending message without returning it`() {
+        DroppedOutcomeRelay.stash("Handoff refused: origin mismatch")
+        DroppedOutcomeRelay.clear()
+        assertNull(DroppedOutcomeRelay.consume())
+    }
+
+    @Test
+    fun `clear is a no-op when nothing is pending`() {
+        DroppedOutcomeRelay.clear()
+        assertNull(DroppedOutcomeRelay.consume())
+    }
+
+    @Test
+    fun `a sibling's stash after this instance already cleared is not discarded retroactively`() {
+        // Models the real ordering: this (live) instance shows its own
+        // dialog and clears first, THEN the dying sibling's late landing
+        // stashes its own copy of the same conclusion. clear() only
+        // discards what is pending AT THE TIME it runs — a message stashed
+        // afterward is a separate event and must still surface once, on
+        // the next resume, exactly per the base "shown exactly once, never
+        // lost" contract.
+        DroppedOutcomeRelay.clear()
+        DroppedOutcomeRelay.stash("Handoff refused: origin mismatch")
+        assertEquals("Handoff refused: origin mismatch", DroppedOutcomeRelay.consume())
+    }
 }

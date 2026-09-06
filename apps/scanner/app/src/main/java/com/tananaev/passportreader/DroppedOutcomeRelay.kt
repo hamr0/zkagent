@@ -40,11 +40,27 @@ package com.tananaev.passportreader
  *
  * `@Volatile` (not `synchronized`): [stash] runs on whichever main thread
  * lands the fenced verification callback (the dying instance's own main
- * thread — Android has exactly one), and [consume] runs on a LATER
+ * thread — Android has exactly one), and [consume]/[clear] run on a LATER
  * instance's main thread — same physical thread, never truly concurrent,
  * but `@Volatile` keeps this correct even if that ever changes, at zero
  * cost.
- */
+ *
+ * S67-POC FIX round 2 (2026-09-06, duplicate-notice hazard) — [stash] is
+ * unconditional and carries no identity, so a dying sibling's landing can
+ * stash AFTER a live instance's [MainActivity.onResume] already ran
+ * `consume()` and found nothing (the dying instance's verification is
+ * async and, per device evidence, reliably finishes AFTER the surviving
+ * instance's own `onResume`, since it started its network round trip
+ * ~150-300ms earlier but the platform relaunch itself takes negligible
+ * time by comparison). The surviving instance then independently verifies
+ * the SAME handoff and shows its OWN dialog directly (its fence still
+ * passes) — at which point the sibling's now-stale stash is still sitting
+ * here, unconsumed, waiting to pop as a genuine DUPLICATE on that surviving
+ * instance's next unrelated `onResume` (backgrounding/return, a biometric
+ * prompt callback, anything). [clear] exists for exactly this: a live
+ * instance that is ABOUT to show its own outcome dialog calls it first, so
+ * a stale relay entry from a sibling that already lost the race to show
+ * its own copy can never resurface later. */
 object DroppedOutcomeRelay {
 
     @Volatile
@@ -67,5 +83,16 @@ object DroppedOutcomeRelay {
         val message = pendingMessage
         pendingMessage = null
         return message
+    }
+
+    /** Called by a live instance right before it shows its own outcome
+     * dialog directly (its fence still passes). Discards — without
+     * returning — any message a dying sibling stashed for the same run: if
+     * one is sitting here, this live instance's own about-to-show dialog is
+     * already about to cover it, so leaving it pending would only surface
+     * it again as a duplicate on some later, unrelated `onResume`. A no-op
+     * in the overwhelmingly common case (nothing pending). */
+    fun clear() {
+        pendingMessage = null
     }
 }
