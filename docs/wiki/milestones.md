@@ -583,7 +583,14 @@ question per hostname — each subdomain listed separately in knob 2's allowlist
 own threshold under D74 — not a new knob. This case is parked as Q52 (DEFERRED, follows broad
 adoption), not scoped further here.
 
-### 6.7.1 Current state (read from source, 2026-09-06)
+### 6.7.1 Current state (read from source, 2026-09-06; "now" column added post-POC)
+
+**Now (post-`962ac96`)**: knobs 2 (verifier hostname allowlist), 3 (threshold list), and 6-branding
+(`app_name`) are config-driven from `apps/scanner/operator.json`, single-writer each, POC
+device-verified. Knob 1 (tier mode) has a gate (`OperatorPolicy.isTierAllowed`) but is unit-tested
+only, not yet device-checked in a real refusal round. Knobs 4 (evidence-plug selection) and 5
+(tier-C hostnames) remain validate-only — the schema accepts/rejects a value (rules 6/7) but no
+code path consumes an evidence-plug choice or a non-empty tier-C list yet.
 
 | Knob | Hardcoded today at | Writers |
 |---|---|---|
@@ -709,11 +716,16 @@ walkthrough once this is built, not now.
 4. **`apps/demo`'s verifier-side config is deferred to a later round.** Ruled, owner: "if this
    round is already big" — §6.7 stays scanner-scoped; the demo's env-var knobs are untouched.
 
-**Status: PRD-gated for BUILD — schema v1 and D84 approved; POC (§6.7.5) next.**
+**Status: POC PASSED 2026-09-06 (three proofs: unit table, wiring trace, real second process) —
+see evidence log; built on `feat/s67-poc` `962ac96`; remaining §6.7 items: tier-mode B device
+check, release-signed gated build at next `/release`, apps/demo verifier-side config (deferred
+D84).**
 
-State: schema v1 and D84 are approved; nothing is built yet (NO-GO #10) — the POC in §6.7.5 is
-the next step. ENHANCEMENT candidate, sequenced after §6.6 items 7/1 unless the owner reorders.
-See decisions.md D81, D82, D84; questions.md Q51, Q52.
+See `docs/logs/M3-S67-POC-EVIDENCE-2026-09-06.md`.
+
+State: schema v1 and D84 are approved; the §6.7.5 POC is built and device-verified (`feat/s67-poc`
+`962ac96`, evidence log above). ENHANCEMENT candidate, sequenced after §6.6 items 7/1 unless the
+owner reorders. See decisions.md D81, D82, D84; questions.md Q51, Q52.
 
 ## 6.8 Android release list (complements CI/publish) — owner-approved 2026-09-06, ENHANCEMENT
 

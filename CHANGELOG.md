@@ -14,7 +14,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   the one place a handoff's origin is accepted
   (`MainActivity.applyHandoffVerificationOutcome`). `ThresholdPolicy.PRESETS`/
   `NAMED_EXCEPTIONS` and the `app_name` resource now come from this config
-  (single writer each) instead of hardcoded values.
+  (single writer each) instead of hardcoded values. Device-verified
+  2026-09-06 (evidence log:
+  `docs/logs/M3-S67-POC-EVIDENCE-2026-09-06.md`).
 - **Docs.** PRD (`docs/wiki/decisions.md` D84, `milestones.md` §6.7.3–§6.7.7,
   `questions.md` Q52, `history.md` v1.75): owner rulings on the four §6.7
   decision points — `verifiers` hostname-only; reference `operator.json`
