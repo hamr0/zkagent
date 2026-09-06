@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D83
+title: zkagent — owner decisions D1–D84
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D83
+# Owner decisions D1–D84
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -277,3 +277,5 @@ stating this and that its "VERIFY" items were never checked against a live conso
 
 Owner, 2026-09-06. See milestones.md §6.6, §6.8; questions.md Q50, Q51; docs/product/privacy-policy.md,
 docs/product/play-listing.md.
+
+**D84 (2026-09-06, owner) — §6.7.7's four decision points ruled; schema v1 approved for BUILD (POC next).** Owner, verbatim: "hostname, commit, what is strings in v1? verifier side later if this round is already big." Rulings: (1) **`verifiers` is hostname-only**, matching the code's existing D74/D38 host-only key shape — the recommendation in §6.7.7 stands; no scheme, no port. (2) **The reference `operator.json` is committed** — it is today's already-public values (D74's published threshold list, `127.0.0.1` for the dev origin), not a secret. (3) **`strings` in schema v1 is `app_name` only — the question-line template stays computed in code, not configurable.** Owner's own reasoning, recorded because it narrows the knob more than the original recommendation did: D74 rule 3 makes the question line's exact wording ("This website asks if you are over N") a user-protection requirement, not branding — an operator may rename their app, but MUST NOT be able to rephrase or soften the disclosure sentence itself. `SessionDisplay.kt:202`'s template is therefore explicitly OUT of `strings` in every schema version, not deferred to v2 — this is a standing MUST, not a scoping choice. (4) **`apps/demo`'s verifier-side config is deferred to a later round**, per the owner's own qualifier ("if this round is already big") — §6.7 stays scanner-scoped; the demo's env-var knobs (`LINK_SCHEME`, `THRESHOLD`, `SCOPE_DOMAIN`, attester/request-signer keys) are unaffected and untouched by this decision. Consequence for the schema: `multi_threshold_verifiers` (D74 rule 2's named-exceptions list, already `ThresholdPolicy.NAMED_EXCEPTIONS` in code, ships empty) is added as a knob field alongside `verifiers` — under model A (D81) the operator's own build IS "the app" whose decision D74 rule 3 refers to, so exposing this list as a build-time config field is the model-A-correct way to let an operator name their own multi-threshold-exempt hostnames, not a new capability. The verifier-hostname-allowlist knob (item 2) does not exist in code today (any request whose JWS verifies is accepted from any origin) — its enforcement becomes schema v1's own riskiest-assumption POC (§6.7.5), not a documented "existing behavior." Status: schema v1 and this decision are approved for BUILD; the POC (§6.7.5) is the next step before any other code is written (NO-GO #10). See milestones.md §6.7.5, §6.7.7; questions.md Q52.

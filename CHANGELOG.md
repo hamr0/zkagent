@@ -5,6 +5,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs.** PRD (`docs/wiki/decisions.md` D84, `milestones.md` §6.7.3–§6.7.7,
+  `questions.md` Q52, `history.md` v1.75): owner rulings on the four §6.7
+  decision points — `verifiers` hostname-only; reference `operator.json`
+  committed; `strings` schema v1 is `app_name` only, permanently (D74 rule
+  3 makes the question line's wording a user-protection requirement, not
+  configurable branding); `apps/demo`'s verifier-side config deferred to a
+  later round. Schema v1 gains `multi_threshold_verifiers` (D74 rule 2's
+  existing `ThresholdPolicy.NAMED_EXCEPTIONS`, ships empty; Q52 stays
+  DEFERRED). §6.7.5's POC re-targeted onto the verifier hostname allowlist
+  itself, which doesn't exist in code today. Status: "PRD-gated for BUILD —
+  schema v1 and D84 approved; POC next."
 - **Docs.** PRD (`docs/wiki/milestones.md` §6.7, `history.md` v1.74):
   operator-knobs design — current-state table (none of the seven D82 knobs
   are configurable in `apps/scanner` today; thresholds/branding are

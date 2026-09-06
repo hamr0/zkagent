@@ -470,4 +470,7 @@ this is flagged in the report back to the caller.
   Status: **DEFERRED**, not open for work — follows broad adoption, not scheduled. Owner,
   verbatim: "park the subdomain for now … i generally think it will be a minor case for the
   future … the whole thing is just av for now and nothing else besides, the absolute domain
-  multiple ask follows broad adoption." See decisions.md D82(c); milestones.md §6.7.
+  multiple ask follows broad adoption." **D84 (2026-09-06) note:** the mechanism already exists
+  per D74 rule 2 (`ThresholdPolicy.NAMED_EXCEPTIONS`); exposed as a §6.7 knob
+  (`multi_threshold_verifiers`), default empty; ruling unchanged. See decisions.md D82(c), D84;
+  milestones.md §6.7.
