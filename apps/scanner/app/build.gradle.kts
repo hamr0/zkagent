@@ -299,14 +299,17 @@ android {
         // file may reference BuildConfig.OPERATOR_* directly.
         buildConfigField("String", "OPERATOR_NAME", "\"${escapeForStringLiteral(operatorConfig.operatorName)}\"")
         buildConfigField("String", "OPERATOR_CONTACT_URL", "\"${escapeForStringLiteral(operatorConfig.contactUrl)}\"")
-        buildConfigField("String", "OPERATOR_TIERS", "\"${operatorConfig.tiers}\"")
+        buildConfigField("String", "OPERATOR_TIERS", "\"${escapeForStringLiteral(operatorConfig.tiers)}\"")
         buildConfigField("String", "OPERATOR_THRESHOLDS", "\"${operatorConfig.thresholds.joinToString(",")}\"")
-        buildConfigField("String", "OPERATOR_VERIFIERS", "\"${operatorConfig.verifiers.joinToString(",")}\"")
+        buildConfigField(
+            "String", "OPERATOR_VERIFIERS",
+            "\"${operatorConfig.verifiers.joinToString(",") { escapeForStringLiteral(it) }}\"",
+        )
         buildConfigField(
             "String", "OPERATOR_MULTI_THRESHOLD_VERIFIERS",
-            "\"${operatorConfig.multiThresholdVerifiers.joinToString(",")}\"",
+            "\"${operatorConfig.multiThresholdVerifiers.joinToString(",") { escapeForStringLiteral(it) }}\"",
         )
-        buildConfigField("String", "OPERATOR_EVIDENCE_PLUG", "\"${operatorConfig.evidencePlug}\"")
+        buildConfigField("String", "OPERATOR_EVIDENCE_PLUG", "\"${escapeForStringLiteral(operatorConfig.evidencePlug)}\"")
 
         // §6.7 item 6 (app_name) — the ONE writer of the app_name resource;
         // apps/scanner/app/src/main/res/values/strings.xml no longer
