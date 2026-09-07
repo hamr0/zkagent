@@ -24,6 +24,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 - **Docs (D88).** `docs/wiki/ngi-zero-application-draft.md` corrected to
   match D83 — removed the Play Store closed-testing work package, described
   the actual GitHub Releases + sideload distribution.
+- **Docs (D89-D92).** Owner rulings closing §6.4 items 1, 2 and 6 of the M3b
+  scope placeholder, no code change. D89 — the "preapproved list" is a
+  HOLDER-side consent list (matches D19's framing), not a verifier-side
+  request list. D90 — tier-C v1 verb vocabulary ships with all four
+  candidates: expiry buckets, name-match, DOB-range, and nationality (two
+  boolean modes, exclusion and confirmation), plus document-number as a
+  boolean match only, value never disclosed. D91 — a flat cap of 3 tier-C
+  predicates per presentation with no operator knob, plus a per-origin
+  lifetime predicate set capped at 3 mirroring D74's lock/refuse shape
+  (the subset-re-ask reading was flagged unconfirmed at the time). D92 —
+  consent matching is all-or-nothing: any predicate outside the holder's
+  D89 consent list refuses the entire presentation, never a partial answer.
+  `questions.md` Q34 closed; `milestones.md` §6.4 items 1/2/6 marked
+  DECIDED, items 3-5 stay OPEN (NO-GO #10's scope gate not yet satisfied)
+  — see `docs/wiki/decisions.md` D89-D92.
+- **Docs (D91(d), D93).** Two owner rulings from a live exchange following
+  D89-D92, no code change. D91(d) — the subset-re-ask reading flagged
+  unconfirmed in D91(b) is confirmed as written: a locked origin may re-ask
+  its full predicate set or any subset of it, never a predicate outside it.
+  D93 (new) — the per-origin tier-C lock is keyed by origin + document, but
+  the 3-predicate ceiling is shared across a holder's documents at the same
+  origin, since the cap protects what a site learns about a person, not a
+  credential, and only the device can enforce that under mode-B
+  unlinkability (D13); the tally record MUST store predicate names only,
+  never zktags or other document identifiers; D38 (signing-key binding) is
+  explicitly untouched. `milestones.md` §6.4 item 2 updated to cite both —
+  see `docs/wiki/decisions.md` D91(d), D93.
 
 ## [0.7.1] — 2026-09-07
 
