@@ -1155,3 +1155,30 @@ JUnit XML, not from a device run.
 - **Status**: OPEN (test-procedure note, not a code fix candidate) — recorded so a future device
   round doesn't misread a stale-task replay as a new result. `force-stop` before every scripted
   `am start` is the mitigation, already applied for the rest of this session's own device runs.
+
+### 2026-09-07 — #25: `DroppedOutcomeRelay` orphaned-stash residual — accepted as documented risk, D85
+
+- **Source**: S67 close-out session's own review-2 finding (see fix-ledger, now cleared), ruled on
+  by the owner 2026-09-07 as D85.
+- **Anchor**: `apps/scanner/app/src/main/java/com/tananaev/passportreader/DroppedOutcomeRelay.kt`
+  (the `clear()`-before-dialog dedupe fix, `c4da7ab`) and `DroppedOutcomeRelayTest` (7 cases).
+- **Finding**: the shipped fix calls `DroppedOutcomeRelay.clear()` before a live instance shows its
+  own outcome dialog, deduping the case where a dying sibling Activity's async landing arrives
+  before the survivor's. The residual, unfixed by that dedupe: instance A starts verifying, a
+  sibling B is created ~150-300 ms later and resumes (calling `consume()`, which finds nothing)
+  BEFORE A's own async landing arrives; A then lands with the fence closed and stashes its message;
+  B goes on to show its own dialog. A's stash is now orphaned and will pop as a stale duplicate
+  notice on B's (or a later instance's) next unrelated `onResume`. Worst case is a stale duplicate
+  notice, **never** silent loss of an outcome — the message shown twice, not dropped.
+- **Owner ruling (D85, 2026-09-07)**: accept and document (option (b) of the two options the S67
+  stash recorded for the owner). The shipped `clear()`-before-dialog fix stays exactly as-is; no
+  further code change. See `docs/wiki/decisions.md` D85.
+- **Evidence basis, stated precisely**: unit-proven only (`DroppedOutcomeRelayTest`, 7 cases
+  covering stash/consume/clear semantics) plus source-level code tracing of the timing argument
+  above. The relay path itself was **never device-reproduced** — the platform relaunch
+  ("activity-requested-portrait") that would trigger the two-sibling race fired 0 times across 14
+  cold launches (6 adb + 8 owner browser-tap) on the fixed build. This finding's timing analysis is
+  therefore code-traced reasoning about a mechanism that has not been observed live, not a
+  device-confirmed behavior — do not describe it as verified.
+- **Status**: CLOSED-BY-OWNER-ACCEPTANCE (D85). Not a defect to fix; a documented, bounded residual
+  risk. Fix-ledger bullet for this item removed 2026-09-07 (this entry is now the durable record).
