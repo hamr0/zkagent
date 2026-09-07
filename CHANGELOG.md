@@ -5,6 +5,57 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-07
+
+Lockstep release (D72): `packages/chiproof` and `apps/scanner` move 0.6.1 →
+0.7.0 together (`packages/chiproof/package.json` + lockfile, `apps/demo`'s
+lockfile, `apps/scanner` versionCode 4 → 5). §6.7 operator knobs
+(`operator.json`, build-time verifier allowlist, tier mode, the
+`multi_threshold_verifiers` knob, and the 12-case negative script) ship
+BUILD for the first time this release, alongside two scanner fixes (the
+S67-POC dropped-refusal relay, HIGH, and its close-out duplicate-notice
+clear) and the G1 pre-fetch allowlist ordering fix.
+
+- **Scanner (FIX, MEDIUM).** S67 close-out (2026-09-06): a losing sibling
+  instance's stashed `DroppedOutcomeRelay` message could resurface as a
+  duplicate notice on the surviving instance's own later, unrelated
+  `onResume` — traced as REAL, not hypothetical, since the losing
+  instance's async landing reliably arrives after the surviving instance's
+  own `onResume`. Fixed with `DroppedOutcomeRelay.clear()`, called from
+  `showBlockingNotice`/`showBlockingOutcomeDialog` right before a live
+  instance shows its own dialog, so a sibling's stale stash can never
+  resurface later. `apps/scanner/scripts/operator-json-negative.sh` grew
+  from 6 to 12 cases (adds validation rules 1, 2, 5, 6, 9) plus a
+  restore-and-rebuild check, now covering all 9 rules. Two new device
+  observations recorded, not fixed (`.claude/remember/findings.md` #23/#24):
+  a malformed `av://` intent missing `request_uri` launches silently with
+  no log/notice, and a stale recents task can resurface an old intent as if
+  freshly launched under scripted `adb install -r`/`am start` testing
+  (test-tooling hazard, not an app defect — `force-stop` before every
+  scripted launch avoids it).
+- **Docs.** `docs/product/customer-guide.md` §7.2 (new): the `operator.json`
+  walkthrough — the required `operator` block (`name`, `contact_url`),
+  corrected "only string knob" wording.
+- **Note.** The `DroppedOutcomeRelay` double-instance-race relay path
+  (`e0eaea4`) stays unit-proven only, not device-reproduced: 0 of 14 cold
+  launches (6 adb + 8 owner browser-tap) triggered the platform's own
+  duplicate `ActivityTaskManager` relaunch that the fix targets.
+- **Mutation check (orchestrator, post-review).** Three deliberate source
+  breaks applied in a scratch worktree turned 6 of 484 scanner unit tests
+  red (the G1 pre-fetch-gate test plus 5 `DroppedOutcomeRelayTest` cases),
+  confirming the new tests actually exercise the changed code rather than
+  passing tautologically.
+- **Release evidence (§6.8 row 6).** Tag `v0.7.0`; signed
+  `app-regular-release.apk` sha256
+  `979761d559be5da26f2428f73710533e347537e953ec0e8f78b1597e8bd4596d`;
+  certificate SHA-256 digest
+  `1f6bceae0ffe9c2b326f2aab2202f0bdf3df7e5bdd8fac50aba2e1d318407264` (matches
+  the showcase keystore, `M3-KEYSTORE-EVIDENCE-2026-09-06.md`); `aapt2 dump
+  badging` confirms versionName `0.7.0` / versionCode `5` and
+  `cleartextTrafficPermitted="false"` with zero exceptions in
+  `network_security_config`; `testRegularDebugUnitTest` 484/0/0/0 (JUnit XML
+  parsed); `apps/demo` 41/0/0; `packages/chiproof` 191/0/0 +
+  `tsc --noEmit` clean; `operator-json-negative.sh` 13 PASS lines, exit 0.
 - **Scanner (FIX, HIGH).** S67-POC device evidence (2026-09-06): a cold
   `av://` launch of `RegularActivity` (`singleTask`, fixed
   `screenOrientation`) into a brand-new task can trigger the platform's

@@ -547,7 +547,7 @@ questions.md Q51; decisions.md D81, D82.
    checklist section in `CHANGELOG.md` or `docs/wiki/history.md`), so it stands recorded here, in
    D80, and in the evidence log only.
 
-## 6.7 Operator knobs (D81, scoped by D82) — PRD-gated for BUILD
+## 6.7 Operator knobs (D81, scoped by D82) — released in v0.7.0
 
 Purpose: an operator-configuration layer (D81 point 2) so UI/knob adjustments do not require
 forking or editing source, consistent with the one-upstream, Apache-2.0 distribution model (A)
@@ -716,13 +716,15 @@ reference config (D84 point 2). `docs/product/customer-guide.md` §7.2 now carri
 4. **`apps/demo`'s verifier-side config is deferred to a later round.** Ruled, owner: "if this
    round is already big" — §6.7 stays scanner-scoped; the demo's env-var knobs are untouched.
 
-**Status: POC + validation pass device-verified 2026-09-06 (G1 pre-fetch gate, G3 tier mode, G4
-multi-threshold all confirmed on device against apps/demo; evidence log). Close-out pass the same
-evening: accept (delivered) path device-confirmed on the fixed build for the first time; the
-`DroppedOutcomeRelay` duplicate-notice fix stays unit-proven only, not device-reproduced post-fix
-(0 of 14 cold launches triggered the platform double-instance relaunch); the negative script now
-covers all 9 validation rules; customer-guide §7.2 written. Remaining: release-signed gated build
-at next `/release`; apps/demo operator config deferred (D84).**
+**Status: released in v0.7.0.** POC + validation pass device-verified 2026-09-06 (G1 pre-fetch
+gate, G3 tier mode, G4 multi-threshold all confirmed on device against apps/demo; evidence log).
+Close-out pass the same evening: accept (delivered) path device-confirmed on the fixed build for
+the first time; the `DroppedOutcomeRelay` duplicate-notice fix stays unit-proven only, not
+device-reproduced (0 of 14 cold launches triggered the platform double-instance relaunch); the
+negative script now covers all 9 validation rules; customer-guide §7.2 written. The release-signed
+gated build (§6.8 row 5) is now **DONE**: `v0.7.0`'s `app-regular-release.apk` verified with
+`apksigner`, certificate SHA-256 digest `1f6bceae0ffe9c2b326f2aab2202f0bdf3df7e5bdd8fac50aba2e1d318407264`
+matches the showcase keystore. Remaining: apps/demo operator config deferred (D84).
 
 See `docs/logs/M3-S67-POC-EVIDENCE-2026-09-06.md`.
 
