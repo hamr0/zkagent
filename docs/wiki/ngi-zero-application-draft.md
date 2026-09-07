@@ -37,9 +37,12 @@ Node package (`chiproof`, Apache-2.0, published on npm) any site can run itself 
 zkagent infrastructure sits in the path, ever. Despite the project's name, v1 uses no
 zero-knowledge cryptography of its own; "zk" survives only as the pseudonym's name
 ("zktag"). This grant would fund an iOS reader, a device-attestation evidence plug for
-stronger client trust, an independent security review, signed Play Store release
-builds, and adopter-facing documentation hardening — moving zkagent from a
-solo-maintainer demo to something a second developer can safely adopt.
+stronger client trust, an independent security review, and adopter-facing
+documentation hardening — moving zkagent from a solo-maintainer demo to something a
+second developer can safely adopt. Distribution is signed APKs on GitHub Releases
+plus sideload, not a Play Store listing (D83): the project deliberately trades
+store discoverability for no vendor account dependency and no store-review gate on
+a government-adoptable tool.
 
 *(character count: verify against the live form's counter before submitting; trimmed
 to fit 1200 but re-check.)*
@@ -60,10 +63,11 @@ project history NLnet expects in this field.*
 
 ## Explain what the requested budget will be used for
 
-The budget funds a solo maintainer's time to close five gaps that separate the current
+The budget funds a solo maintainer's time to close four gaps that separate the current
 M3 demo from an adopter-ready open-source project (see work packages and budget table
 below): an iOS reader, a device-attestation evidence plug, an independent security
-review, signed release builds on a real distribution track, and documentation hardening.
+review, and documentation hardening. Signed release builds already ship today, self-
+funded, via GitHub Releases + sideload (D83, §6.8) — not a grant-funded work package.
 No new hires, no infrastructure spend — zkagent is deliberately stateless and runs no
 server of its own (NO-GO #1/#3); the money goes to engineering and audit time, denominated
 in EUR day-rates the owner will size (placeholders below).
@@ -122,11 +126,14 @@ not equated with zkagent's own trust model.
   `allowed:false` (the core invariant, §3), that no stable identifier leaks in mode A
   (NO-GO #11), and that the disclosed circuit-class leak in the ZK evidence plug (D26)
   is bounded to what's already documented and not worse in practice.
-- **Signed release builds without weakening the trust-list identity.** Moving from a
-  sideloaded debug APK to a Play-signed release changes the app's signing-cert digest
-  (Play App Signing re-signs the APK), which is the client's trust-list identity under
-  FR10/D17 — every verifier configuration, including the reference demo, has to account
-  for both digests once the Play digest is known.
+- **(Already solved, self-funded, not a grant work package.)** Signed release builds were
+  a listed challenge in an earlier draft of this application, when the plan was a
+  Play-signed release (which would have re-signed the APK under a second, Play-owned
+  signing-cert digest that every verifier configuration would then have to account for
+  alongside the local one). D83 parked that plan: distribution is GitHub Releases +
+  sideload with a single, owner-controlled showcase signing-cert digest, published with
+  every release and verifiable with `apksigner verify --print-certs` (§6.8). This is
+  already shipping as of `v0.7.1` and needs no further engineering time from this grant.
 
 ---
 
@@ -151,9 +158,10 @@ decision log in the open before building it.
 
 ## Requested amount
 
-**EUR — placeholder, see budget table below (sums to a figure in the €30,000–€50,000
-range). Owner to confirm final requested amount against the live form's stated ceiling
-for the current NGI Zero Commons Fund call before submitting.**
+**EUR — placeholder, see budget table below (sums to a figure in the €25,000–€40,000
+range, lower than an earlier draft since the Play Store work package was removed —
+see D83). Owner to confirm final requested amount against the live form's stated
+ceiling for the current NGI Zero Commons Fund call before submitting.**
 
 ## Project website / repository
 
@@ -173,10 +181,14 @@ the reasoning shape and sums to a mid-range total for reference.
 | 1 | iOS reader via NFCPassportReader (vetted library, no custom chip parsing) | 15 | 500 | 7,500 |
 | 2 | Device-attestation evidence plug (Play Integrity / Android Key Attestation) enabling the client trust list (§6.5 S4) | 12 | 500 | 6,000 |
 | 3 | Independent security review of `chiproof` and the scanner app (external reviewer, not the owner's own time) | — | — | 8,000 |
-| 4 | Signed release builds + Play Store closed testing track (§6.6) | 8 | 500 | 4,000 |
-| 5 | Documentation / spec hardening for third-party adopters (FR10/FR11/FR12 registry docs, integration guide) | 10 | 500 | 5,000 |
-| | **Contingency (~10%)** | | | 3,000 |
-| | **Total** | | | **≈33,500** |
+| 4 | Documentation / spec hardening for third-party adopters (FR10/FR11/FR12 registry docs, integration guide) | 10 | 500 | 5,000 |
+| | **Contingency (~10%)** | | | 2,650 |
+| | **Total** | | | **≈29,150** |
+
+*Row previously numbered 4 ("Signed release builds + Play Store closed testing track")
+was removed — signed release builds already ship today, self-funded, via GitHub
+Releases + sideload (D83, §6.8); there is no Play track to fund (D83 parked it
+indefinitely). Documentation hardening is renumbered 4.*
 
 *Owner: replace the placeholder day rate and day counts with real numbers; adjust the
 external security-review quote (line 3) once an actual reviewer/firm is contacted —
@@ -215,25 +227,31 @@ that line was left as a round placeholder since it depends on a quote, not a day
 Two options for when the owner files this application; no recommendation is given here
 (that call belongs to whoever is orchestrating the decision, not this draft).
 
+**Note (2026-09-07): signed release builds already shipped (v0.7.0, v0.7.1) via GitHub
+Releases + sideload before this timing decision was revisited — D83 parked the Play
+track entirely, so "file after signed release" is no longer a future option, it is
+already true. This section is otherwise left as the two options the owner was
+originally weighing, for the historical record; option B's original Play-specific
+premise no longer applies.**
+
 **Option A — file now, after M3, before M3b**
 - Momentum: M3 just shipped (v0.6.0, 2026-09-05) with a working end-to-end demo, fresh
   device evidence, and a clean exit-criteria table — the strongest "here's a working
   thing" story available today.
-- Risk: the application would ask for money to build things (iOS, attestation plug,
-  signed release) that don't exist yet, on a project with no signed release build and
-  no external security review to point to as precedent.
+- Risk: the application would ask for money to build things (iOS, attestation plug)
+  that don't exist yet, on a project with no external security review to point to as
+  precedent.
 - Grant funding could directly determine M3b/rung-2 sequencing rather than the owner
   deciding it solo — a funder's own scope preferences might pull the roadmap.
 
-**Option B — file after Play closed track / signed release**
-- Stronger evidence base: a real signed APK on a real distribution track and at least
-  one completed milestone beyond a sideloaded demo make the "adoption-ready" claim more
-  credible to a reviewer.
-- Delay cost: NGI Zero calls take time to review either way; waiting adds a full
-  release cycle (§6.6, Play closed-track review) before even submitting.
-- The application's own work packages (signed release, security review) would already
-  be partially done, weakening the case that this is what the grant itself is needed to
-  produce — a funder may ask "why do you need money for something you already shipped."
+**Option B — file after a completed release cycle**
+- Stronger evidence base: a real signed APK on GitHub Releases and at least one
+  completed milestone beyond a sideloaded demo make the "adoption-ready" claim more
+  credible to a reviewer. As of D83/v0.7.1 this evidence already exists.
+- Delay cost: NGI Zero calls take time to review either way.
+- The application's own remaining work packages (iOS reader, attestation plug,
+  security review, docs) are the ones not yet done — signed release is no longer
+  something to wait for, since it already shipped.
 
 ---
 
