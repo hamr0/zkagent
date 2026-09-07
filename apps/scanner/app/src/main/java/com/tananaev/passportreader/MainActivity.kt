@@ -1097,6 +1097,20 @@ abstract class MainActivity : AppCompatActivity() {
                 beginHandoffVerification(handoff)
                 return
             }
+            // Finding #23 FIX (D87): handoff == null here means this VIEW
+            // intent's data did not parse into a handoff at all — a
+            // malformed/truncated av:// link (missing request_uri, or a
+            // scheme/host that does not match, e.g. under adb explicit-
+            // component testing) rather than an unrelated intent this
+            // Activity was never asked to open. Log + non-blocking
+            // Snackbar, same non-terminal shape as
+            // HANDOFF_REFUSED_MID_SESSION_MESSAGE just above — MUST NOT use
+            // showBlockingOutcomeDialog (findings #12/#13) since this is a
+            // refusal of an unauthenticated foreign intent, not a terminal
+            // outcome of any locked session.
+            Log.w(TAG, "M2 stage: av:// handoff intent REFUSED — data did not parse into a handoff (malformed or truncated link): $data")
+            Snackbar.make(lockButton, HANDOFF_LINK_MALFORMED_MESSAGE, Snackbar.LENGTH_LONG).show()
+            return
         }
         if (NfcAdapter.ACTION_TECH_DISCOVERED == intent.action) {
             val tag: Tag? = intent.extras?.getParcelable(NfcAdapter.EXTRA_TAG)
@@ -3821,6 +3835,19 @@ abstract class MainActivity : AppCompatActivity() {
         // inbound av:// handoff because a session is already locked or a
         // read is in progress. Shortened 2026-09-02 to fit a Snackbar.
         private const val HANDOFF_REFUSED_MID_SESSION_MESSAGE = "Ignored a site request that arrived mid-scan."
+
+        // Finding #23 (.claude/remember/findings.md), D87 (owner ruling
+        // 2026-09-07): a VIEW intent that looks like an av:// handoff
+        // attempt but fails to parse (e.g. a truncated link missing
+        // request_uri) previously launched the app with no log line and no
+        // user-facing notice — indistinguishable from launching with no
+        // link at all. Same shape as HANDOFF_REFUSED_MID_SESSION_MESSAGE
+        // (non-blocking Snackbar, no state transition, no emitReport — see
+        // finding #12/#13: this is a refusal/ignore path, so it MUST NOT
+        // use showBlockingOutcomeDialog, and must not append to the
+        // persisted/bounded ReportLog for an unauthenticated foreign
+        // intent).
+        private const val HANDOFF_LINK_MALFORMED_MESSAGE = "That link looks broken — nothing was scanned."
 
         // Finding #20 (.claude/remember/findings.md), device-found
         // 2026-09-03: the prior Snackbar-only `error_input` string gave no

@@ -1138,6 +1138,26 @@ JUnit XML, not from a device run.
   identical to the user and to the log.
 - **Status**: OPEN. Question for review: should a malformed `av://` link log and/or say something,
   rather than reading as if the link had simply never been tapped?
+- Status update 2026-09-07 (D87, owner ruling): **FIXED**, code + unit tests, NOT device-verified
+  (no device work in scope this session; screen capture is forbidden on this app so a refusal
+  Snackbar needs the owner's own eyes). `MainActivity.handleIncomingIntent`'s `ACTION_VIEW` branch
+  now has an explicit `else` when `HandoffClient.parseAvLink(data)` returns null: `Log.w` naming
+  the raw malformed/unparsed `data` plus a non-blocking `Snackbar` (`HANDOFF_LINK_MALFORMED_MESSAGE`
+  = "That link looks broken — nothing was scanned."), same non-terminal shape as the existing
+  `HANDOFF_REFUSED_MID_SESSION_MESSAGE` refusal a few lines above it. Deliberately does **not** use
+  `showBlockingOutcomeDialog` (findings #12/#13's standing rule: no refusal/ignore path may use that
+  dialog, since it is a terminal-outcome state transition that would wipe a legitimate locked
+  session) and deliberately does **not** call `emitReport`/append to `ReportLog` (same reasoning as
+  #13 — an unauthenticated foreign intent must not be able to append to persisted state). See
+  `apps/scanner/app/src/main/java/com/tananaev/passportreader/MainActivity.kt`. **No new unit test
+  was added** — `handleIncomingIntent` and `HandoffClient.parseAvLink` both take `android.net.Uri`/
+  `Intent`, which are non-functional under this module's JVM unit-test stubs
+  (`unitTests.isReturnDefaultValues = true`, no Robolectric dependency in this project); the
+  existing 484-test suite already has zero coverage of `parseAvLink` for the same reason, so this
+  fix is not a regression on that front. Scanner suite count is unchanged by this fix
+  (still 484/0/0/0 — confirm at commit time). Needs the owner's device pass (a synthetic malformed
+  `av://` VIEW intent, quoted this time so the shell doesn't truncate it, confirming both the
+  `Log.w` line and the Snackbar text appear) before this is called device-verified.
 
 ### 2026-09-06 — #24: a stale recents task can resurface an old intent as if it were fresh, under scripted `adb install -r` / `am start` device testing
 
