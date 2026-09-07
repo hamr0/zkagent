@@ -157,11 +157,14 @@ this is flagged in the report back to the caller.
   shape). What remains open, precisely: (1) D91 narrows but does not close Q11's DOB-range
   binary-search risk in its tier-C shape — a first request of three well-chosen DOB-range
   predicates is still three bits the app cannot refuse; tracked as milestones.md §6.4 item 4,
-  not as part of Q34 itself. (2) D91(d) flags an unconfirmed reading of the re-ask rule (whether
-  a subset re-ask of the locked set is permitted) that needs owner confirmation. (3) §6.4 items
-  3 and 5 (pinning UX / Q49, and lifting the scanner's tier-C refusal) are untouched by this
-  closure. **Cross-referenced 2026-09-03 (D73): this is M3b's problem, not M3's — see
-  milestones.md §6.4.** (zkagent-prd.md:2034-2060)
+  not as part of Q34 itself. (2) D91(d)'s reading of the re-ask rule (a subset re-ask of the
+  locked set is permitted) is now CONFIRMED (2026-09-07, owner: "same 3 or subset of it") — no
+  longer open. A related, distinct question raised in the same 2026-09-07 exchange — how the
+  per-origin lock is keyed across a holder's multiple documents — is settled by D93 (per-document
+  records, shared 3-predicate ceiling); D93 is not part of Q34, tracked under milestones.md §6.4
+  item 2. (3) §6.4 items 3 and 5 (pinning UX / Q49, and lifting the scanner's tier-C refusal) are
+  untouched by this closure. **Cross-referenced 2026-09-03 (D73): this is M3b's problem, not
+  M3's — see milestones.md §6.4.** (zkagent-prd.md:2034-2060)
 - **Q35 (descendant of Q33 part a)** — The scanner must read the already-signed,
   nonce-bound `zkagent.challenge.threshold` field instead of its hardcoded `18`.
   Status: FIXED-IN-this commit — `RequestTrust.thresholdOf` (pure extractor,

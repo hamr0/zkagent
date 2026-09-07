@@ -25,7 +25,7 @@ next integrates. (zkagent-prd.md:855-865)
 | **M1b** — Mode-A unlinkability probe | Black-box byte comparison of N mode-A presentations, same device/holder/service, including a planted positive control (zkagent-prd.md:857) | No field differs across presentations except those proven independent of holder/device; a planted stable field must fail the check. Blocks M3. Answers a linkability question. Evidence: `docs/logs/M1B-EVIDENCE.md` (zkagent-prd.md:857) | Ran 2026-08-30; passes with one disclosed leak bucket; block on M3 lifted (zkagent-prd.md:857) |
 | **M2** — Scanner app (rewrite, not graduate) | Real app: Keystore/StrongBox, biometric gate, QR/app-link handoff; ships BARE (`evidence: []`) as its fixed evidence set — no on-device ZK prover; `zk-passport/1` stays verifier-side; mode-B roundtrip exercises the attester-key evidence plug end to end against the M1 core. Opens with a riskiest-assumption POC: capture real-world age-verification request flows, build a test verifier to the observed shape, and run the web→app→web handoff over the mechanism the captures show is real (zkagent-prd.md:858) | End-to-end on real device against local verifier; zktag stability across reinstall+re-scan; mode A emits no zktag even after a mode-B presentation. Half-loaded masterlist ⇒ read refused (`ok:false`), never a pass. Two-bucket rule for the masterlist checkpoint (integrity failure ⇒ `ok:false`; well-formed list lacking the issuing CSCA ⇒ `ok:true, allowed:false`). Build scope for the rewrite itself: §6.2 below (zkagent-prd.md:858) | **Closed/complete, 2026-09-03, v0.5.0.** §6.2 items 1–25 all built and device-confirmed (item 19 WITHDRAWN by D71a, number reserved); findings #18–#21 closed; every row in the Exit criteria table below is device-confirmed or FIXED-IN-<sha> device-confirmed. D66–D71 recorded. First release under D72's lockstep versioning rule. |
 | **M3** — Demo (tier A/B only, vanilla) | Web page: "prove you're over 18" (tier A) and "prove you're a unique adult human" (tier B); responsive (mandatory); no tier C (zkagent-prd.md:859) | Live flow. Tier B: second scan from same document rejected as duplicate zktag. Tier A: two presentations indistinguishable. Demo site is its own adopter with its own store — the SDK still stores nothing (zkagent-prd.md:859) | COMPLETE — released as v0.6.0 (2026-09-05), exit rows all confirmed on that build (see docs/logs/M3-EXIT-ROWS-v0.6.0-2026-09-05.md); owner signed off 2026-09-05. M3b remains open; §6.6 Play track PARKED (D83). |
-| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), pinned-issuer gated (D20); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points | Not started — PRD-gated (D73); blocked on Q34 (verb vocabulary); Q11 CLOSED by D74; scanner follow-ups §6.5 (S1–S3) precede it |
+| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), pinned-issuer gated (D20); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points | Not started — PRD-gated (D73); Q34 CLOSED (D90/D91, 2026-09-07); §6.4 items 3-5 still OPEN, scope gate (NO-GO #10) not yet satisfied; Q11 CLOSED by D74 (for mode B; Q11's tier-C shape tracked as §6.4 item 4); scanner follow-ups §6.5 (S1–S3) precede it |
 | **M4** — Agent layer (rung 2) | Delegation certs, RFC 9421 middleware (FR8), per-serial revocation, phone→agent cert handoff (zkagent-prd.md:860) | Agent request accepted with valid chain; killed by zktag-block; single-use serial burns once; signature verifies against an off-the-shelf RFC 9421 verifier with no zkagent patches; cert reaches a headless agent host with no zkagent-run server in the path (zkagent-prd.md:860) | Frozen until rung 1 ships |
 | **M5** — Blocklist/appeal (rung 2) | Signed blocklist format, adopter store interface, prove-control-of-zktag appeal (zkagent-prd.md:861) | Store pattern fails closed, never silently falls back to in-memory (zkagent-prd.md:861) | Frozen until rung 1 ships |
 
@@ -257,13 +257,26 @@ Must be decided before M3b is scoped:
    D74's per-origin lock/refuse persisted-record shape exactly — same storage class, not a new
    mechanism; same disclosed-not-mitigated limit as D74 (per-install, resets on reinstall, doesn't
    cover one owner running many origins). This closes the accumulation question but does not
-   close item 4 below — see decisions.md D91, including D91(d)'s flagged unconfirmed reading of
-   the re-ask rule, which needs owner confirmation before scanner enforcement is scoped.
+   close item 4 below — see decisions.md D91. D91(d)'s re-ask reading is now CONFIRMED
+   (2026-09-07, owner: "same 3 or subset of it") — a later request from a locked origin is
+   answered when every predicate it asks is drawn from the locked set (the full set or any
+   subset of it), and refused outright if it introduces any predicate outside that set; a subset
+   re-ask discloses nothing new since the site already received those answers on the origin's
+   first visit, and the flat cap of three is unchanged either way. Separately, D93 (2026-09-07,
+   owner: "leaning towards #3") settles how this per-origin lock is KEYED when one holder
+   presents two different documents at the same origin: per-document records, but the
+   three-predicate ceiling counts across all of that holder's documents at that origin, not per
+   document — the cap protects what a site learns about a PERSON, and only the device (never the
+   site, which cannot tell the two presentations are the same holder under mode-B unlinkability)
+   is positioned to enforce that. The per-origin tally record must store predicate names only,
+   never the zktags/document identifiers asked against, so the record itself cannot become a
+   cross-document correlation. D93 does not touch D38 (signing-key binding stays origin + zktag,
+   per document) — a separate tally record, not a key. See decisions.md D91, D93; D38, D74.
 3. **Pinning UX (D20).** How an operator's issuer key actually gets pinned into a real
    deployment — D20 settles the mechanism at the protocol level
    (`trustedChallengeIssuers: [{pubkey, maxTier}]`) but not the UX of getting a key into that
    list for a live operator. Not currently covered by any open question — tracked as new **Q49**
-   (questions.md). **OPEN, not decided by D89–D92.**
+   (questions.md). **OPEN, not decided by D89–D93.**
 4. **Q11 for tier C — PARTIALLY ADDRESSED by D91, still OPEN.** The binary-search date-of-birth
    risk (Q11) is scoped to M3/mode B today. D91's per-origin lifetime cap (item 2 above) bounds
    how many DOB-range-shaped predicates one origin can ever accumulate against one holder to 3,
