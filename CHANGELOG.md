@@ -5,6 +5,45 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-09-07
+
+Lockstep release (D72): `packages/chiproof` and `apps/scanner` move 0.7.0 →
+0.7.1 together (`packages/chiproof/package.json` + lockfile, `apps/demo`'s
+lockfile's `chiproof` dependency entry, `apps/scanner` versionCode 5 → 6).
+`packages/chiproof`'s own source is untouched this release — it republishes
+unchanged under D72's one-version-across-the-repo rule, not because anything
+in it changed.
+
+- **Scanner (FIX, ledger).** `escapeForStringLiteral` is now applied to every
+  `operator.json`-derived string spliced into a `buildConfigField` literal in
+  `apps/scanner/app/build.gradle.kts` — `OPERATOR_TIERS`, each
+  `OPERATOR_VERIFIERS` entry, each `OPERATOR_MULTI_THRESHOLD_VERIFIERS` entry,
+  and `OPERATOR_EVIDENCE_PLUG` (`OPERATOR_NAME`/`OPERATOR_CONTACT_URL` already
+  escaped this way). Previously, an `operator.json` `verifiers`/tier/
+  evidence-plug value containing a `"` broke the generated `BuildConfig`
+  literal outright (reproduced pre-fix: "unclosed string literal"); it now
+  escapes correctly. No behaviour change for any value the nine build-time
+  validation rules currently admit — for every input the validator accepts,
+  the generated `BuildConfig` output is byte-identical to 0.7.0.
+  `isBareHostname` is unchanged.
+- **Docs.** `CLAUDE.md`: corrected the `.claude/stash/` gitignore-state
+  sentence — stash files are gitignored for *new* files (session handover
+  notes, not deliverables) since `b778b49`, not tracked-by-design like the
+  rest of `.claude/remember/`; files already tracked before that change stay
+  tracked.
+- **Release evidence (§6.8 row 6).** Tag `v0.7.1`; signed
+  `app-regular-release.apk` sha256
+  `2e2a2bbc6c2ade27bbe077f557f7248d05354db7e5c80d8157c5ed792d8340c7`;
+  certificate SHA-256 digest
+  `1f6bceae0ffe9c2b326f2aab2202f0bdf3df7e5bdd8fac50aba2e1d318407264` (matches
+  the showcase keystore); `aapt2 dump badging` confirms versionName `0.7.1` /
+  versionCode `6` and `cleartextTrafficPermitted="false"` with zero exceptions
+  in `network_security_config` (resolved via the release manifest's obfuscated
+  resource path, `res/8G.xml`); `testRegularDebugUnitTest` 484/0/0/0 (JUnit
+  XML parsed); `apps/demo` 41/0/0; `packages/chiproof` 191/0/0 +
+  `tsc --noEmit` clean; `operator-json-negative.sh` 13 PASS lines, exit 0,
+  tree clean after.
+
 ## [0.7.0] — 2026-09-07
 
 Lockstep release (D72): `packages/chiproof` and `apps/scanner` move 0.6.1 →
