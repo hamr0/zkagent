@@ -5,6 +5,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Scanner (FIX, D86).** `isBareHostname` (`apps/scanner/app/build.gradle.kts`)
+  now rejects commas, quotes and backslashes as a loud build failure (rule
+  4/5), closing a footgun where `OperatorPolicy.parseHostnameList`'s
+  comma-split silently turned one `verifiers`/`multi_threshold_verifiers`
+  entry containing a comma into two allowlisted hostnames at build time.
+  `apps/scanner/scripts/operator-json-negative.sh` grew from 13 to 16 cases.
+- **Scanner (FIX, D87, finding #23).** A malformed/truncated `av://` VIEW
+  intent (data that does not parse via `HandoffClient.parseAvLink`) now logs
+  (`Log.w`) and shows a non-blocking Snackbar refusal notice
+  (`HANDOFF_LINK_MALFORMED_MESSAGE`), instead of launching the app silently.
+  Does not use `showBlockingOutcomeDialog` or append to `ReportLog` (findings
+  #12/#13's standing rules for refusal/ignore paths). Not device-verified
+  this session.
+- **Docs (D85).** `DroppedOutcomeRelay`'s orphaned-stash residual accepted as
+  documented risk, no code change — see `docs/wiki/decisions.md` D85,
+  `.claude/remember/findings.md` #25.
+- **Docs (D88).** `docs/wiki/ngi-zero-application-draft.md` corrected to
+  match D83 — removed the Play Store closed-testing work package, described
+  the actual GitHub Releases + sideload distribution.
+
 ## [0.7.1] — 2026-09-07
 
 Lockstep release (D72): `packages/chiproof` and `apps/scanner` move 0.7.0 →
