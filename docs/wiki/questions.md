@@ -147,13 +147,21 @@ this is flagged in the report back to the caller.
   request-carried threshold and D11 enforcement already exist in code); split into
   Q35 (scanner-side one-line fix) and Q36 (real DOB comparison, genuine design
   work). (zkagent-prd.md:1958-1983)
-- **Q34 (open, owner-raised)** — Whether/how zkagent should support a general claim
-  vocabulary beyond age (e.g. document-expiry buckets). Status: OPEN — D49 settled
-  only the rendering SHAPE (a list of predicate→boolean pairs); which claims exist,
-  their per-tier limits, and cumulative-disclosure cost remain undecided and need
-  their own design pass and riskiest-assumption POC. **Cross-referenced 2026-09-03
-  (D73): this is M3b's problem, not M3's — see milestones.md §6.4 (M3b scope
-  placeholder) item 1.** (zkagent-prd.md:2034-2060)
+- **Q34 (CLOSED by D90/D91, 2026-09-07)** — Whether/how zkagent should support a general claim
+  vocabulary beyond age (e.g. document-expiry buckets). D49 had already settled only the
+  rendering SHAPE (a list of predicate→boolean pairs). Status: **CLOSED** — D90 settles which
+  claims exist (expiry buckets, name-match, DOB-range, nationality in two modes, document-number
+  match, all boolean, v1 vocabulary complete); D91 settles the per-tier limit (flat cap of 3
+  per presentation, no operator knob) and the cross-site/repeat-presentation accumulation
+  question (a per-origin lifetime predicate set, capped at 3, mirroring D74's lock/refuse
+  shape). What remains open, precisely: (1) D91 narrows but does not close Q11's DOB-range
+  binary-search risk in its tier-C shape — a first request of three well-chosen DOB-range
+  predicates is still three bits the app cannot refuse; tracked as milestones.md §6.4 item 4,
+  not as part of Q34 itself. (2) D91(d) flags an unconfirmed reading of the re-ask rule (whether
+  a subset re-ask of the locked set is permitted) that needs owner confirmation. (3) §6.4 items
+  3 and 5 (pinning UX / Q49, and lifting the scanner's tier-C refusal) are untouched by this
+  closure. **Cross-referenced 2026-09-03 (D73): this is M3b's problem, not M3's — see
+  milestones.md §6.4.** (zkagent-prd.md:2034-2060)
 - **Q35 (descendant of Q33 part a)** — The scanner must read the already-signed,
   nonce-bound `zkagent.challenge.threshold` field instead of its hardcoded `18`.
   Status: FIXED-IN-this commit — `RequestTrust.thresholdOf` (pure extractor,

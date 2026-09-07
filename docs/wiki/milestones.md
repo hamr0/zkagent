@@ -242,35 +242,52 @@ delegation) — it does not touch the frozen rung-2 agent layer.
 
 Must be decided before M3b is scoped:
 
-1. **Verb vocabulary (Q34).** Which tier-C fields/predicates are offered — candidates named by
-   the owner: name-match (true/false against a holder-supplied name), expiry-bucket booleans
-   (`expiry > 3mo` / `> 6mo` / `> 1yr`), and open candidates raised but not committed:
-   nationality, DOB-range. No similarity scores, ever (Q22's standing rule carries over).
-2. **Per-tier limits and cumulative-disclosure cost (Q34).** How many tier-C predicates one
-   presentation may carry, and whether/how repeated presentations across sites compound
-   disclosure risk.
+1. **DECIDED — verb vocabulary (D90, 2026-09-07; closes Q34's vocabulary half).** All four
+   candidates ship in v1: expiry-bucket booleans (`expiry > 3mo` / `> 6mo` / `> 1yr`); name-match
+   (true/false against a site-supplied name, Q22's no-similarity-scores rule unchanged); DOB-range
+   (boolean); nationality in two boolean modes (exclusion — not in a site-named set — and
+   confirmation — matches one site-named nationality); and document-number match (boolean
+   true/false only, the value itself never disclosed, since `document_number` is mode-B's zktag
+   derivation field, D9). See decisions.md D90.
+2. **DECIDED — per-tier limits and cumulative-disclosure cost (D91, 2026-09-07; closes Q34's
+   limits half).** Flat app-side hard cap of 3 tier-C predicates per presentation, no per-domain
+   operator knob (the cap rides on D20's existing pinning gate rather than adding a new one, and
+   living in code rather than operator config means a rogue/misconfigured `operator.json` cannot
+   widen it). Repeated presentations: a per-origin LIFETIME predicate set, capped at 3, mirroring
+   D74's per-origin lock/refuse persisted-record shape exactly — same storage class, not a new
+   mechanism; same disclosed-not-mitigated limit as D74 (per-install, resets on reinstall, doesn't
+   cover one owner running many origins). This closes the accumulation question but does not
+   close item 4 below — see decisions.md D91, including D91(d)'s flagged unconfirmed reading of
+   the re-ask rule, which needs owner confirmation before scanner enforcement is scoped.
 3. **Pinning UX (D20).** How an operator's issuer key actually gets pinned into a real
    deployment — D20 settles the mechanism at the protocol level
    (`trustedChallengeIssuers: [{pubkey, maxTier}]`) but not the UX of getting a key into that
    list for a live operator. Not currently covered by any open question — tracked as new **Q49**
-   (questions.md).
-4. **Q11 for tier C.** The binary-search date-of-birth risk (Q11) is scoped to M3/mode B today;
-   it must be re-evaluated for tier C's expiry-bucket predicates before M3b is written, since
-   multiple boolean buckets over one date field raise the same probing risk in a different shape.
-5. **Scanner tier-C support.** §6.2 item 13 currently REFUSES any tier other than A/B outright.
-   M3b requires lifting that refusal for tier C specifically — a scanner-side change, which is
-   itself a §6.2-scope decision the owner has not yet made.
-6. **"Preapproved list" meaning.** The owner described "user can also choose different things on
-   a, b or kyc from preapproved list" — this needs to be resolved as either a HOLDER-side consent
-   list (what the holder is willing to disclose, matching D19's framing that tiers are defined by
-   what the holder is told) or a VERIFIER-side request list (what the site is allowed to ask
-   for, matching D20's issuer pinning) — these are different UX and different trust boundaries,
-   not interchangeable.
+   (questions.md). **OPEN, not decided by D89–D92.**
+4. **Q11 for tier C — PARTIALLY ADDRESSED by D91, still OPEN.** The binary-search date-of-birth
+   risk (Q11) is scoped to M3/mode B today. D91's per-origin lifetime cap (item 2 above) bounds
+   how many DOB-range-shaped predicates one origin can ever accumulate against one holder to 3,
+   but does not close the risk: a FIRST request of three well-chosen DOB-range predicates is
+   still three bits the app has no prior record to refuse. Re-evaluating this fully for tier C's
+   shape (before M3b is written) remains undone.
+5. **Scanner tier-C support — OPEN, not decided.** §6.2 item 13 currently REFUSES any tier other
+   than A/B outright. M3b requires lifting that refusal for tier C specifically — a scanner-side
+   change, which is itself a §6.2-scope decision the owner has not yet made.
+6. **DECIDED — "preapproved list" meaning (D89, 2026-09-07).** The preapproved list is a
+   HOLDER-side consent list — what the holder is willing to disclose, matching D19's framing that
+   tiers are defined by what the holder is told — not a VERIFIER-side request list. D20's issuer
+   pinning remains the separate, unaffected gate on which sites may reach tier C at all. How a
+   request is matched against this consent list (all-or-nothing, no partial answers) is decided
+   by D92. See decisions.md D89, D92.
+
+Items 3, 4 and 5 remain OPEN and undecided; no M3b build-scope list is written here — the scope
+gate (NO-GO #10) is not satisfied until those three are also ruled and the owner approves a scope
+section.
 
 **M3b's opening riskiest-assumption POC candidate (not yet owner-approved):** a live tier-C
-presentation carrying exactly one verb from item 1's eventual vocabulary, refused end-to-end when
-the requesting site's issuer key is unpinned (D20's "refused, not downgraded, if unpinned" rule),
-and accepted end-to-end when it is pinned — on both real documents.
+presentation carrying exactly one verb from item 1's now-decided vocabulary, refused end-to-end
+when the requesting site's issuer key is unpinned (D20's "refused, not downgraded, if unpinned"
+rule), and accepted end-to-end when it is pinned — on both real documents.
 
 ## 6.5 Scanner follow-ups (post-M2, owner-approved 2026-09-03, D74) — not in M3, built before/alongside M3b
 
