@@ -248,6 +248,48 @@ run_case "unknown-strings-key" "rule 8" '{
 # 12. Missing file entirely (rule 9)
 run_case_missing_file "missing-file" "rule 9"
 
+# 13. Comma-embedded verifiers entry (rule 4) — D86: isBareHostname must
+# reject a literal comma, since OperatorPolicy.parseHostnameList
+# comma-splits the field at read time; before D86 this single entry
+# silently expanded into two allowlisted hostnames.
+run_case "comma-embedded-verifier" "rule 4" '{
+  "schema_version": 1,
+  "operator": {"name": "x", "contact_url": "https://x.example"},
+  "tiers": "A+B",
+  "thresholds": [18],
+  "verifiers": ["evil.example,good.example"],
+  "multi_threshold_verifiers": [],
+  "evidence_plug": "none",
+  "tier_c_verifiers": [],
+  "strings": {"app_name": "x"}
+}'
+
+# 14. Quote-embedded verifiers entry (rule 4) — D86.
+run_case "quote-embedded-verifier" "rule 4" '{
+  "schema_version": 1,
+  "operator": {"name": "x", "contact_url": "https://x.example"},
+  "tiers": "A+B",
+  "thresholds": [18],
+  "verifiers": ["evil\"example"],
+  "multi_threshold_verifiers": [],
+  "evidence_plug": "none",
+  "tier_c_verifiers": [],
+  "strings": {"app_name": "x"}
+}'
+
+# 15. Backslash-embedded verifiers entry (rule 4) — D86.
+run_case "backslash-embedded-verifier" "rule 4" '{
+  "schema_version": 1,
+  "operator": {"name": "x", "contact_url": "https://x.example"},
+  "tiers": "A+B",
+  "thresholds": [18],
+  "verifiers": ["evil\\example"],
+  "multi_threshold_verifiers": [],
+  "evidence_plug": "none",
+  "tier_c_verifiers": [],
+  "strings": {"app_name": "x"}
+}'
+
 # Restore and prove the good file builds clean again (belt-and-suspenders —
 # `cleanup` on EXIT also does this, but a mid-script restore lets this
 # script assert the positive case too).

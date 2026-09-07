@@ -90,6 +90,17 @@ fun isBareHostname(value: Any?): Boolean {
     if (value.contains("://")) return false
     if (value.contains("*")) return false
     if (value.contains(":")) return false
+    // D86: `verifiers`/`multi_threshold_verifiers` entries are comma-joined
+    // into a single BuildConfig field and comma-split back apart at read
+    // time (OperatorPolicy.parseHostnameList) — a literal comma in one
+    // entry here would silently expand into two allowlisted hostnames.
+    // Quotes/backslashes are already escaped safely by
+    // escapeForStringLiteral, but a hostname containing them can never
+    // match a real host anyway, so all three are rejected loudly here
+    // instead of failing silently or matching nothing.
+    if (value.contains(",")) return false
+    if (value.contains("\"")) return false
+    if (value.contains("\\")) return false
     return true
 }
 
