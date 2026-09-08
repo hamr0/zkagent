@@ -55,6 +55,17 @@ this is flagged in the report back to the caller.
   threshold locked per origin, exact-hostname exception allowlist, question shown
   above the Verify button before the tap — removes the binary-search space rather
   than rate-limiting it; scanner build tracked as milestones.md §6.5 S1/S2.
+  **Tier-C shape (D95, 2026-09-07/08): NARROWED, still OPEN for tier C.** D74's
+  closure above is scoped to M3/mode B. For tier C, D95 rules that DOB-range/
+  expiry-bucket boundaries also come from a FIXED published list, in the same
+  shape as D74, never chosen by the requesting verifier, with the same
+  fail-loudly rule for an off-list boundary — but the list's actual contents
+  are explicitly NOT ruled (open, needs real compliance use cases before M3b is
+  scoped). Even against a fixed list, three predicates still yield three bits
+  about a date of birth, on top of D91's flat cap of 3 and D93's shared
+  per-origin ceiling (those bound how often the bits can be asked, not whether
+  asking them is itself informative). Tracked as milestones.md §6.4 item 4;
+  not fully closed. See decisions.md D74, D91, D93, D95.
   (zkagent-prd.md:1806-1806)
 - **Q12 (M0/M3)** — Which ICAO documents (beyond passports) are actually readable
   by the JMRTD path used. Status: OPEN, empirical — do not state coverage numbers
@@ -417,14 +428,19 @@ this is flagged in the report back to the caller.
   and section 13.2 (fix confirmed); see milestones.md §6.2 item 24,
   decisions.md D70(c).
 - **Q49 (opened 2026-09-03, M3b-shaped)** — How an operator's issuer key actually
-  gets pinned into a real tier-C deployment. Status: OPEN — D20 settles the
-  protocol-level mechanism (`trustedChallengeIssuers: [{pubkey, maxTier}]`,
-  unsigned challenges refused at tier C) but not the UX of getting a specific
-  key into that list for a live operator, nor whether "preapproved list" (the
-  owner's phrase, D73) means a HOLDER-side consent list or a VERIFIER-side
-  request list — these differ in trust boundary and are not interchangeable.
-  Must be resolved before M3b is written into the PRD. See milestones.md §6.4
-  item 3; decisions.md D20, D73.
+  gets pinned into a real tier-C deployment. Status: **CLOSED, by D89 and D94
+  together (2026-09-07/08).** Q49 bundled two questions: (1) whether "preapproved
+  list" (the owner's phrase, D73) means a HOLDER-side consent list or a
+  VERIFIER-side request list — closed by **D89** (holder-side, matching D19's
+  framing). (2) The UX/mechanism for getting a specific issuer key into a live
+  operator's pinned list — closed by **D94**: the key list is a new
+  `operator.json` knob (§6.7), validated and baked in at build time exactly like
+  the existing verifier hostname allowlist, checked fully offline; D94 also
+  corrects a routing misreading (the `av://` VIEW intent carries no key at all;
+  the site signs its own challenge with its own key, D20; the app holds the
+  pinned list and verifies offline; unpinned tier-C is refused, never
+  downgraded, D19/D20). Both halves now resolved — **Q49 is fully CLOSED.** See
+  milestones.md §6.4 item 3; decisions.md D19, D20, D73, D89, D94.
 - **Q50 (opened 2026-09-04, parked by D76)** — How does a Play-installed (non-sideloaded) user
   reach a verifier over HTTPS at all? M3's origin is fixed to `http://127.0.0.1:8787` via
   `adb reverse` against a sideloaded debug build (D76) precisely because the scanner's network

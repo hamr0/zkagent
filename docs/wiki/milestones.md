@@ -25,7 +25,7 @@ next integrates. (zkagent-prd.md:855-865)
 | **M1b** — Mode-A unlinkability probe | Black-box byte comparison of N mode-A presentations, same device/holder/service, including a planted positive control (zkagent-prd.md:857) | No field differs across presentations except those proven independent of holder/device; a planted stable field must fail the check. Blocks M3. Answers a linkability question. Evidence: `docs/logs/M1B-EVIDENCE.md` (zkagent-prd.md:857) | Ran 2026-08-30; passes with one disclosed leak bucket; block on M3 lifted (zkagent-prd.md:857) |
 | **M2** — Scanner app (rewrite, not graduate) | Real app: Keystore/StrongBox, biometric gate, QR/app-link handoff; ships BARE (`evidence: []`) as its fixed evidence set — no on-device ZK prover; `zk-passport/1` stays verifier-side; mode-B roundtrip exercises the attester-key evidence plug end to end against the M1 core. Opens with a riskiest-assumption POC: capture real-world age-verification request flows, build a test verifier to the observed shape, and run the web→app→web handoff over the mechanism the captures show is real (zkagent-prd.md:858) | End-to-end on real device against local verifier; zktag stability across reinstall+re-scan; mode A emits no zktag even after a mode-B presentation. Half-loaded masterlist ⇒ read refused (`ok:false`), never a pass. Two-bucket rule for the masterlist checkpoint (integrity failure ⇒ `ok:false`; well-formed list lacking the issuing CSCA ⇒ `ok:true, allowed:false`). Build scope for the rewrite itself: §6.2 below (zkagent-prd.md:858) | **Closed/complete, 2026-09-03, v0.5.0.** §6.2 items 1–25 all built and device-confirmed (item 19 WITHDRAWN by D71a, number reserved); findings #18–#21 closed; every row in the Exit criteria table below is device-confirmed or FIXED-IN-<sha> device-confirmed. D66–D71 recorded. First release under D72's lockstep versioning rule. |
 | **M3** — Demo (tier A/B only, vanilla) | Web page: "prove you're over 18" (tier A) and "prove you're a unique adult human" (tier B); responsive (mandatory); no tier C (zkagent-prd.md:859) | Live flow. Tier B: second scan from same document rejected as duplicate zktag. Tier A: two presentations indistinguishable. Demo site is its own adopter with its own store — the SDK still stores nothing (zkagent-prd.md:859) | COMPLETE — released as v0.6.0 (2026-09-05), exit rows all confirmed on that build (see docs/logs/M3-EXIT-ROWS-v0.6.0-2026-09-05.md); owner signed off 2026-09-05. M3b remains open; §6.6 Play track PARKED (D83). |
-| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), pinned-issuer gated (D20); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points | Not started — PRD-gated (D73); Q34 CLOSED (D90/D91, 2026-09-07); §6.4 items 3-5 still OPEN, scope gate (NO-GO #10) not yet satisfied; Q11 CLOSED by D74 (for mode B; Q11's tier-C shape tracked as §6.4 item 4); scanner follow-ups §6.5 (S1–S3) precede it |
+| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), pinned-issuer gated (D20); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points | Not started — PRD-gated (D73); Q34 CLOSED (D90/D91, 2026-09-07); all six §6.4 items now ruled (D89–D96, 2026-09-07/08), item 4 narrowed not closed and item 5 leaves design points open for M3b's own POC; scope gate (NO-GO #10) still not satisfied — no owner-approved M3b scope section written yet; Q11 CLOSED by D74 (for mode B; Q11's tier-C shape narrowed by D95, tracked as §6.4 item 4); Q49 CLOSED (D89/D94); scanner follow-ups §6.5 (S1–S3) precede it |
 | **M4** — Agent layer (rung 2) | Delegation certs, RFC 9421 middleware (FR8), per-serial revocation, phone→agent cert handoff (zkagent-prd.md:860) | Agent request accepted with valid chain; killed by zktag-block; single-use serial burns once; signature verifies against an off-the-shelf RFC 9421 verifier with no zkagent patches; cert reaches a headless agent host with no zkagent-run server in the path (zkagent-prd.md:860) | Frozen until rung 1 ships |
 | **M5** — Blocklist/appeal (rung 2) | Signed blocklist format, adopter store interface, prove-control-of-zktag appeal (zkagent-prd.md:861) | Store pattern fails closed, never silently falls back to in-memory (zkagent-prd.md:861) | Frozen until rung 1 ships |
 
@@ -272,20 +272,42 @@ Must be decided before M3b is scoped:
    never the zktags/document identifiers asked against, so the record itself cannot become a
    cross-document correlation. D93 does not touch D38 (signing-key binding stays origin + zktag,
    per document) — a separate tally record, not a key. See decisions.md D91, D93; D38, D74.
-3. **Pinning UX (D20).** How an operator's issuer key actually gets pinned into a real
-   deployment — D20 settles the mechanism at the protocol level
-   (`trustedChallengeIssuers: [{pubkey, maxTier}]`) but not the UX of getting a key into that
-   list for a live operator. Not currently covered by any open question — tracked as new **Q49**
-   (questions.md). **OPEN, not decided by D89–D93.**
-4. **Q11 for tier C — PARTIALLY ADDRESSED by D91, still OPEN.** The binary-search date-of-birth
-   risk (Q11) is scoped to M3/mode B today. D91's per-origin lifetime cap (item 2 above) bounds
-   how many DOB-range-shaped predicates one origin can ever accumulate against one holder to 3,
-   but does not close the risk: a FIRST request of three well-chosen DOB-range predicates is
-   still three bits the app has no prior record to refuse. Re-evaluating this fully for tier C's
-   shape (before M3b is written) remains undone.
-5. **Scanner tier-C support — OPEN, not decided.** §6.2 item 13 currently REFUSES any tier other
-   than A/B outright. M3b requires lifting that refusal for tier C specifically — a scanner-side
-   change, which is itself a §6.2-scope decision the owner has not yet made.
+3. **DECIDED — issuer-key pinning mechanism (D94, 2026-09-07/08); closes Q49 together with
+   D89.** An operator's trusted tier-C challenge-issuer public keys are pinned via `operator.json`
+   (§6.7) at build time, validated and baked in exactly like the existing verifier hostname
+   allowlist — build-time because D81 model A already puts operator trust there for every other
+   knob; the check is fully offline. D94 also corrects a misreading raised in the same exchange:
+   routing (`av://` VIEW intent) carries no key at all; per D20 the SITE signs its challenge and
+   the site's own public key is its identity; the APP holds the pinned list and verifies that
+   signature offline; per D19/D20 tier C is REFUSED, never downgraded, if the signing key isn't
+   pinned — nothing is published for a verifier to read. Q49's two halves (holder-vs-verifier-list,
+   closed by D89; pinning mechanism/UX, closed by D94) are now BOTH closed — **Q49 is fully
+   CLOSED.** See decisions.md D19, D20, D81, D89, D94; questions.md Q49.
+4. **Q11 for tier C — NARROWED by D95, still OPEN.** D95 (2026-09-07/08) rules that DOB-range/
+   expiry-bucket boundaries come from a FIXED, published list — the same shape as D74's preset
+   threshold list — never chosen by the requesting verifier; a boundary not on the list fails
+   loudly (no mint), mirroring D74 exactly. This closes the "verifier can pick any probe point"
+   half of the risk. **The list's actual contents are explicitly NOT ruled** — an open item
+   needing a further owner decision (candidates from real compliance use cases) before M3b is
+   scoped. Even with a fixed list, three predicates still yield three bits about a date of birth,
+   on top of D91's flat cap of 3 and D93's shared per-origin ceiling — those bound frequency, not
+   whether the three bits are informative. Q11 for tier C remains OPEN. See decisions.md D74,
+   D91, D93, D95; questions.md Q11.
+5. **DECIDED — capability switch and per-verifier authorization (D96, 2026-09-07/08).** Two
+   rulings. (a) Tier C stays REFUSED by default — §6.2 item 13's current behaviour is unchanged
+   for any build that doesn't opt in; an operator's build enables tier-C support via a new
+   `operator.json` knob, alongside D94's pinned issuer keys. (b) Per-verifier authorization is an
+   operator-signed, SHORT-LIVED membership statement: the verifier fetches its own statement and
+   includes it in its request; the app verifies it offline against the operator key already
+   pinned by D94 — no live app-to-operator API call, which the owner's first instinct proposed and
+   D96 rejects (it would create exactly the site-visit tracking channel this project exists to
+   avoid, breaks under no network, and buys no security over build-time pinning since D81 model A
+   already gives the operator full build control). Add/revoke a verifier without a rebuild;
+   expiry does the revoking. **OPEN, not ruled by D96, flagged as design-requirement candidates
+   for the owner or M3b's POC:** the statement's lifetime/expiry duration; its concrete format;
+   whether it MUST bind the verifier's own challenge-signing key and origin (expected yes, not
+   ruled); behaviour on an expired statement (expected refuse, matching D19/D20, not ruled). See
+   decisions.md D19, D20, D76, D81, D94, D96; milestones.md §6.2 item 13, §6.7.
 6. **DECIDED — "preapproved list" meaning (D89, 2026-09-07).** The preapproved list is a
    HOLDER-side consent list — what the holder is willing to disclose, matching D19's framing that
    tiers are defined by what the holder is told — not a VERIFIER-side request list. D20's issuer
@@ -293,9 +315,11 @@ Must be decided before M3b is scoped:
    request is matched against this consent list (all-or-nothing, no partial answers) is decided
    by D92. See decisions.md D89, D92.
 
-Items 3, 4 and 5 remain OPEN and undecided; no M3b build-scope list is written here — the scope
-gate (NO-GO #10) is not satisfied until those three are also ruled and the owner approves a scope
-section.
+**All six §6.4 items are now ruled (D89–D96).** Item 4 (Q11 for tier C) is narrowed rather than
+fully closed, and item 5 (D96) leaves four design points explicitly open for M3b's own POC — but
+every item on this list has an owner ruling. That does NOT mean M3b is scoped: **NO-GO #10 still
+requires an owner-approved M3b scope section, written into this PRD, before any M3b code is
+written** — no such scope section exists yet, and none is written by this pass.
 
 **M3b's opening riskiest-assumption POC candidate (not yet owner-approved):** a live tier-C
 presentation carrying exactly one verb from item 1's now-decided vocabulary, refused end-to-end

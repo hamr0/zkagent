@@ -51,6 +51,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   never zktags or other document identifiers; D38 (signing-key binding) is
   explicitly untouched. `milestones.md` §6.4 item 2 updated to cite both —
   see `docs/wiki/decisions.md` D91(d), D93.
+- **Docs (D94-D96).** Owner rulings closing §6.4 items 3, 4 and 5 of the M3b
+  scope placeholder, no code change — all six §6.4 items are now ruled. D94 —
+  an operator's trusted tier-C issuer public keys are pinned via
+  `operator.json` at build time (new §6.7 knob), validated and checked
+  offline like the existing verifier hostname allowlist; also corrects a
+  routing misreading — no key is involved in `av://` routing, the site signs
+  its own challenge with its own key (D20), the app verifies offline against
+  the pinned list, and tier C is refused (never downgraded) if unpinned
+  (D19/D20). Closes §6.4 item 3 and, with D89, fully closes Q49. D95 —
+  tier-C DOB-range/expiry-bucket boundaries come from a fixed published
+  list, same shape as D74's threshold list, never chosen by the verifier;
+  narrows but does not close Q11 for tier C, since the list's contents are
+  explicitly left open and three predicates from even a fixed list still
+  yield three bits about a date of birth. D96 — tier C stays refused by
+  default; an operator's build opts in via `operator.json` alongside D94's
+  keys; per-verifier authorization is an operator-signed, short-lived
+  membership statement the verifier carries and the app checks offline
+  against the D94-pinned key, rejecting a live app-to-operator API call
+  (would create a site-visit tracking channel, breaks offline, adds no
+  security over build-time pinning); statement lifetime/format/binding and
+  expired-statement behaviour flagged open for the owner/M3b's POC.
+  `milestones.md` §6.4 items 3/4/5 marked DECIDED with a closing note that
+  NO-GO #10's scope gate still requires an owner-approved M3b scope section;
+  `questions.md` Q49 fully CLOSED, Q11 updated with its tier-C narrowing —
+  see `docs/wiki/decisions.md` D94-D96.
 
 ## [0.7.1] — 2026-09-07
 
