@@ -55,17 +55,24 @@ this is flagged in the report back to the caller.
   threshold locked per origin, exact-hostname exception allowlist, question shown
   above the Verify button before the tap — removes the binary-search space rather
   than rate-limiting it; scanner build tracked as milestones.md §6.5 S1/S2.
-  **Tier-C shape (D95, 2026-09-07/08): NARROWED, still OPEN for tier C.** D74's
-  closure above is scoped to M3/mode B. For tier C, D95 rules that DOB-range/
-  expiry-bucket boundaries also come from a FIXED published list, in the same
-  shape as D74, never chosen by the requesting verifier, with the same
-  fail-loudly rule for an off-list boundary — but the list's actual contents
-  are explicitly NOT ruled (open, needs real compliance use cases before M3b is
-  scoped). Even against a fixed list, three predicates still yield three bits
-  about a date of birth, on top of D91's flat cap of 3 and D93's shared
-  per-origin ceiling (those bound how often the bits can be asked, not whether
-  asking them is itself informative). Tracked as milestones.md §6.4 item 4;
-  not fully closed. See decisions.md D74, D91, D93, D95.
+  **Tier-C shape (D95, 2026-09-07/08; list contents fixed by D97, 2026-09-26):
+  NARROWED further, residual point still OPEN for tier C.** D74's closure above
+  is scoped to M3/mode B. For tier C, D95 rules that DOB-range/expiry-bucket
+  boundaries also come from a FIXED published list, in the same shape as D74,
+  never chosen by the requesting verifier, with the same fail-loudly rule for
+  an off-list boundary. D97 then fixed the list's actual contents, which D95
+  had left open: expiry buckets `{3 months, 6 months, 1 year}`; DOB-range
+  boundaries the same six ages D74 already uses for tier-A/B, `{15, 16, 18,
+  21, 60, 65}` (an owner-proposed 31 was corrected to 21 in the same exchange
+  and never adopted). Consequence noted, not further ruled: tier-C DOB-range
+  now answers the same kind of question tier-A/B thresholds already answer,
+  attached to an attributed presentation instead of an unlinkable one. Even
+  against a fixed list, three predicates still yield three bits about a date
+  of birth, on top of D91's flat cap of 3 and D93's shared per-origin ceiling
+  (those bound how often the bits can be asked, not whether asking them is
+  itself informative) — this residual point remains OPEN; the boundary
+  mechanism and list contents are both now DECIDED. Tracked as milestones.md
+  §6.4 item 4. See decisions.md D74, D91, D93, D95, D97.
   (zkagent-prd.md:1806-1806)
 - **Q12 (M0/M3)** — Which ICAO documents (beyond passports) are actually readable
   by the JMRTD path used. Status: OPEN, empirical — do not state coverage numbers
@@ -108,8 +115,16 @@ this is flagged in the report back to the caller.
   delegation option is rung-2 machinery, forbidden to design before rung 1 ships;
   v1 ships only the direct case. (zkagent-prd.md:1831-1837)
 - **Q22 (before tier C is built)** — What the tier-C verb vocabulary of identifying
-  predicates should be. Status: OPEN — no similarity scores ever allowed; decide
-  against the first real tier-C adopter, not speculatively. (zkagent-prd.md:1839-1844)
+  predicates should be. Status: **substantially CLOSED.** D90 (2026-09-07) settled which
+  predicates exist (expiry buckets, name-match, DOB-range, nationality in two boolean modes,
+  document-number match) — see Q34. D101 (2026-09-26) closed the name-match comparison rule
+  (case/hyphen-insensitive, accent-stripped, MRZ `<` treated as a separator; still a hard
+  boolean, no similarity scores — this rule stands unchanged) and flagged, but did not rule
+  on, MRZ field-length truncation as a disclosed limitation; further normalization beyond
+  accent-stripping (e.g. `ß`, `Ø`, transliteration tables) stays an OPEN edge case for M3b's
+  POC. D102 (2026-09-26) closed the nationality-exclusion set size at a cap of 10 countries.
+  Remaining OPEN: MRZ truncation behavior and any further normalization beyond D101's rule.
+  See decisions.md D90, D101, D102. (zkagent-prd.md:1839-1844)
 - **Q23 (resolved by D23)** — Whether tier A's attestation requirement is compatible
   with the "nothing stable across sites" unlinkability bar. Status: CLOSED by D23 —
   Play Integrity measured with no device-unique field; owner's call could still be

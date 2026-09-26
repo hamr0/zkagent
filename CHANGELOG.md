@@ -76,6 +76,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   NO-GO #10's scope gate still requires an owner-approved M3b scope section;
   `questions.md` Q49 fully CLOSED, Q11 updated with its tier-C narrowing —
   see `docs/wiki/decisions.md` D94-D96.
+- **Docs (D97-D102).** Owner rulings resolving the OPEN points left by
+  D90/D95/D96, no code change. D97 — D95's boundary lists fixed: expiry
+  `{3 months, 6 months, 1 year}`, DOB-range `{15, 16, 18, 21, 60, 65}` (D74's
+  own threshold-preset ages, reused verbatim; an owner-proposed 31 was
+  corrected to 21 and never adopted); off-list boundary still fails loudly.
+  Consequence noted: tier-C DOB-range now answers the same kind of question
+  tier-A/B thresholds already answer, attached to an attributed presentation.
+  D98 — the D96 membership statement's lifetime is owner-chosen, bounded
+  1 week to 1 month; this range IS the revocation window (disclosed, not
+  mitigated); clarified as the site's permission lifetime, not answer
+  validity; enforcement of the bound left OPEN. D99 — the statement MUST
+  bind the verifier's origin and challenge-signing key (unbound would be a
+  replayable bearer token). D100 — an expired statement is REFUSED, never
+  downgraded (D19/D20). D101 — name-match comparison is case/hyphen-
+  insensitive, strips accents, treats MRZ `<` as a separator, stays a hard
+  boolean (Q22 unchanged); MRZ truncation flagged as a disclosed limitation
+  and orchestrator recommendation, not owner-ruled; no further normalization
+  adopted. D102 — nationality exclusion sets cap at 10 countries, else fail
+  loudly (an uncapped exclusion set is a confirmation predicate in disguise).
+  `decisions.md` title updated to D1–D102; `milestones.md` §6.4 items 1/4/5
+  updated; `questions.md` Q11 and Q22 updated — see `docs/wiki/decisions.md`
+  D97-D102.
 
 ## [0.7.1] — 2026-09-07
 

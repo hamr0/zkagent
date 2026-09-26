@@ -242,13 +242,25 @@ delegation) — it does not touch the frozen rung-2 agent layer.
 
 Must be decided before M3b is scoped:
 
-1. **DECIDED — verb vocabulary (D90, 2026-09-07; closes Q34's vocabulary half).** All four
-   candidates ship in v1: expiry-bucket booleans (`expiry > 3mo` / `> 6mo` / `> 1yr`); name-match
-   (true/false against a site-supplied name, Q22's no-similarity-scores rule unchanged); DOB-range
-   (boolean); nationality in two boolean modes (exclusion — not in a site-named set — and
-   confirmation — matches one site-named nationality); and document-number match (boolean
-   true/false only, the value itself never disclosed, since `document_number` is mode-B's zktag
-   derivation field, D9). See decisions.md D90.
+1. **DECIDED — verb vocabulary (D90, 2026-09-07; closes Q34's vocabulary half), name-match
+   comparison rule (D101, 2026-09-26) and nationality exclusion-set cap (D102, 2026-09-26) both
+   now ruled.** All four candidates ship in v1: expiry-bucket booleans (`expiry > 3mo` / `> 6mo` /
+   `> 1yr`); name-match (true/false against a site-supplied name, Q22's no-similarity-scores rule
+   unchanged); DOB-range (boolean); nationality in two boolean modes (exclusion — not in a
+   site-named set — and confirmation — matches one site-named nationality); and document-number
+   match (boolean true/false only, the value itself never disclosed, since `document_number` is
+   mode-B's zktag derivation field, D9). See decisions.md D90.
+   **Name-match comparison (D101):** case-insensitive, hyphen-insensitive, strips accents (`José`
+   → `JOSE`), treats the MRZ `<` filler as a separator; still a hard boolean only. Rationale: DG1/
+   MRZ data carries no diacritics, so without stripping accents most accented names would falsely
+   fail against a document that never had the accent. Disclosed limitation, flagged as the
+   orchestrator's recommendation rather than owner-ruled: MRZ field truncation can make a
+   sufficiently long, correctly-typed name fail to match — no "match the truncated prefix" rule
+   was adopted. No further normalization (e.g. `ß`→`SS`, `Ø`→`O`, transliteration tables) is
+   adopted; any such case is an OPEN edge case for M3b's own POC. See decisions.md D101.
+   **Nationality exclusion cap (D102):** an exclusion set may name at most 10 countries; a request
+   naming more than 10 MUST fail loudly (no mint) — without a cap, naming "every country but one"
+   is a confirmation predicate disguised as an exclusion. See decisions.md D102.
 2. **DECIDED — per-tier limits and cumulative-disclosure cost (D91, 2026-09-07; closes Q34's
    limits half).** Flat app-side hard cap of 3 tier-C predicates per presentation, no per-domain
    operator knob (the cap rides on D20's existing pinning gate rather than adding a new one, and
@@ -283,31 +295,48 @@ Must be decided before M3b is scoped:
    pinned — nothing is published for a verifier to read. Q49's two halves (holder-vs-verifier-list,
    closed by D89; pinning mechanism/UX, closed by D94) are now BOTH closed — **Q49 is fully
    CLOSED.** See decisions.md D19, D20, D81, D89, D94; questions.md Q49.
-4. **Q11 for tier C — NARROWED by D95, still OPEN.** D95 (2026-09-07/08) rules that DOB-range/
-   expiry-bucket boundaries come from a FIXED, published list — the same shape as D74's preset
-   threshold list — never chosen by the requesting verifier; a boundary not on the list fails
-   loudly (no mint), mirroring D74 exactly. This closes the "verifier can pick any probe point"
-   half of the risk. **The list's actual contents are explicitly NOT ruled** — an open item
-   needing a further owner decision (candidates from real compliance use cases) before M3b is
-   scoped. Even with a fixed list, three predicates still yield three bits about a date of birth,
-   on top of D91's flat cap of 3 and D93's shared per-origin ceiling — those bound frequency, not
-   whether the three bits are informative. Q11 for tier C remains OPEN. See decisions.md D74,
-   D91, D93, D95; questions.md Q11.
-5. **DECIDED — capability switch and per-verifier authorization (D96, 2026-09-07/08).** Two
-   rulings. (a) Tier C stays REFUSED by default — §6.2 item 13's current behaviour is unchanged
-   for any build that doesn't opt in; an operator's build enables tier-C support via a new
-   `operator.json` knob, alongside D94's pinned issuer keys. (b) Per-verifier authorization is an
-   operator-signed, SHORT-LIVED membership statement: the verifier fetches its own statement and
-   includes it in its request; the app verifies it offline against the operator key already
-   pinned by D94 — no live app-to-operator API call, which the owner's first instinct proposed and
-   D96 rejects (it would create exactly the site-visit tracking channel this project exists to
-   avoid, breaks under no network, and buys no security over build-time pinning since D81 model A
-   already gives the operator full build control). Add/revoke a verifier without a rebuild;
-   expiry does the revoking. **OPEN, not ruled by D96, flagged as design-requirement candidates
-   for the owner or M3b's POC:** the statement's lifetime/expiry duration; its concrete format;
-   whether it MUST bind the verifier's own challenge-signing key and origin (expected yes, not
-   ruled); behaviour on an expired statement (expected refuse, matching D19/D20, not ruled). See
-   decisions.md D19, D20, D76, D81, D94, D96; milestones.md §6.2 item 13, §6.7.
+4. **Q11 for tier C — boundary-list MECHANISM AND CONTENTS both now fixed (D95, D97); the
+   information-bearing residual stays OPEN, unchanged in kind.** D95 (2026-09-07/08) ruled that
+   DOB-range/expiry-bucket boundaries come from a FIXED, published list — the same shape as D74's
+   preset threshold list — never chosen by the requesting verifier; a boundary not on the list
+   fails loudly (no mint), mirroring D74 exactly. D97 (2026-09-26) then ruled the list's actual
+   contents, which D95 had left explicitly open: expiry buckets are exactly `{3 months, 6 months,
+   1 year}`; DOB-range boundaries are exactly the six ages `{15, 16, 18, 21, 60, 65}` — the same
+   list D74 already uses for tier-A/B thresholds, reused rather than separately invented. (In the
+   live exchange the owner first named 31 as a candidate DOB boundary and corrected it to 21 on
+   being asked to confirm; 31 was never adopted — the six-age list above is final.) **Consequence,
+   stated as an observation and not further ruled on:** because tier-C DOB-range now uses the
+   identical ages D74 already uses for tier-A/B thresholds, a tier-C DOB-range predicate answers
+   the same kind of question tier A/B already answers, now attached to an attributed tier-C
+   presentation rather than an unlinkable tier-A one. Even with both lists fixed, three predicates
+   still yield three bits about a date of birth, on top of D91's flat cap of 3 and D93's shared
+   per-origin ceiling — those bound frequency, not whether the three bits are informative. Q11 for
+   tier C remains OPEN on that residual point only; the boundary-selection mechanism and the list
+   contents are both now DECIDED. See decisions.md D74, D91, D93, D95, D97; questions.md Q11.
+5. **DECIDED — capability switch and per-verifier authorization (D96, 2026-09-07/08); three of
+   D96's four open points now ruled (D98-D100, 2026-09-26), one still open.** Two D96 rulings.
+   (a) Tier C stays REFUSED by default — §6.2 item 13's current behaviour is unchanged for any
+   build that doesn't opt in; an operator's build enables tier-C support via a new `operator.json`
+   knob, alongside D94's pinned issuer keys. (b) Per-verifier authorization is an operator-signed,
+   SHORT-LIVED membership statement: the verifier fetches its own statement and includes it in its
+   request; the app verifies it offline against the operator key already pinned by D94 — no live
+   app-to-operator API call, which the owner's first instinct proposed and D96 rejects (it would
+   create exactly the site-visit tracking channel this project exists to avoid, breaks under no
+   network, and buys no security over build-time pinning since D81 model A already gives the
+   operator full build control). Add/revoke a verifier without a rebuild; expiry does the
+   revoking.
+   **Lifetime (D98, DECIDED):** owner-chosen per statement, bounded between 1 week and 1 month.
+   This range IS the revocation window — a dropped verifier's already-issued statement keeps
+   working until it expires, up to one month worst case — a disclosed consequence, not mitigated,
+   the same shape as D74/D91/D93. Clarification confirmed in the exchange: this is the lifetime of
+   the SITE's permission to ask, not the validity of any holder's answer. **Still OPEN:** how the
+   app enforces the 1-week-to-1-month bound (refuse, clamp, or accept a statement that claims a
+   longer/shorter lifetime) — left for the owner or M3b's POC.
+   **Binding (D99, DECIDED — YES):** the statement MUST bind both the verifier's origin and its
+   challenge-signing key; an unbound statement is a bearer token any site could replay.
+   **Expired statement (D100, DECIDED — REFUSE):** never downgraded, matching D19/D20.
+   **Format (ii) remains OPEN** — not addressed by this pass; left for the owner or M3b's POC.
+   See decisions.md D19, D20, D76, D81, D94, D96, D98, D99, D100; milestones.md §6.2 item 13, §6.7.
 6. **DECIDED — "preapproved list" meaning (D89, 2026-09-07).** The preapproved list is a
    HOLDER-side consent list — what the holder is willing to disclose, matching D19's framing that
    tiers are defined by what the holder is told — not a VERIFIER-side request list. D20's issuer
@@ -315,11 +344,16 @@ Must be decided before M3b is scoped:
    request is matched against this consent list (all-or-nothing, no partial answers) is decided
    by D92. See decisions.md D89, D92.
 
-**All six §6.4 items are now ruled (D89–D96).** Item 4 (Q11 for tier C) is narrowed rather than
-fully closed, and item 5 (D96) leaves four design points explicitly open for M3b's own POC — but
-every item on this list has an owner ruling. That does NOT mean M3b is scoped: **NO-GO #10 still
-requires an owner-approved M3b scope section, written into this PRD, before any M3b code is
-written** — no such scope section exists yet, and none is written by this pass.
+**All six §6.4 items are now ruled (D89–D96), with a further round of rulings (D97–D102,
+2026-09-26) closing most of what those six left open.** Item 1's name-match comparison rule and
+nationality exclusion cap are now ruled (D101, D102). Item 4 (Q11 for tier C)'s boundary-list
+mechanism AND contents are both now fixed (D95, D97); the residual "three predicates are still
+three bits" observation stays open, unchanged in kind — not a gap left by this pass, a fact
+about the predicate shape itself. Item 5 (D96)'s lifetime, binding and expired-statement points
+are now ruled (D98-D100); its enforcement-of-bounds sub-point and its statement-format point (ii)
+remain explicitly OPEN for the owner or M3b's own POC. That does NOT mean M3b is scoped: **NO-GO
+#10 still requires an owner-approved M3b scope section, written into this PRD, before any M3b
+code is written** — no such scope section exists yet, and none is written by this pass.
 
 **M3b's opening riskiest-assumption POC candidate (not yet owner-approved):** a live tier-C
 presentation carrying exactly one verb from item 1's now-decided vocabulary, refused end-to-end
