@@ -325,18 +325,22 @@ Must be decided before M3b is scoped:
    network, and buys no security over build-time pinning since D81 model A already gives the
    operator full build control). Add/revoke a verifier without a rebuild; expiry does the
    revoking.
-   **Lifetime (D98, DECIDED):** owner-chosen per statement, bounded between 1 week and 1 month.
-   This range IS the revocation window — a dropped verifier's already-issued statement keeps
-   working until it expires, up to one month worst case — a disclosed consequence, not mitigated,
-   the same shape as D74/D91/D93. Clarification confirmed in the exchange: this is the lifetime of
-   the SITE's permission to ask, not the validity of any holder's answer. **Still OPEN:** how the
-   app enforces the 1-week-to-1-month bound (refuse, clamp, or accept a statement that claims a
-   longer/shorter lifetime) — left for the owner or M3b's POC.
+   **Lifetime (D98, DECIDED; range widened by D103, 2026-09-27):** owner-chosen per statement,
+   bounded between 1 week and 6 months (was 1 week to 1 month under D98). This range IS the
+   revocation window — a dropped verifier's already-issued statement keeps working until it
+   expires, up to six months worst case — a disclosed consequence, not mitigated, the same shape
+   as D74/D91/D93. Clarification confirmed in the exchange: this is the lifetime of the SITE's
+   permission to ask, not the validity of any holder's answer; D103 separately recorded that a
+   distinct "how long may a site rely on an answer it already has" validity period (option B) was
+   considered and NOT adopted. **Still OPEN:** how the app enforces the 1-week-to-6-month bound
+   (refuse, clamp, or accept a statement that claims a longer/shorter lifetime) — left for the
+   owner or M3b's POC; orchestrator's recommendation, NOT a ruling: refuse a statement claiming a
+   lifetime over the six-month ceiling, consistent with D100's refused-never-downgraded rule.
    **Binding (D99, DECIDED — YES):** the statement MUST bind both the verifier's origin and its
    challenge-signing key; an unbound statement is a bearer token any site could replay.
    **Expired statement (D100, DECIDED — REFUSE):** never downgraded, matching D19/D20.
    **Format (ii) remains OPEN** — not addressed by this pass; left for the owner or M3b's POC.
-   See decisions.md D19, D20, D76, D81, D94, D96, D98, D99, D100; milestones.md §6.2 item 13, §6.7.
+   See decisions.md D19, D20, D76, D81, D94, D96, D98, D99, D100, D103; milestones.md §6.2 item 13, §6.7.
 6. **DECIDED — "preapproved list" meaning (D89, 2026-09-07).** The preapproved list is a
    HOLDER-side consent list — what the holder is willing to disclose, matching D19's framing that
    tiers are defined by what the holder is told — not a VERIFIER-side request list. D20's issuer

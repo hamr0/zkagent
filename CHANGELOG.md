@@ -98,6 +98,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   `decisions.md` title updated to D1–D102; `milestones.md` §6.4 items 1/4/5
   updated; `questions.md` Q11 and Q22 updated — see `docs/wiki/decisions.md`
   D97-D102.
+- **Docs (D103).** Owner revised D98's range only: the tier-C membership
+  statement's lifetime may now run 1 week to 6 months (was 1 week to 1
+  month); D98's other content — the range IS the sole revocation window,
+  disclosed not mitigated, and the site-permission-not-answer-validity
+  clarification — stands unchanged. Clarification exchange recorded: the
+  owner asked whether the lifetime meant how long a dropped verifier's past
+  verifications stay valid; it does not — an already-issued statement can't
+  be recalled, so the lifetime only bounds how long a dropped site can keep
+  asking NEW tier-C questions of new holders. A separate "answer-reliance
+  validity" option was laid out and NOT adopted (it would only bind a
+  verifier that honestly uses chiproof). Worst case: a dropped site can keep
+  asking for up to 6 months if the operator chose the maximum; an operator
+  wanting fast revocation should pick the short end. `decisions.md` title
+  updated to D1–D103; `milestones.md` §6.4 item 5's lifetime bound and its
+  still-OPEN enforcement point updated to the 6-month ceiling (with the
+  orchestrator's non-binding recommendation to refuse a statement claiming a
+  lifetime over that ceiling, per D100) — see `docs/wiki/decisions.md` D103.
 
 ## [0.7.1] — 2026-09-07
 
