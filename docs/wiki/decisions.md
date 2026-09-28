@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D106
+title: zkagent — owner decisions D1–D107
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D106
+# Owner decisions D1–D107
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -399,3 +399,17 @@ See milestones.md §6.4 item 2; decisions.md D13, D38, D74, D91.
 The ceiling protects holders; the floor does not. This is why they get different enforcement, not a partial application of D100's refused-never-downgraded rule — D100 governs an EXPIRED statement (already past its own claimed end), which is a distinct case from a statement that is still valid but was issued with an unusually short lifetime.
 
 **Consequence for the enforcement sub-point overall.** D98/D103's originally-open enforcement question ("is an out-of-range claimed lifetime refused, clamped, or accepted") is now FULLY CLOSED: over-ceiling is refused (D105); under-floor is accepted (D106); a lifetime within `[1 week, 6 months]` is the ordinary case D103 already covers. No further sub-point remains open under D98/D103's enforcement question. See milestones.md §6.4 item 5; decisions.md D19, D20, D74, D91, D93, D96, D98, D100, D103, D104, D105.
+
+**D107 (2026-09-28, owner) — five rulings on points the first §6.9 M3b draft left to the owner, from the orchestrator's review pass: consent-list UI, the membership-statement signing tool, per-site lock visibility, the per-origin store's storage constraint, and the one-phone-per-person assumption.**
+
+**(a) Holder-side consent list is a Settings tab, one checkbox per tier-C question type, every checkbox UNTICKED by default (extends D89).** The holder may change any checkbox at any time. Owner agreed with the orchestrator's reasoning: a pre-ticked checkbox would mean the holder is agreeing before looking, which is not consent — every checkbox therefore defaults to unticked, requiring an affirmative holder action before any predicate can ever be disclosed. The list itself is stored as a small JSON record inside the app; the holder never edits a file, only the Settings-tab checkboxes. **Considered and explicitly NOT adopted:** an operator-shipped consent list inside `operator.json`, rejected because it would reverse D89 — it would let the OPERATOR tick boxes on the HOLDER's behalf, exactly the verifier-side reading D89 ruled against when it settled the "preapproved list" ambiguity as holder-side. **Consequence, following from D92 rather than being a new rule:** unticking a predicate that a site had already locked into its per-origin set (D91's lifetime lock) means that site's next request is refused, all-or-nothing (D92) — the predicate is removed from the holder's consent entirely, so any subsequent request still naming it fails D92's match regardless of what the site's own locked set contains.
+
+**(b) A membership-statement signing tool is IN scope, not deferred.** A small command-line tool, run by the operator, with which the operator signs a verifier's membership statement (D96(2)). This tool is needed by M3b's own opening POC — nothing can issue a statement for the POC to test against without it — and by the demo (which, acting as its own operator persona, needs to issue its own statement to exercise the whole tier-C chain). Its concrete output format follows whatever format the POC settles on for the membership statement itself (D96 open point (ii), still open) — this ruling does NOT specify that format. Wherever the first §6.9 draft said statement issuance was "unspecified" or "out of chiproof's scope," that language is corrected: issuance is IN scope, via this tool, just not via `chiproof`'s own runtime.
+
+**(c) Per-site tier-C locks are shown in the Log tab, view-only, with NO reset control.** The holder can see, in the existing Log tab, which sites have locked which tier-C predicates and how much of the cap-of-3 (D91) each has used — but nothing in the UI may reset or clear that record. Owner reasoning, confirmed: a reset button would let a site socially engineer a holder — for example, a refusal message reading "Verification failed — open zkagent, go to Log, reset this site, then try again" — handing that site three fresh tier-C questions on demand and defeating D91's lifetime lock entirely. Reinstalling the app remains the only way to reset this state, which is already a disclosed limitation (the same per-install-reset shape D74/D91/D93 already carry).
+
+**(d) BUILD CONSTRAINT (MUST), from the orchestrator's code check: the per-origin/per-person tier-C records MUST live in their own, non-evicting store — never inside the capped report log.** `ReportLog`/`ReportLogStore` caps at 20 entries and evicts the oldest (`ReportLog.MAX_ENTRIES = 20`, `ReportLog.kt`/`ReportLogStore.kt`, D59). `ThresholdPolicy.kt`'s own separate, uncapped, non-evicting store (already built for D74's per-origin threshold lock) is the precedent this new record MUST follow instead. Why this matters, recorded so it is not lost in an implementation pass: if D91's per-origin tier-C lock lived inside the capped log, the lock would silently roll off after 20 further scans of ANY kind (not even 20 tier-C scans) — which is exactly the reset (c) above just ruled out by name. The Log tab (c) only DISPLAYS this record; it is never the record's storage.
+
+**(e) One phone per person — a stated assumption, not a guarantee.** D93's shared per-person ceiling (three tier-C predicates shared across every document scanned on one install, at one origin) assumes one install belongs to one person. Consequence, recorded as a disclosed limitation alongside D74/D91/D93's other disclosed-not-mitigated limits: two people sharing one phone share one limit of three tier-C predicates at each site — the app has no way to tell them apart, and this decision does not attempt to give it one.
+
+See `docs/wiki/milestones.md` §6.9 (items 3, 7, 10, 11, 12, 17); decisions.md D89, D91, D92, D93, D96, D107 (this decision); `.claude/remember/findings.md` (ReportLog cap, D59).

@@ -5,6 +5,45 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs (D107; §6.9 M3b draft fix pass, STILL NOT owner-approved).** Orchestrator review of the
+  §6.9 M3b draft (commit `ab6bcf8`) found internal item-numbering off-by-one errors in about eight
+  places and two items misdescribing `chiproof`'s role; the owner then ruled on five remaining
+  open points. Recorded as D107(a)-(e): (a) the holder-side consent list (D89) is a new Settings
+  tab, one checkbox per tier-C question type, every checkbox UNTICKED by default (pre-ticked would
+  mean agreeing before looking); an operator-shipped consent list in `operator.json` was
+  considered and NOT adopted (would reverse D89); unticking a locked predicate refuses that site's
+  next request, all-or-nothing (D92). (b) A membership-statement signing tool is IN scope (new
+  item 3) — needed by the POC and by the demo, output format left to the POC, not specified. (c)
+  Per-site tier-C locks are shown in the Log tab, view-only, with NO reset control — a reset would
+  let a site socially engineer holders into handing it three fresh questions, defeating D91's
+  lifetime lock; reinstalling remains the only reset. (d) BUILD CONSTRAINT: the per-origin/
+  per-person tier-C records MUST live in their own non-evicting store, never inside `ReportLog`'s
+  20-entry capped/evicting log (`ReportLog.MAX_ENTRIES`) — `ThresholdPolicy.kt`'s separate store is
+  the precedent; storing them in the capped log would silently roll a site's lock off after 20
+  further scans, exactly the reset (c) just ruled out. (e) The shared per-person ceiling (D93) is a
+  stated "one phone per person" assumption; two people sharing a phone share one limit of three
+  predicates per site, disclosed as a limitation. `docs/wiki/decisions.md` title updated to
+  D1–D107; D107 appended after D106. `docs/wiki/milestones.md` §6.9 renumbered from 15 to 17 scope
+  items (inserting the signing tool at item 3 and per-site lock visibility at item 12, shifting
+  everything after each insertion point), fixed every "item N" cross-reference against the new
+  numbering (previously off by one in roughly eight places, including two pointing at the wrong
+  vocabulary/chiproof items and one pointing at `ThresholdPolicy` via a non-existent "item 8"
+  relationship), and rewrote item 14 (`chiproof`) to state correctly that `chiproof` is the SITE's
+  own verifier library (runs on a requesting verifier's server, e.g. `apps/demo`) — never part of
+  the holder's Android scanner, which has no `chiproof` dependency — with statement issuance (item
+  3's tool), app-side statement verification (item 4, in the scanner), and site-side presentation/
+  statement-embedding support (item 14, in `chiproof`) now three distinct, correctly-attributed
+  roles. §6.9.3's traceability table, §6.9.4's OPEN list, and §6.9.6's size estimate all updated to
+  match the new numbering and D107. **The section remains headed "DRAFT — NOT OWNER-APPROVED" —
+  this fix pass prepares it for approval, it does not grant approval.** No conflicts were found
+  between any two decisions during this pass. Verification performed this session: every Dn/Qn/
+  section cross-reference was checked programmatically (python3, ugrep's bounded-repetition
+  regexes are unreliable here) against the live decisions.md/milestones.md/questions.md files, and
+  every "item N" cross-reference inside §6.9 was checked against the section's own new item
+  numbering — all resolve. `docs/index.md`/`docs/log.md` regenerated via `docs-builder.cjs
+  index-flat`, not hand-edited. No application code, build files, or `apps/`/`packages/` content
+  touched; `.claude/remember/AGENT_RULES.md`'s pre-existing uncommitted modification was left
+  untouched and unstaged. See `docs/wiki/decisions.md` D107; `docs/wiki/milestones.md` §6.9.
 - **Docs (M3b scope draft, §6.9, NOT owner-approved).** With every §6.4 decision point now ruled
   (D89–D106), a candidate M3b build-scope section (§6.9 of `docs/wiki/milestones.md`) has been
   drafted from those rulings in §6.2/§6.3's numbered MUST/MUST NOT house format: an opening
