@@ -5,6 +5,32 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs (M3b scope draft, §6.9, NOT owner-approved).** With every §6.4 decision point now ruled
+  (D89–D106), a candidate M3b build-scope section (§6.9 of `docs/wiki/milestones.md`) has been
+  drafted from those rulings in §6.2/§6.3's numbered MUST/MUST NOT house format: an opening
+  riskiest-assumption POC (pinning gate, replay negative, expiry/ceiling/floor cases, on both real
+  documents), 15 numbered scope items (operator.json tier-C opt-in and issuer-key pinning;
+  membership-statement verification, lifetime bound, and reference default; the holder-side
+  consent list; the tier-C verb vocabulary and its fixed boundary lists; the per-presentation cap,
+  per-origin lifetime predicate set, and shared cross-document ceiling with its names-only storage
+  MUST and UI-explanation requirement; all-or-nothing consent matching; chiproof verifier-side
+  changes; the demo page extension over M3; standing rules carried forward; and disclosed
+  limitations), a decision-to-item traceability table, an OPEN list (membership-statement wire
+  format, further name normalization, Q11's residual, MRZ truncation, the demo's own operator
+  config, exact `operator.json` field shapes — none invented), and a size estimate (19 numbered
+  units, largest being the membership-statement verifier, the per-origin/cross-document predicate
+  store, and the chiproof verifier-side changes). **This section is explicitly marked DRAFT — NOT
+  OWNER-APPROVED; NO-GO #10's scope gate is NOT satisfied by drafting it — nothing in §6.9 may be
+  built until the owner approves it.** §6.4's own status line and the §6 table's M3b row both
+  updated to point at §6.9 ("scope DRAFTED, awaiting owner approval"), not marked approved
+  anywhere. Separately, and NOT an M3b item: finding #23 / D87's malformed-`av://` guard has no
+  unit test and no device check yet — flagged as a pre-merge item for this branch
+  (`feat/s68-rulings`), not folded into M3b's scope. Verification performed this session: every
+  Dn/Qn/section cross-reference written was checked programmatically (python3, since ugrep's
+  bounded-repetition regexes are unreliable here) against the live decisions.md/milestones.md/
+  questions.md files — all resolve. `docs/index.md`/`docs/log.md` regenerated via
+  `docs-builder.cjs index-flat`, not hand-edited. No application code, build files, or
+  `apps/`/`packages/` content touched. See `docs/wiki/milestones.md` §6.9.
 - **Docs (D106).** Owner ruling, closing the floor half of D98/D103's open
   tier-C membership-statement lifetime enforcement sub-point (D105 already
   closed the ceiling half): a statement claiming a lifetime shorter than

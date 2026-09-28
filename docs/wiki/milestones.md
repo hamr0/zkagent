@@ -25,7 +25,7 @@ next integrates. (zkagent-prd.md:855-865)
 | **M1b** — Mode-A unlinkability probe | Black-box byte comparison of N mode-A presentations, same device/holder/service, including a planted positive control (zkagent-prd.md:857) | No field differs across presentations except those proven independent of holder/device; a planted stable field must fail the check. Blocks M3. Answers a linkability question. Evidence: `docs/logs/M1B-EVIDENCE.md` (zkagent-prd.md:857) | Ran 2026-08-30; passes with one disclosed leak bucket; block on M3 lifted (zkagent-prd.md:857) |
 | **M2** — Scanner app (rewrite, not graduate) | Real app: Keystore/StrongBox, biometric gate, QR/app-link handoff; ships BARE (`evidence: []`) as its fixed evidence set — no on-device ZK prover; `zk-passport/1` stays verifier-side; mode-B roundtrip exercises the attester-key evidence plug end to end against the M1 core. Opens with a riskiest-assumption POC: capture real-world age-verification request flows, build a test verifier to the observed shape, and run the web→app→web handoff over the mechanism the captures show is real (zkagent-prd.md:858) | End-to-end on real device against local verifier; zktag stability across reinstall+re-scan; mode A emits no zktag even after a mode-B presentation. Half-loaded masterlist ⇒ read refused (`ok:false`), never a pass. Two-bucket rule for the masterlist checkpoint (integrity failure ⇒ `ok:false`; well-formed list lacking the issuing CSCA ⇒ `ok:true, allowed:false`). Build scope for the rewrite itself: §6.2 below (zkagent-prd.md:858) | **Closed/complete, 2026-09-03, v0.5.0.** §6.2 items 1–25 all built and device-confirmed (item 19 WITHDRAWN by D71a, number reserved); findings #18–#21 closed; every row in the Exit criteria table below is device-confirmed or FIXED-IN-<sha> device-confirmed. D66–D71 recorded. First release under D72's lockstep versioning rule. |
 | **M3** — Demo (tier A/B only, vanilla) | Web page: "prove you're over 18" (tier A) and "prove you're a unique adult human" (tier B); responsive (mandatory); no tier C (zkagent-prd.md:859) | Live flow. Tier B: second scan from same document rejected as duplicate zktag. Tier A: two presentations indistinguishable. Demo site is its own adopter with its own store — the SDK still stores nothing (zkagent-prd.md:859) | COMPLETE — released as v0.6.0 (2026-09-05), exit rows all confirmed on that build (see docs/logs/M3-EXIT-ROWS-v0.6.0-2026-09-05.md); owner signed off 2026-09-05. M3b remains open; §6.6 Play track PARKED (D83). |
-| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), pinned-issuer gated (D20); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points | Not started — PRD-gated (D73); Q34 CLOSED (D90/D91, 2026-09-07); all six §6.4 items now ruled (D89–D96, 2026-09-07/08), item 4 narrowed not closed and item 5 leaves design points open for M3b's own POC; scope gate (NO-GO #10) still not satisfied — no owner-approved M3b scope section written yet; Q11 CLOSED by D74 (for mode B; Q11's tier-C shape narrowed by D95, tracked as §6.4 item 4); Q49 CLOSED (D89/D94); scanner follow-ups §6.5 (S1–S3) precede it |
+| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), pinned-issuer gated (D20); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points and §6.9's draft | **Scope DRAFTED, awaiting owner approval** — all §6.4 decision points (D89–D106) are now ruled; a candidate build-scope section (§6.9) has been drafted from them but is explicitly NOT owner-approved; scope gate (NO-GO #10) still not satisfied until the owner approves §6.9 (in whole or amended) — nothing may be built until then; Q34 CLOSED (D90/D91, 2026-09-07); Q11 CLOSED by D74 (for mode B; Q11's tier-C residual tracked as §6.4 item 4 / §6.9 item 15(e), still open); Q49 CLOSED (D89/D94); scanner follow-ups §6.5 (S1–S3) precede it |
 | **M4** — Agent layer (rung 2) | Delegation certs, RFC 9421 middleware (FR8), per-serial revocation, phone→agent cert handoff (zkagent-prd.md:860) | Agent request accepted with valid chain; killed by zktag-block; single-use serial burns once; signature verifies against an off-the-shelf RFC 9421 verifier with no zkagent patches; cert reaches a headless agent host with no zkagent-run server in the path (zkagent-prd.md:860) | Frozen until rung 1 ships |
 | **M5** — Blocklist/appeal (rung 2) | Signed blocklist format, adopter store interface, prove-control-of-zktag appeal (zkagent-prd.md:861) | Store pattern fails closed, never silently falls back to in-memory (zkagent-prd.md:861) | Frozen until rung 1 ships |
 
@@ -239,6 +239,10 @@ Play Store listing: NOT an M3 item — see §6.6 (owner, 2026-09-03).
 Not a build scope list — a list of what must be decided before any M3b item can be written into
 this PRD (NO-GO #10 applies to M3b exactly as it does to M3). M3b is rung 1 (disclosure, not
 delegation) — it does not touch the frozen rung-2 agent layer.
+
+**Status (2026-09-28): all items below are now ruled (D89–D106). A candidate build-scope section
+drafted from these rulings lives at §6.9 — scope DRAFTED, awaiting owner approval, NOT yet
+satisfying NO-GO #10's scope gate.**
 
 Must be decided before M3b is scoped:
 
@@ -874,6 +878,323 @@ once the Android use case has succeeded (a signed GitHub-released build has been
 used by a third party), fold this into
 LIBRARY_CONVENTIONS as a new section for app packages — a hamr0-repo change, not zkagent's; noted
 here only, not actioned.
+
+## 6.9 M3b scope (DRAFT — NOT OWNER-APPROVED)
+
+> **DRAFT — NOT OWNER-APPROVED — NO-GO #10's scope gate is NOT satisfied; nothing here may be
+> built until the owner approves this section.**
+
+Written 2026-09-28 now that every §6.4 decision point (D89–D106) is ruled. This section drafts
+what those rulings imply for a buildable M3b scope, in §6.2/§6.3's numbered MUST/MUST NOT house
+format, so the owner has a single section to approve or amend rather than reconstructing scope
+from eighteen decisions by hand. Until the owner approves it (in whole or amended), §6.4 remains
+the decision record and this section has no force — it is a proposal, not a scope list.
+
+Components referenced below: **scanner** (`apps/scanner`), **chiproof**
+(`packages/chiproof`), **demo** (`apps/demo`), **operator.json** (`apps/scanner/operator.json`,
+schema §6.7.3), **docs** (this file / customer-guide.md).
+
+### 6.9.1 Opening riskiest-assumption POC (written first, before any other item)
+
+Per standing project practice (every module opens with a POC on real devices/documents aimed at
+its riskiest assumption before the easy parts get built — MEMORY.md), M3b's POC targets the
+riskiest assumption in the ruled design: that the two-layer trust mechanism (D94's pinned
+operator key plus D96's short-lived, verifier-carried membership statement) actually gates tier-C
+access the way D19/D20/D94/D96/D99/D100 describe, offline, on real hardware — not merely in a unit
+truth table. The membership statement's own concrete wire format is explicitly OPEN (D96 open
+point (ii), not ruled by any of D97–D106) — **this POC is where that format gets settled, not
+invented ahead of it in this document.**
+
+**Pass/fail criteria**, each with a paired non-vacuity positive/negative control (a negative must
+be shown to actually exclude something, not merely fail to be exercised):
+
+1. **Pinning gate.** A single-predicate tier-C presentation (one item-6 vocabulary predicate,
+   operator's choice) is REFUSED end-to-end when the requesting site's issuer/operator key is
+   unpinned in the build's `operator.json`, and ACCEPTED end-to-end (mint, deliver, verifier
+   returns `ok:true`) when it is pinned. Positive control: the accepted case must actually reach
+   the verifier with a non-empty presentation, not merely fail to be refused. Negative control:
+   the same request replayed against a SECOND build whose `operator.json` never pinned the key at
+   all must refuse identically — proving the refusal is keyed on pinning, not on some incidental
+   difference between the two runs.
+2. **The replay negative.** A valid membership statement lifted from an approved verifier's real
+   request and re-presented by a DIFFERENT origin, or under a different signing key, is REFUSED
+   (D99 — binding to origin and signing key). Positive control: the SAME statement, replayed by
+   the SAME origin and key it was issued to, is accepted — proving the refusal is the binding
+   check firing, not the statement being malformed or already consumed.
+3. **Expiry and ceiling.** An expired statement is refused (D100), and a statement claiming a
+   lifetime over D103's 6-month ceiling is refused (D105). Positive control: a statement inside
+   the valid window, and one claiming a lifetime under the ceiling, are both accepted. A statement
+   claiming a lifetime under D103's 1-week floor is exercised too, expecting ACCEPT (D106) — its
+   positive control is the ordinary in-range case already covered above; there is no negative to
+   pair it with, since D106 rules there is nothing to refuse.
+
+Cases 1 and 2 MUST run on BOTH real documents the owner holds (US passport, NL ID card) — case 3
+is statement-level and document-independent, so it MAY run once, on either document, since it
+exercises no document-specific code path. No PII or document values go into any evidence artifact
+produced by this POC; record field names, verdicts, and timings only, per standing project
+practice (MEMORY.md).
+
+**Also surfaced by this POC, not resolved by this document:** the ß/Ø normalisation edge cases
+D101 left open for name-match (transliteration beyond case/hyphen/accent-stripping) are OPEN items
+this POC should observe against real MRZ data and report, not rule on in advance.
+
+### 6.9.2 Scope items
+
+1. **Tier-C capability switch (`operator.json`, D96(1)).** `operator.json` schema gains a new
+   `tier_c: { "enabled": false }`-shaped knob (exact field name/shape settled by §6.9.1's POC,
+   consistent with the existing `tiers`/`evidence_plug` enum knobs in §6.7.3). Default MUST be
+   `false`/absent for every existing and reference build — §6.2 item 13's tier-C refusal is
+   UNCHANGED for any build that does not explicitly opt in. Only an opted-in build's scanner may
+   reach any of items 2–10 below; an unopted build MUST continue to fail loudly on a tier-C
+   request exactly as it does today. Touches: **operator.json** (schema), **scanner**
+   (`RequestTrust`/item-13 gate). Tag: ENHANCEMENT. Implements: D96(1), D73.
+2. **Issuer/operator key pinning (`operator.json`, D94).** A new `operator.json` knob carries the
+   pinned public key(s) an opted-in build trusts for tier-C authorization, validated and baked in
+   at build time exactly like the existing `verifiers` hostname allowlist (§6.7.4-style rules: a
+   malformed or missing key fails the build, never ships a silent default). Per D94's correction of
+   the routing misunderstanding: this key is never read from the `av://` link itself and nothing is
+   published by the operator for a verifier to fetch — the pinned list lives only inside the
+   holder's own app build, checked fully offline. Touches: **operator.json** (schema, new
+   validation rule), **scanner** (`OperatorPolicy`). Tag: ENHANCEMENT. Implements: D94, closes
+   §6.4 item 3 / Q49 in code (already closed on paper).
+3. **Membership statement verification (D96(2), D99, D100).** The scanner gains an offline
+   verifier for an operator-signed, short-lived membership statement the requesting verifier
+   carries in its request: (a) the statement's signature MUST verify against item 2's pinned
+   key(s); (b) the statement MUST bind the requesting verifier's origin AND its challenge-signing
+   key (D99) — a statement not bound to both is a bearer token and MUST be rejected as such, not
+   merely "unbound but otherwise valid"; (c) an expired statement MUST be refused, never downgraded
+   to tier A/B (D100, matching D19/D20's standing refusal shape); (d) the app MUST make no live
+   network call to the operator at presentation time — verification is fully offline against
+   item 2's already-pinned key, per D96(2)'s rejection of a live app-to-operator API call (tracking
+   channel, offline-breaking, no security benefit under D81 model A). The statement's own wire
+   format is OPEN (D96 point (ii)) — settled by §6.9.1's POC, not specified here. Touches:
+   **scanner** (new verifier module, name TBD by the POC), **chiproof** (see item 11). Tag:
+   ENHANCEMENT. Implements: D96(2), D99, D100.
+4. **Membership-statement lifetime bound (D98, D103, D105, D106).** The app MUST enforce that an
+   operator-chosen statement lifetime falls in `[1 week, 6 months]`: a statement claiming a
+   lifetime OVER 6 months MUST be refused outright (never clamped down, D105); a statement claiming
+   a lifetime UNDER 1 week MUST be accepted as claimed, not refused or clamped up (D106 — a
+   shorter lifetime is holder-neutral, the floor exists to bound operator renewal burden, not to
+   protect holders). A lifetime within range is the ordinary case and needs no special handling
+   beyond item 3(c)'s expiry check. Touches: **scanner** (statement verifier from item 3). Tag:
+   ENHANCEMENT. Implements: D98, D103, D105, D106.
+5. **Reference default and guide wording for the lifetime knob (D104).** When the operator-facing
+   lifetime knob is added to `operator.json`'s schema, the reference `operator.json` MUST default
+   it to 1 week — the short end of D103's range, not the 6-month ceiling — and
+   `docs/product/customer-guide.md` §7.2 (or its tier-C successor section) MUST state plainly, in
+   the walkthrough itself, that a longer choice is a slower ban: a site the operator drops can keep
+   asking tier-C questions of new holders until its current statement expires, up to 6 months at
+   the range's maximum. Touches: **operator.json** (reference file), **docs** (customer-guide.md).
+   Tag: ENHANCEMENT (documentation MUST, not code). Implements: D104.
+6. **Holder-side consent list (D89).** The app maintains a per-holder set of tier-C predicates
+   (drawn from item 7's vocabulary) the holder has consented to disclose — matching D19's framing
+   that tiers are defined by what the holder is told, not what a site is allowed to ask. This list
+   is DISTINCT from item 2's issuer-pinning gate (D89's own text: "D20's issuer pinning remains the
+   separate, unaffected gate on which sites may reach tier C at all") and from item 8's per-origin
+   locked-predicate-set record — three different lists, never conflated. How a request is matched
+   against this consent list is item 10 (D92). Touches: **scanner** (new consent-list store, same
+   persistence class as the item-23 log store / `ThresholdPolicy`'s per-origin record). Tag:
+   ENHANCEMENT. Implements: D89.
+7. **Tier-C verb vocabulary (D90, D101, D102).** The scanner's tier-C predicate set is exactly:
+   (a) expiry-bucket booleans (item 8's fixed buckets); (b) name-match — boolean only, normalized
+   per D101 (case-insensitive, hyphen-insensitive, accent-stripped, MRZ `<` treated as a
+   separator), no similarity score (Q22 unchanged); (c) DOB-range boolean (item 8's fixed ages);
+   (d) nationality, exclusion mode (site names a set, MUST NOT exceed 10 countries per D102, else
+   fail loudly/no mint) and confirmation mode (site names one nationality, boolean); (e)
+   document-number match — boolean true/false ONLY, the number itself MUST NEVER be disclosed as a
+   value (it is mode-B's zktag derivation field, D9 — disclosing it as a value would hand a site a
+   stable cross-site identifier). No sixth predicate and no vocabulary extension ships without a
+   further owner ruling. Touches: **scanner** (predicate evaluators), **chiproof** (item 11,
+   predicate-set schema on the wire). Tag: ENHANCEMENT. Implements: D90, D101, D102; Q22, Q34
+   (closed).
+8. **Fixed boundary lists (D95, D97).** Expiry-bucket and DOB-range boundaries come from a FIXED,
+   published list, never chosen by the requesting verifier, mirroring D74's discipline exactly: a
+   request naming a boundary not on the list MUST fail loudly (no mint). Expiry buckets are exactly
+   `{3 months, 6 months, 1 year}`. DOB-range boundaries are exactly the six ages D74 already uses
+   for tier A/B, `{15, 16, 18, 21, 60, 65}` — reused verbatim, not separately invented. Touches:
+   **scanner** (new `TierCBoundaryPolicy`-shaped object, sibling to `ThresholdPolicy`). Tag:
+   ENHANCEMENT. Implements: D95, D97.
+9. **Per-presentation cap and per-origin lifetime predicate set (D91).** A flat, app-side hard cap
+   of THREE tier-C predicates per presentation applies to every opted-in build, with NO
+   per-operator knob to raise it (D91(a) — the cap rides on item 2's pinning gate, not a separate
+   configurable ceiling, so a rogue/misconfigured `operator.json` cannot widen it). The app records
+   the exact predicate set an origin's first tier-C request asks (≤3) as a per-origin LIFETIME
+   record, the same persisted-record shape as D74's threshold lock (item 8's `ThresholdPolicy`
+   precedent) applied to a predicate SET instead of a single value. A later request from that same
+   origin MUST be answered when every predicate it asks is drawn from the locked set (the full set
+   or any subset of it) and MUST be refused outright if it introduces any predicate outside that
+   set (D91(d), confirmed). Touches: **scanner** (new per-origin predicate-set store). Tag:
+   ENHANCEMENT. Implements: D91.
+10. **Shared per-person ceiling across a holder's documents (D93).** The per-origin lock (item 9)
+    is keyed by origin + DOCUMENT (a separate record per document), but the 3-predicate ceiling is
+    SHARED across all of a holder's documents at that origin — a site MUST NOT be able to collect
+    three predicates from one document and a further three from a second document at the same
+    origin. The tally record MUST store predicate NAMES only and MUST NOT store the zktags or any
+    other document identifier asked against (D93(c)) — storing identifiers would itself create a
+    durable cross-document correlation, the exact privacy leak this cap exists to prevent. **UI
+    requirement (D93(e)):** scanning a second document at an origin whose shared ceiling is already
+    exhausted MUST show an explanation of why it is refused (e.g. "this site has already asked its
+    limit of tier-C questions for you") rather than a bare/unexplained refusal that reads as a
+    broken app — D93(e) named this as a UI requirement to be written into a scope item once M3b is
+    scoped; this item is that write-in. Touches: **scanner** (per-origin store, refusal UI copy).
+    Tag: ENHANCEMENT. Implements: D93.
+11. **All-or-nothing consent matching (D92).** A tier-C request is matched against BOTH item 6's
+    holder consent list and item 9/10's per-origin locked set; if the request names any predicate
+    falling outside either, the ENTIRE presentation MUST be refused — never a partial answer, never
+    an optional/droppable predicate, never a per-predicate opt-out control. A holder's declining
+    pattern is itself potentially holder-stable, cross-site information (D92's own reasoning) — the
+    only signal a site may ever receive is "refused" or "answered everything asked." Touches:
+    **scanner** (consent-matching gate, upstream of mint). Tag: ENHANCEMENT. Implements: D92.
+12. **chiproof verifier-side changes.** `packages/chiproof`'s verifier core gains: (a) a tier-C
+    presentation shape (predicate-name/boolean pairs, capped at 3 per item 9, validated against
+    item 7's fixed vocabulary and item 8's fixed boundary lists — a verifier claiming an off-list
+    boundary or a predicate outside the item-7 vocabulary MUST get `ok:false`, mirroring the
+    existing never-throw verdict contract, D4); (b) membership-statement verification support for
+    the verifier side that ISSUES statements is explicitly OUT of chiproof's scope — chiproof is
+    the HOLDER-side verifier core; statement issuance is the operator's own signing tooling,
+    unspecified by this scope item and left to the POC/operator documentation; (c) evidence-plug
+    registry entries, if item 3's statement format (once settled by the POC) is naturally expressed
+    as an evidence-plug contract (`verifyEvidence(item, ctx) → {ok, valid, reason}`, D24) rather
+    than a request-object field — this choice is left to the POC, not pre-decided here. Touches:
+    **chiproof** (`packages/chiproof/src`, new tier-C validation module; possibly
+    `packages/chiproof/src/plugs/`). Tag: ENHANCEMENT. Implements: D19, D20, D90, D91, D95, D97
+    (verifier-side enforcement of what the scanner already enforces holder-side — a dishonest
+    scanner build must not be the only place these caps are checked).
+13. **Demo page extension over M3 (§6 table's M3b row).** `apps/demo` gains a third action —
+    "prove specific attributes" (tier C) — alongside M3's existing tier-A/B actions, gated to a
+    demo-side `operator.json`-equivalent (or the existing env-var config, per D84 point 4's
+    deferral of the demo's own config layer — this item does NOT reopen that deferral, it only
+    extends the demo's tier-A/B page pattern to tier C using whatever config mechanism is live when
+    this item is built). The page MUST display, per predicate asked: the predicate name, the
+    boolean answer, and (mirroring M3 item 3's payload/store display requirement) the store's
+    relevant per-origin state (e.g. "predicates locked for this origin: {expiry>6mo, name-match}").
+    MUST NOT display any PII or raw field value at any point (standing rule, item 14 below). MUST
+    show an explicit "refused — over the 3-predicate cap" or "refused — outside your consented
+    list" outcome distinctly from a successful disclosure, mirroring M3 item 4's "already
+    registered" distinct-outcome pattern for tier B. Touches: **demo** (`apps/demo/server.mjs` and
+    its page), **chiproof** (item 12's tier-C shape). Tag: ENHANCEMENT. Implements: the §6 table's
+    M3b deliverable line ("demo page extension over M3").
+14. **Standing rules carried forward, unchanged, restated because they govern new UI/paths.** (a)
+    No screen renders a raw document field, DG1/MRZ value, or the document number's actual value at
+    any tier, on any screen (§6.2 item 5, unchanged; tier-C's document-number predicate (item 7e)
+    is boolean-only for exactly this reason). (b) Every tier-C result write MUST route through the
+    scanner's single report-writer discipline (`emitReport`, §6.2 item 16) — no second write site.
+    (c) A non-2xx `direct_post` response MUST map to an explicit user-facing refusal and MUST NEVER
+    be read as PASS/success (the M3/S2-S3 finding #22 lesson, D79(b), carried forward explicitly
+    since tier-C adds new response-handling branches). (d) A blocking modal dialog is used only for
+    an outcome requiring user action (item 15, §6.2 D43); a transient/no-state-change fact uses a
+    Snackbar; the two are never blended for a tier-C outcome. Touches: **scanner**, **demo**. Tag:
+    carried standing rule, not new scope. Implements: §6.2 items 5/15/16; D43, D79(b); finding #22.
+15. **Disclosed limitations (MUST be stated in customer-guide.md and/or in-app, not silently
+    carried).** (a) **Per-install reset** — every per-origin/per-holder record above (items 6, 9,
+    10) is per-install state; an uninstall/reinstall resets it, the same disclosed-not-mitigated
+    shape as D74/D91/D93. (b) **Multi-origin not covered** — a single owner operating many origins
+    to route around any per-origin lock is not covered by any item above, same disclosed shape. (c)
+    **Revocation window** — a dropped verifier's already-issued membership statement keeps working
+    until it expires, up to 6 months worst case if the operator chose the top of D103's range (item
+    4/5 mitigate this with a 1-week default, but do not eliminate the worst case an operator may
+    still choose). (d) **MRZ name-match truncation** — a sufficiently long, correctly-typed name
+    can fail item 7(b)'s match against a document whose MRZ field truncated it; this is flagged as
+    the orchestrator's own recommendation from D101, NOT an owner ruling, and stays a stated,
+    disclosed limitation rather than a "MUST fix." (e) **Q11 residual** — even against item 8's
+    fixed boundary lists, three DOB-range predicates still yield three bits of information about a
+    holder's date of birth; items 9/10's caps bound how OFTEN those bits can be asked, not whether
+    asking them is itself informative — this residual is unchanged by anything in this draft and is
+    not resolved by any item above. (f) **Document-number linkage residual (D90 item 5)** — a
+    `true` document-number-match answer confirms to the asking site that this holder is the person
+    behind a number the site already held; bounded to a number the site already knew going in, not
+    a new value extracted from the device, but a real linkage nonetheless. Touches: **docs**
+    (customer-guide.md tier-C section, once written), **scanner** (in-app disclosure text). Tag:
+    documentation MUST, not code. Implements: D74/D91/D93 (disclosed-limit convention), D101
+    (truncation), Q11 (residual), D90 item 5 (document-number residual).
+
+### 6.9.3 Traceability — decision → item
+
+| Decision | Item(s) |
+|---|---|
+| D89 | 6 |
+| D90 | 7, 12 |
+| D91 | 9, 12 |
+| D92 | 11 |
+| D93 | 10 |
+| D94 | 2 |
+| D95 | 8, 12 |
+| D96 | 1, 3, 4 |
+| D97 | 8, 12 |
+| D98 | 4 |
+| D99 | 3 |
+| D100 | 3, 4 |
+| D101 | 7, 15(d) |
+| D102 | 7 |
+| D103 | 4, 5 |
+| D104 | 5 |
+| D105 | 4 |
+| D106 | 4 |
+| §6 table M3b deliverable line | 13 |
+| §6.2 item 5/15/16, D43, D79(b), finding #22 | 14 |
+| D74/D91/D93 disclosed-limit convention | 15(a), 15(b) |
+| Q11 (residual, still open) | 15(e) |
+| D9 (document-number as zktag derivation field) | 7(e), 15(f) |
+
+Every ruled decision D89–D106 lands in at least one item above; none needed to be listed as
+"no build work" — every one of them has a concrete scope consequence.
+
+### 6.9.4 OPEN — not ruled, not invented here
+
+- **Membership statement wire format** (D96 open point (ii)) — settled by §6.9.1's POC, not
+  picked in this document.
+- **ß/Ø normalisation and further transliteration beyond D101's accent-stripping rule** — flagged
+  by D101 itself as an open edge case for M3b's own POC; §6.9.1 directs the POC to surface real
+  cases, not resolve them in advance.
+- **Q11's residual** (three DOB-range predicates are still three bits about a date of birth, even
+  from a fixed list) — unchanged by this draft; no item above closes it, and none invents a
+  closure. Item 15(e) states it as a disclosed limitation.
+- **MRZ name-match truncation behavior** — D101 explicitly left this unruled (orchestrator
+  recommendation only); item 15(d) states it as disclosed, not fixed.
+- **`apps/demo`'s own operator-config mechanism for tier C** — D84 point 4 deferred the demo's
+  verifier-side config to a later round "if this round is already big"; item 13 does not reopen
+  that deferral and does not invent a demo-side config schema — it uses whatever mechanism (env
+  vars or a future demo `operator.json`) is live when item 13 is actually built.
+- **Exact `operator.json` field names/shapes for items 1, 2, 4, 5** — the schema additions are
+  described functionally above; their exact JSON key names, nesting, and validation-rule numbering
+  (extending §6.7.4's list) are left to whoever writes the implementation PRD delta alongside the
+  code, not fixed by this draft.
+- **Whether tier-C predicate evaluation belongs in a new chiproof module or an evidence plug**
+  (item 12(c)) — left to the POC.
+
+### 6.9.5 Branch loose end (NOT an M3b item — pre-merge item for `feat/s68-rulings`)
+
+Finding #23 / D87's malformed-`av://` guard (the `Log.w` + non-blocking Snackbar refusal for a
+malformed VIEW intent) has no unit test — `Uri`/`Intent` are non-functional under this module's
+JVM unit-test stubs, so none was possible — and no device check yet (findings.md #23: "explicitly
+NOT device-verified — needs the owner's device pass with a correctly-quoted malformed link"). This
+sits on the current branch's own history, is unrelated to M3b's scope, and is listed here only so
+it is not lost: **a pre-merge item for `feat/s68-rulings`, not a task for M3b.**
+
+### 6.9.6 Size estimate
+
+**19 numbered units** (15 scope items in §6.9.2 plus the §6.9.1 POC counted as its own unit, plus
+the three cross-cutting sub-lists in items 14/15 which are restatements/disclosures rather than
+new build surface). Of the 15 scope items, the largest by build surface are:
+
+- **Item 3 (membership statement verification)** — a new offline verifier module with three
+  independent checks (signature, binding, expiry) plus the two lifetime-bound rules in item 4;
+  this is the item whose concrete shape depends entirely on the still-OPEN wire format (§6.9.4),
+  so its actual size cannot be bounded further until the POC settles that format.
+- **Items 9/10 (per-presentation cap, per-origin lifetime set, shared cross-document ceiling)** —
+  together they are a new persisted-record subsystem (predicate-set storage, subset-matching logic,
+  cross-document tallying) comparable in shape to `ThresholdPolicy`, but with a cross-document join
+  `ThresholdPolicy` never needed.
+- **Item 12 (chiproof verifier-side changes)** — touches the one package with an external npm
+  audience and a lockstep-versioned release obligation (D72); any schema chosen here is a public
+  contract the moment `chiproof` republishes.
+- **Item 7 (vocabulary)** — five distinct predicate evaluators, each with its own edge cases
+  (D101's normalization, D102's cap, D90(e)'s value-never-disclosed constraint), is more surface
+  than its single-item listing suggests.
+
+Items 1, 2, 5, 6, 8, 11, 14, and 15 are comparatively small (a knob, a gate, a documentation
+requirement, or a restatement of an existing rule in a new context).
+
 
 ## 7. Riskiest-assumption register (what M0 must answer)
 
