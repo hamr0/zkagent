@@ -336,10 +336,14 @@ Must be decided before M3b is scoped:
    a statement claiming a lifetime over the six-month ceiling is refused outright — never clamped
    down to six months, never accepted as claimed — consistent with D100's refused-never-downgraded
    rule and D19/D20; clamping would silently accept a statement the operator's own signing process
-   should never have produced, hiding a misconfigured or compromised signer. **Floor case still
-   OPEN, flagged for the owner:** whether a statement claiming a lifetime shorter than the one-week
-   floor is refused, clamped up, or accepted as written is NOT addressed by D105 (the owner's
-   ruling named only the ceiling) and is left for the owner or M3b's own POC.
+   should never have produced, hiding a misconfigured or compromised signer. **Enforcement of the
+   floor (D106, DECIDED — ACCEPT, 2026-09-28):** a statement claiming a lifetime shorter than the
+   one-week floor is ACCEPTED, not refused or clamped up — a shorter lifetime only makes revocation
+   faster, carrying no holder-side risk to guard against; the floor exists to bound operator
+   renewal burden, not to protect holders, so there is nothing to refuse. **Enforcement of the
+   bound is therefore now fully DECIDED, both halves:** over the ceiling is refused (D105); under
+   the floor is accepted (D106) — an intentional asymmetry, since the ceiling protects holders and
+   the floor does not.
    **Binding (D99, DECIDED — YES):** the statement MUST bind both the verifier's origin and its
    challenge-signing key; an unbound statement is a bearer token any site could replay.
    **Expired statement (D100, DECIDED — REFUSE):** never downgraded, matching D19/D20.
@@ -353,7 +357,7 @@ Must be decided before M3b is scoped:
    is unchanged; operators keep the full choice, D104 only sets the default and a documentation
    requirement. Neither `operator.json` nor §7.2 is edited today — there is no tier-C knob in
    either file yet, and this item does not itself satisfy NO-GO #10's scope gate.
-   See decisions.md D19, D20, D76, D81, D94, D96, D98, D99, D100, D103, D104, D105; milestones.md §6.2 item 13, §6.7.
+   See decisions.md D19, D20, D76, D81, D94, D96, D98, D99, D100, D103, D104, D105, D106; milestones.md §6.2 item 13, §6.7.
 6. **DECIDED — "preapproved list" meaning (D89, 2026-09-07).** The preapproved list is a
    HOLDER-side consent list — what the holder is willing to disclose, matching D19's framing that
    tiers are defined by what the holder is told — not a VERIFIER-side request list. D20's issuer
@@ -367,8 +371,9 @@ nationality exclusion cap are now ruled (D101, D102). Item 4 (Q11 for tier C)'s 
 mechanism AND contents are both now fixed (D95, D97); the residual "three predicates are still
 three bits" observation stays open, unchanged in kind — not a gap left by this pass, a fact
 about the predicate shape itself. Item 5 (D96)'s lifetime, binding and expired-statement points
-are now ruled (D98-D100); its enforcement-of-bounds sub-point and its statement-format point (ii)
-remain explicitly OPEN for the owner or M3b's own POC. That does NOT mean M3b is scoped: **NO-GO
+are now ruled (D98-D100); its enforcement-of-bounds sub-point is now also fully ruled (D105 the
+ceiling, D106 the floor) — only its statement-format point (ii) remains explicitly OPEN for the
+owner or M3b's own POC. That does NOT mean M3b is scoped: **NO-GO
 #10 still requires an owner-approved M3b scope section, written into this PRD, before any M3b
 code is written** — no such scope section exists yet, and none is written by this pass.
 

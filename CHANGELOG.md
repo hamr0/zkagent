@@ -5,6 +5,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs (D106).** Owner ruling, closing the floor half of D98/D103's open
+  tier-C membership-statement lifetime enforcement sub-point (D105 already
+  closed the ceiling half): a statement claiming a lifetime shorter than
+  D103's 1-week floor is ACCEPTED, not refused or clamped up. Owner:
+  "accept it," adopting the orchestrator's recommendation. Reasoning
+  recorded: a shorter lifetime only makes revocation faster, carrying no
+  holder-side risk to guard against — the 1-week floor exists to bound
+  operator renewal burden, not to protect holders, so there is nothing to
+  refuse; refusing a short statement would only break an operator who
+  deliberately chose a tighter setting. Resulting asymmetry stated as
+  intentional: over the ceiling is refused (D105, holder-protective);
+  under the floor is accepted (D106, no holder risk). This fully closes
+  D98/D103's enforcement sub-point — only the statement's concrete format
+  (D96 open point (ii)) remains open for M3b's own POC. `decisions.md`
+  title updated to D1–D106; D105's floor paragraph rewritten to point at
+  D106; D98/D103's open-point paragraphs updated to note both halves are
+  now closed. `milestones.md` §6.4 item 5's "Floor case still OPEN"
+  paragraph replaced with the D106 ruling and a closing note that
+  enforcement of the bound is now fully decided — see
+  `docs/wiki/decisions.md` D106.
 - **Scanner (FIX, D86).** `isBareHostname` (`apps/scanner/app/build.gradle.kts`)
   now rejects commas, quotes and backslashes as a loud build failure (rule
   4/5), closing a footgun where `OperatorPolicy.parseHostnameList`'s
