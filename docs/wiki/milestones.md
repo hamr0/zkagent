@@ -340,7 +340,16 @@ Must be decided before M3b is scoped:
    challenge-signing key; an unbound statement is a bearer token any site could replay.
    **Expired statement (D100, DECIDED — REFUSE):** never downgraded, matching D19/D20.
    **Format (ii) remains OPEN** — not addressed by this pass; left for the owner or M3b's POC.
-   See decisions.md D19, D20, D76, D81, D94, D96, D98, D99, D100, D103; milestones.md §6.2 item 13, §6.7.
+   **Default (D104, 2026-09-28, forward requirement for M3b, not built today):** when the
+   statement-lifetime knob is actually added to `operator.json`'s schema (§6.7) and to
+   customer-guide §7.2's walkthrough, the reference `operator.json` MUST default it to 1 week —
+   the short end of D103's range, not the 6-month ceiling — and §7.2's prose MUST say plainly that
+   a longer choice is a slower ban: a site the operator drops can keep asking tier-C questions
+   until its current statement expires, up to 6 months at the range's maximum. D103's range itself
+   is unchanged; operators keep the full choice, D104 only sets the default and a documentation
+   requirement. Neither `operator.json` nor §7.2 is edited today — there is no tier-C knob in
+   either file yet, and this item does not itself satisfy NO-GO #10's scope gate.
+   See decisions.md D19, D20, D76, D81, D94, D96, D98, D99, D100, D103, D104; milestones.md §6.2 item 13, §6.7.
 6. **DECIDED — "preapproved list" meaning (D89, 2026-09-07).** The preapproved list is a
    HOLDER-side consent list — what the holder is willing to disclose, matching D19's framing that
    tiers are defined by what the holder is told — not a VERIFIER-side request list. D20's issuer

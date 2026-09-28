@@ -115,6 +115,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   still-OPEN enforcement point updated to the 6-month ceiling (with the
   orchestrator's non-binding recommendation to refuse a statement claiming a
   lifetime over that ceiling, per D100) — see `docs/wiki/decisions.md` D103.
+- **Docs (D104).** Owner ruling: the reference `operator.json` MUST default
+  the tier-C membership-statement lifetime to 1 week — the short end of
+  D103's 1-week-to-6-month range — and the operator guide MUST state
+  plainly that a longer choice is a slower ban (a dropped site keeps asking
+  tier-C questions until its statement expires, up to 6 months at the
+  maximum). D103's range itself is unchanged; operators keep the full
+  choice. Reasoning recorded: the ceiling risks becoming the de facto value
+  for an operator who doesn't think about renewals, and that cost falls on
+  holders, not the operator; renewal is a cheap scheduled signing job; the
+  web PKI's TLS lifetime shrank from years to 90 days (heading toward ~47)
+  for the same reason short expiry is the revocation that actually works,
+  and tier C is zkagent's most sensitive mode. This is a forward
+  requirement for M3b, not a change made today — the tier-C knob does not
+  exist in `operator.json` yet, tier C is not built, and M3b scope is not
+  owner-approved (NO-GO #10). The reference `operator.json` and
+  customer-guide §7.2 are NOT modified by this entry. D98/D103's still-OPEN
+  enforcement-of-bounds sub-point is untouched. `decisions.md` title
+  updated to D1–D104; `milestones.md` §6.4 item 5 updated — see
+  `docs/wiki/decisions.md` D104.
 
 ## [0.7.1] — 2026-09-07
 
