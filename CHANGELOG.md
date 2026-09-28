@@ -134,6 +134,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
   enforcement-of-bounds sub-point is untouched. `decisions.md` title
   updated to D1–D104; `milestones.md` §6.4 item 5 updated — see
   `docs/wiki/decisions.md` D104.
+- **Docs (D105).** Owner ruling, closing the ceiling half of D98/D103's open
+  enforcement sub-point: a tier-C membership statement claiming a lifetime
+  over D103's 6-month ceiling is REFUSED — never clamped down to six
+  months, never accepted as claimed. Owner: "agreed to refuse it," adopting
+  the orchestrator's earlier D98/D103 recommendation as a ruling. Reasoning
+  recorded: consistent with D100's refused-never-downgraded rule and with
+  D19/D20; clamping would silently accept a statement the operator's own
+  signing process should never have produced, hiding a misconfigured or
+  compromised signer instead of surfacing it. The floor case (a statement
+  claiming a lifetime shorter than the 1-week floor) is NOT addressed by
+  this ruling and stays OPEN, flagged for the owner — D98/D103's original
+  open-point text posed ceiling and floor together, but the owner's D105
+  ruling names only the ceiling; nothing in it decides the floor by
+  implication. `decisions.md` title updated to D1–D105; D98's open-point
+  paragraph updated to note the ceiling is now closed and the floor stays
+  open; `milestones.md` §6.4 item 5's "Still OPEN" line split into a
+  DECIDED ceiling paragraph and an OPEN floor paragraph — see
+  `docs/wiki/decisions.md` D105.
 
 ## [0.7.1] — 2026-09-07
 

@@ -332,10 +332,14 @@ Must be decided before M3b is scoped:
    as D74/D91/D93. Clarification confirmed in the exchange: this is the lifetime of the SITE's
    permission to ask, not the validity of any holder's answer; D103 separately recorded that a
    distinct "how long may a site rely on an answer it already has" validity period (option B) was
-   considered and NOT adopted. **Still OPEN:** how the app enforces the 1-week-to-6-month bound
-   (refuse, clamp, or accept a statement that claims a longer/shorter lifetime) — left for the
-   owner or M3b's POC; orchestrator's recommendation, NOT a ruling: refuse a statement claiming a
-   lifetime over the six-month ceiling, consistent with D100's refused-never-downgraded rule.
+   considered and NOT adopted. **Enforcement of the ceiling (D105, DECIDED — REFUSE, 2026-09-28):**
+   a statement claiming a lifetime over the six-month ceiling is refused outright — never clamped
+   down to six months, never accepted as claimed — consistent with D100's refused-never-downgraded
+   rule and D19/D20; clamping would silently accept a statement the operator's own signing process
+   should never have produced, hiding a misconfigured or compromised signer. **Floor case still
+   OPEN, flagged for the owner:** whether a statement claiming a lifetime shorter than the one-week
+   floor is refused, clamped up, or accepted as written is NOT addressed by D105 (the owner's
+   ruling named only the ceiling) and is left for the owner or M3b's own POC.
    **Binding (D99, DECIDED — YES):** the statement MUST bind both the verifier's origin and its
    challenge-signing key; an unbound statement is a bearer token any site could replay.
    **Expired statement (D100, DECIDED — REFUSE):** never downgraded, matching D19/D20.
@@ -349,7 +353,7 @@ Must be decided before M3b is scoped:
    is unchanged; operators keep the full choice, D104 only sets the default and a documentation
    requirement. Neither `operator.json` nor §7.2 is edited today — there is no tier-C knob in
    either file yet, and this item does not itself satisfy NO-GO #10's scope gate.
-   See decisions.md D19, D20, D76, D81, D94, D96, D98, D99, D100, D103, D104; milestones.md §6.2 item 13, §6.7.
+   See decisions.md D19, D20, D76, D81, D94, D96, D98, D99, D100, D103, D104, D105; milestones.md §6.2 item 13, §6.7.
 6. **DECIDED — "preapproved list" meaning (D89, 2026-09-07).** The preapproved list is a
    HOLDER-side consent list — what the holder is willing to disclose, matching D19's framing that
    tiers are defined by what the holder is told — not a VERIFIER-side request list. D20's issuer
