@@ -401,7 +401,6 @@ dependencies {
     implementation(libs.jmrtd)
     implementation(libs.scuba.sc.android)
     implementation(libs.spongycastle.prov)
-    implementation(libs.jnbis) // ImageUtil.kt (unused DG2/fingerprint decode path, kept for compile compat)
     implementation(libs.bcpkix.jdk15on) // do not update — also supplies CMS (org.bouncycastle.cms.*) for §6.2 item 7
     implementation(libs.commons.io)
     implementation(libs.androidx.biometric) // §6.2 item 2 — BiometricPrompt (biometric-or-device-credential gate)

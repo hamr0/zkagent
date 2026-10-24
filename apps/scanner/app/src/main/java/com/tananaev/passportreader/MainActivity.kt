@@ -960,7 +960,7 @@ abstract class MainActivity : AppCompatActivity() {
         authorizedHandoff = snapshot
         // D58 step 4: [refreshSessionDisplay] reads [lockedMode] (just set,
         // above) and renders the SAME "Locked: mode X — tap your document
-        // now" banner, disabled button, and (Q40, PROVISIONAL) "Tap and
+        // now" banner, disabled button, and (Q40, CLOSED D67) "Tap and
         // scan" label — see [SessionDisplay.render]'s `locked` branch.
         refreshSessionDisplay()
         armNfcDispatch()
@@ -3870,14 +3870,16 @@ abstract class MainActivity : AppCompatActivity() {
 
         // §6.2 item 20 (D68, owner ruling 2026-09-03, Q45): the unlocked
         // verb while a VERIFIED av:// request is pending. Owner's own exact
-        // wording, from the ruling. Not yet device-confirmed (Q45 status:
-        // BUILT-IN-<sha>, device verification pending).
+        // wording, from the ruling. Device-confirmed 2026-09-03 PM (Q45,
+        // questions.md).
         private const val LOCK_BUTTON_VERIFY_LABEL = "Verify"
 
         // §6.2 item 20 (D68): Q40's "Tap and scan" waiting-frame, for a
         // LOCKED session that is itself handoff-driven — the ruling's own
         // collision wording ("if the label slots collide, use 'Tap and
-        // verify'/'Tap and scan'"). Not yet device-confirmed.
+        // verify'/'Tap and scan'"). Wording reviewed and confirmed by the
+        // owner (D71(d)); the locked "Tap and verify" frame itself was not
+        // separately observed in the 2026-09-03 device passes.
         private const val LOCK_BUTTON_WAITING_VERIFY_LABEL = "Tap and verify"
 
         // D56: per-process salt for [lastMrzHash] — a companion-object
