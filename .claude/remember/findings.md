@@ -1180,6 +1180,45 @@ JUnit XML, not from a device run.
   (still 484/0/0/0 — confirm at commit time). Needs the owner's device pass (a synthetic malformed
   `av://` VIEW intent, quoted this time so the shell doesn't truncate it, confirming both the
   `Log.w` line and the Snackbar text appear) before this is called device-verified.
+- **CORRECTION 2026-10-24 (D108 close-out, the entry above is left as written).** The 2026-09-07
+  status update's "FIXED, code + unit tests" was **false until commit `b3a03f0`**: the commit that
+  landed the guard (`90ba7f3`) added no tests, and the "unit tests" in that sentence never existed.
+  The guard shipped untested, and the device pass it asked for was not run until 2026-10-24.
+- Status update 2026-10-24 (D87 proof, D108 step 2). The guard now has the three proofs, recorded as they happened:
+  - **Proof 1, unit (`b3a03f0`).** The pure accept/reject rules were extracted from
+    `HandoffClient.parseAvLink` into `AvLinkRules.kt` (`AvLinkRules.decide`), and
+    `AvLinkRulesTest.kt` is a truth table of 11 tests. The scanner suite is 495 tests, 0 failures.
+    Negative control: deliberately breaking `AvLinkRules.decide` turned 7 of the 11 tests red. The 4
+    that stayed green are accept-path and lazy-read tests. **Limit: these tests cover the rules only. `android.net.Uri` parsing itself
+    (scheme, host, `getQueryParameter`) is still done by `android.net.Uri` and is not unit-tested**
+    (it is non-functional under this module's JVM stubs); that was deliberate, so behaviour does not change.
+  - **Proof 2, wiring trace (current file, re-checked 2026-10-24).** The VIEW intent arrives in
+    `onCreate` (`MainActivity.kt` calls `handleIncomingIntent(intent)` at line 541) or in
+    `onNewIntent` (defined at 1027, calling `handleIncomingIntent` at 1030). Then
+    `handleIncomingIntent` (1033) calls `HandoffClient.parseAvLink` (1036; defined at
+    `HandoffClient.kt:43`), which calls `AvLinkRules.decide` (`HandoffClient.kt:46`). A null result
+    reaches the `else` branch: `Log.w` ("av:// handoff intent REFUSED", line 1111), then the
+    non-blocking Snackbar `HANDOFF_LINK_MALFORMED_MESSAGE` (line 1112), then `return`.
+    `HandoffClient.parseAvLink` itself also logs `I/HandoffClient parseAvLink: dropped ...`.
+  - **Proof 3, device (owner's Pixel 6a, 2026-10-24).** A debug build of branch `feat/s68-rulings`
+    (installed as versionName 0.7.1, package `com.zkagent.scanner`). The link
+    `av://authorize?client_id=site.example&` (no `request_uri`) was fired with `adb shell am start`,
+    with the app's package specified. In every run the log carried both
+    `I/HandoffClient ... parseAvLink: dropped ...` and `W/MainActivity ... av:// handoff intent REFUSED ...`.
+    - Run 1 (21:47): **invalid as a visual check.** Logcat showed both lines, but the screen was
+      off/locked; the last wake was about 105 s after the intent, so a Snackbar (LENGTH_LONG) could
+      not have been seen. It proves only the log half.
+    - Run 2 (21:51, screen awake and unlocked): the logs fired for both the cold start and the warm
+      (`onNewIntent`) case, and the owner saw the notice **once**. That is an **unexplained single
+      observation**: it is not known which case showed it, or why only one did. There is no
+      evidence it was a defect, since run 3 was clean, and it is not explained away here.
+    - Run 3 (21:53, awake and unlocked): the owner saw the notice in BOTH the cold case and the warm case.
+    - Not testable on a device: a wrong-host link (`av://other?...`) never reaches the app. Android
+      refuses to resolve it, because the manifest's intent filter only accepts host `authorize`. The
+      app's own `WRONG_HOST` rule is therefore defence in depth, covered by unit test only.
+  - **FINAL STATUS — CLOSED: fixed and verified by all three proofs.** Residuals, not hidden: the
+    `Uri` parsing layer is not unit-tested, run 1 was invalid, run 2's once-only observation is unexplained
+    (run 3 clean), and screen capture is forbidden on this app, so the Snackbar was confirmed by the owner's eyes, not by a capture.
 
 ### 2026-09-06 — #24: a stale recents task can resurface an old intent as if it were fresh, under scripted `adb install -r` / `am start` device testing
 

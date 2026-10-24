@@ -1250,14 +1250,31 @@ Every ruled decision D89–D107 lands in at least one item above; none needed to
 - **Exact location of item 3's signing tool** (`packages/chiproof/scripts/`, a sibling package, or
   elsewhere) — not fixed by this draft, left to whoever implements it.
 
-### 6.9.5 Branch loose end (NOT an M3b item — pre-merge item for `feat/s68-rulings`)
+### 6.9.5 Branch loose end (NOT an M3b item — pre-merge item for `feat/s68-rulings`) — CLOSED 2026-10-24
 
 Finding #23 / D87's malformed-`av://` guard (the `Log.w` + non-blocking Snackbar refusal for a
-malformed VIEW intent) has no unit test — `Uri`/`Intent` are non-functional under this module's
-JVM unit-test stubs, so none was possible — and no device check yet (findings.md #23: "explicitly
-NOT device-verified — needs the owner's device pass with a correctly-quoted malformed link"). This
-sits on the current branch's own history, is unrelated to M3b's scope, and is listed here only so
-it is not lost: **a pre-merge item for `feat/s68-rulings`, not a task for M3b.**
+malformed VIEW intent) was recorded as FIXED on 2026-09-07 with "code + unit tests"; **that claim was
+false until commit `b3a03f0`** (the guard's own commit, `90ba7f3`, added no tests, and no device
+check had been run). Closed 2026-10-24 (D108 step 2) with three proofs, recorded in
+`.claude/remember/findings.md` #23:
+
+1. **Unit.** The accept/reject rules are the pure `AvLinkRules.decide`; `AvLinkRulesTest` is an 11-test
+   truth table (scanner suite 495 tests, 0 failures). A negative control turned 7 of the 11 red; the
+   4 that stayed green are accept-path and lazy-read tests. The tests cover the rules only, not
+   `android.net.Uri` parsing.
+2. **Wiring trace.** VIEW intent → `onCreate` (`MainActivity.kt:541`) or `onNewIntent` (1027/1030) →
+   `handleIncomingIntent` (1033) → `HandoffClient.parseAvLink` (`HandoffClient.kt:43`) →
+   `AvLinkRules.decide` → null → `Log.w` (1111) + Snackbar (1112).
+3. **Device (owner's Pixel 6a, 2026-10-24, debug build of the branch, `com.zkagent.scanner`).**
+   Link `av://authorize?client_id=site.example&` fired by `adb am start` with the package specified.
+   Run 1 (21:47) is invalid as a visual check (logs fired, but the screen was off/locked, last wake
+   about 105 s after the intent). Run 2 (21:51, awake): logs for cold and warm cases, but the owner saw
+   the notice only once, an unexplained single observation (no evidence of a defect). Run 3 (21:53,
+   awake): the owner saw the notice in both the cold and the warm case. A wrong-host link never reaches the
+   app (the manifest filter only accepts host `authorize`), so `WRONG_HOST` is defence in depth,
+   unit-tested only.
+
+This sat on the current branch's own history and was never an M3b task.
 
 ### 6.9.6 Size estimate
 

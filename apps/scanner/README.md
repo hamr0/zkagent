@@ -45,7 +45,7 @@ shipping a silent default. It sets the per-deployment verifier hostname
 allowlist, the D74 threshold subset, tier mode (A+B vs B-only), and the
 `app_name` string. See `docs/wiki/milestones.md` §6.7 for the schema and the
 nine build-time validation rules; `apps/scanner/scripts/operator-json-negative.sh`
-exercises fifteen deliberately-bad cases (covering all nine rules) against `:app:assembleRegularDebug`.
+exercises fifteen deliberately-bad cases (covering all nine rules) against `:app:assembleRegularDebug`, then checks the good file is restored: 16 `PASS` lines in its output when all is well (re-run and counted 2026-10-24).
 
 ## Unit tests (no device needed)
 
@@ -55,8 +55,8 @@ export JAVA_HOME=$HOME/.gradle/jdks/eclipse_adoptium-17-amd64-linux.2 ANDROID_HO
 ```
 
 Covers: the canonical-JSON claim encoding (`CanonicalTest`), the §6.2 item 9
-signed-message byte layout against a known vector produced independently by
-`spikes/m2-handoff/sig-ed25519-plug.mjs` (`EvidenceSignerTest`; that spike was removed when `spikes/m2-handoff` became `apps/demo` under D73, so the vector is no longer reproducible from this tree — `packages/chiproof/src/plugs/attester-sig.js` is the live equivalent), and the §6.2
+signed-message byte layout against a known vector (`EvidenceSignerTest`). The vector was
+produced independently by a Node plug in the old `spikes/m2-handoff` (since moved to `apps/demo` under D73, and that plug is no longer in the tree; it is recoverable from git history), so it is not reproducible from the current files; the live verifier of the same signed-message layout is `packages/chiproof/src/plugs/attester-sig.js`, and the §6.2
 item 7 masterlist CMS integrity + two-bucket rule against the REAL bundled
 `assets/DE_ML.ml` (`MasterlistVerifierTest`) — including a real half-truncated
 negative and a flipped-signature-byte negative, both asserted to refuse

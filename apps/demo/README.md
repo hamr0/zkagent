@@ -217,4 +217,4 @@ by the M3 build pass):
 `android/app/src/main/AndroidManifest.xml` (an old dev-side test rig in this directory, not the
 M2 scanner) no longer sets app-wide `android:usesCleartextTraffic="true"`; it points
 `android:networkSecurityConfig` at a config permitting cleartext only for `127.0.0.1`.
-**UNBUILT / UNVERIFIED ON DEVICE** — config-only, not re-run on a Pixel as part of this change.
+**UNBUILT / UNVERIFIED ON DEVICE** — config-only, not re-run on a Pixel as part of this change. The whole `android/` directory is a historical rig, not part of the shipped demo (see `android/README.md`).

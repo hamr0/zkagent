@@ -5,6 +5,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Close-out polish (D108, 2026-10-24; FIX).** Finding #23 / D87 (malformed `av://` guard) is
+  now closed with three recorded proofs: the pure `AvLinkRules` truth table (11 tests; scanner
+  suite 495, 0 failures; the earlier "code + unit tests" claim for it was false until `b3a03f0`),
+  a wiring trace, and a device pass on a Pixel 6a (run 1 invalid, run 2 an unexplained
+  once-only observation, run 3 clean in both cold and warm cases); see `findings.md` #23 and
+  `milestones.md` §6.9.5. Nits fixed: `chiproof`'s `package.json` description (npm metadata,
+  not the version) no longer says no real-hardware evidence backs it; stale Q40/Q45 and
+  `ReportLog.MAX_ENTRIES` comments corrected; dead code `ImageUtil.kt`, `M2MasterlistProbe.kt` and
+  the then-unused `jnbis` dependency removed from `apps/scanner` (no references found; builds
+  and tests unchanged); `apps/scanner/NOTICE` rewritten for the distributed app (upstream licence
+  statement kept); a README added to the historical `apps/demo/android` rig; the scanner README's
+  dead `sig-ed25519-plug.mjs` reference repointed and the negative-script count clarified (15 bad
+  cases plus a restore check, 16 `PASS` lines); D107(d) gets a dated correction note about where
+  the D74 locks actually live. No version field changed.
 - **Docs: close-out (D108, 2026-10-24; docs only, no code touched).** The owner closed zkagent as
   a complete experiment, to stay in clean, inspectable, usable standing (it is cited by the
   owner's individual Internet-Draft `draft-hamr-oauth-agent-delegation`, which has no IETF
