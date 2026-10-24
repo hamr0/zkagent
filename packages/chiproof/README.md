@@ -1,6 +1,6 @@
 # chiproof
 
-**M1 buckets B1–B4 implemented and tested. No real-hardware M0 evidence backs this package yet — do not treat a "verified" verdict as proof about a person until an evidence plug you trust is configured.**
+**Status: released (see the version on npm); the zkagent project is closed as a complete experiment (D108). This package has been exercised end to end against the project's reference scanner and demo on real hardware (a Pixel 6a, a US passport and an NL ID card) — see `docs/logs/` in the repository — but it has no external adopter and has not been independently audited. A "verified" verdict from bare mode proves nothing about a person; do not treat it as identity-grade until an evidence plug you trust is configured.**
 
 `chiproof` is the verifier SDK of the [zkagent](https://github.com/hamr0/zkagent) project: a stateless Node library that checks an attested, windowed disclosure derived from an ICAO 9303 chip document — the chip already in a passport or a modern national ID card.
 

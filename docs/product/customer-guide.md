@@ -47,7 +47,7 @@ cannot tell you the site's decision. Read the page.**
 |---|---|
 | Tier A | Anonymous mode. One yes/no answer, no way to recognise you again. Default. |
 | Tier B | Pseudonymous mode. Same yes/no answer, plus a per-site tag so that site (only) can tell if it's seen this document before. Opt-in, requires a tap-to-approve action on the phone. |
-| Tier C | Attributed mode (name/expiry/other fields) — not built yet, planned for a future milestone (M3b). |
+| Tier C | Attributed mode (name/expiry/other fields) — designed and parked (M3b), never built. See `docs/wiki/backlog.md`. |
 | zktag | The per-site tag tier B adds. Computed on the phone from the document and the site's address; the same document at the same site always makes the same zktag; the same document at a different site makes a different, unrelated zktag. |
 | Verifier | The website's own server that checks what the phone sends and decides allow/refuse. Every operator runs their own; zkagent runs none. |
 | Handoff link | The `av://` link the page hands to the phone (tap on the same device, or scan a QR code from a second device) to start a scan tied to that specific request. The scanner app only handles `av://` links today — it has no `https` App Link intent filter — so the demo must be run with the `av` link scheme for the same-device tap to work; the demo's `https` default is only a placeholder for a possible future app-link path, not something the scanner can open yet. |
@@ -55,7 +55,7 @@ cannot tell you the site's decision. Read the page.**
 | Attester key | A key the phone generates in its secure hardware (Keystore/StrongBox) and uses to sign a tier-B answer, so the site can trust it came from this phone. Requires a PIN/biometric approval each time it signs. |
 | Chip authentication | A property some (not all) chips support that proves the physical chip is genuine, not a copy. Reported as true/false at tiers B/C only — tier A never emits it. |
 | Masterlist | The public list of government signing certificates the phone checks the chip's signature against. Bundled in the app, verified before use. |
-| Threshold | The age number being asked about (e.g. "over 18"). Fixed at 18 for the current demo; a small published list of allowed numbers is planned (§5). |
+| Threshold | The age number being asked about (e.g. "over 18"). Fixed at 18 on the demo page; the app enforces a small published list of allowed numbers (§5). |
 | Origin | The website address (scheme+host+port) the request came from. Keys, zktags, and thresholds are all scoped per origin. |
 | Store | The website's own persistent record of zktags/keys it has seen. zkagent code stores nothing; the demo keeps a plain JSON file as an example. |
 
@@ -75,7 +75,7 @@ cannot tell you the site's decision. Read the page.**
 | Can two sites link you | No | No — zktags differ per site by design | Not built |
 | Works with a cloned chip | N/A (no chip check in tier A) | Yes, if `chip_auth` is false — a clone mints the identical zktag as the real holder | Not built |
 | Threshold | 18 (fixed) | 18 (fixed) | Not built |
-| Status | POC passed, build in progress; trust-list (FR10, §6.3 item 8) moved to §6.5 S4, D78 — not an M3 criterion, needs a future attestation plug | POC passed, build in progress; trust-list (FR10, §6.3 item 8) moved to §6.5 S4, D78 — not an M3 criterion, needs a future attestation plug | M3b — not started, PRD-gated |
+| Status | Built and device-confirmed (M3, shipped v0.6.0). The client trust list (FR10) is not built: it needs an attestation plug (§6.5 S4, D78; backlog) | Built and device-confirmed (M3, shipped v0.6.0). The client trust list (FR10) is not built: it needs an attestation plug (§6.5 S4, D78; backlog) | M3b — designed, parked, never approved or built |
 
 ## 4. Tier rules — what each may and may never ask
 
@@ -83,7 +83,7 @@ cannot tell you the site's decision. Read the page.**
 |---|---|---|---|
 | A | One yes/no threshold bit | Any identifying field; anything that could stably identify you | None — always available, the default |
 | B | Tier A's bit, plus "have I seen this document at my site before" (the zktag) | Your name, birthdate, or any document field; anything that links you across two different sites | Must be explicitly requested by the site — never inferred or defaulted |
-| C | Booleans over identifying fields, from a published verb list (candidates named so far: name-match, expiry-bucket booleans; vocabulary not yet finalized) | Similarity scores, ever; any predicate off the published list | Refused outright unless the requesting site's issuer key is pinned in advance; the scanner refuses any tier-C request today; requires a future build (M3b) that is not started and is blocked on which verbs the vocabulary will contain |
+| C | Booleans over identifying fields, from a published verb list (the vocabulary was ruled in D90: expiry buckets, name-match, date-of-birth range, nationality, document-number match — but none of it is built) | Similarity scores, ever; any predicate off the published list | Refused outright unless the requesting site's issuer key is pinned in advance; the scanner refuses any tier-C request today; requires M3b, which is designed (D89–D107, `docs/wiki/milestones.md` §6.9) but parked and not built |
 
 ## 5. Preset age thresholds and per-site locking
 
@@ -224,7 +224,7 @@ What "attestation" means here, and how much of it an operator can change:
 zkagent is distributed as one upstream Apache-2.0 repository, not as a hosted service (see §7):
 each operator builds and signs their own copy of the scanner app, under their own package
 identity, with their own keystore. There is no shared zkagent signing key, and there never will
-be — the owner's own showcase build (Google Play, closed testing) uses a separate keystore of
+be — the owner's own showcase build (a signed APK on GitHub Releases; the Play track is parked, D83) uses a separate keystore of
 its own, generated the same way as below.
 
 **Why this matters.** Android requires every APK to carry a certificate, and the SHA-256 digest
@@ -296,7 +296,7 @@ this whole recipe.
    passwords appear in a CI environment log. Rotating this key is not a maintenance step — it
    creates a new app identity, so don't do it unless you mean to.
 
-6. **If you upload to Google Play:** Play App Signing re-signs your APK with Google's own key —
+6. **If you upload to Google Play (the owner's own Play track is parked, D83):** Play App Signing re-signs your APK with Google's own key —
    your local key becomes only the "upload key" (see §6.6 item 2 in `docs/wiki/milestones.md`
    for the owner's own showcase-listing deliverables, which are not required of operators). Any
    verifier pinning your Play-distributed build must pin Google's digest instead of (or alongside)
@@ -430,8 +430,8 @@ What's actually checked, and what isn't yet:
 |---|---|
 | Clone replay on non-chip-authenticated documents | Disclosed, not mitigated — a cloned chip mints the same zktag as the real one when `chip_auth` is false |
 | Not zero-knowledge | Never marketed as such — third-party ZK only enters as a validation-grade, tier-A-only evidence option |
-| Tier C (name/expiry/other fields) | Not built — planned as M3b, gated on further PRD decisions |
-| Play Store / HTTPS reachability | Not solved yet — a Play-installed (non-sideloaded) phone has no route to a verifier over HTTPS today |
+| Tier C (name/expiry/other fields) | Not built — designed and parked as M3b (never approved); see `docs/wiki/backlog.md` |
+| Play Store / HTTPS reachability | Moot — the Play track is parked (D83); distribution is GitHub Releases + sideload, and the demo is reached over `adb reverse` (D76) |
 | Online hosting | Out of scope for the current demo — operator runs it locally, USB only |
 | Per-install state | Keys, zktag bindings' local record, threshold locks, and the log all reset on reinstall (see §6.10) |
 | LAN cleartext | Refused outright by the app's network settings — no plain HTTP over Wi-Fi, ever |
@@ -480,15 +480,20 @@ again on the next scan, exactly like a genuine first-time visit.
 
 ## 13. Planned, not built
 
-| Item | What it will do | Status |
+zkagent is closed as a complete experiment (D108, 2026-10-24); nothing below is scheduled. Every
+parked or unbuilt item — M3b tier C, the client trust list via an attestation plug (§6.5 S4), the
+Play Store track, rung 2, Track Z, and the others — is listed with its reason and its decision
+pointers in [`docs/wiki/backlog.md`](../wiki/backlog.md), which also says how to revive any of them.
+Anything revived goes into the PRD first (NO-GO #10).
+
+| Item | What it would do | Status |
 |---|---|---|
-| M3b | Tier C: attributed disclosure (e.g. name match, expiry-bucket booleans), pinned to approved issuers only | Not started — blocked on several open design questions |
-| Play Store track | Closed-testing upload of the scanner app; a showcase track only, doesn't change how the demo is reached | Not started — opens after a separate proof-of-concept passes |
+| M3b | Tier C: attributed disclosure (e.g. name match, expiry-bucket booleans), pinned to approved issuers only | Designed and parked — never approved, not built |
+| Client trust list (§6.5 S4) | Pin the scanner's package and signing certificate via an attestation plug | Not built — needs an attestation plug |
+| Play Store track | Closed-testing upload of the scanner app | Parked (D83) |
 
 (§6.5 items S1, S2, and S3 — the preset threshold list/lock, the pre-tap question line, and the
-scan-pane cleanup — are all built and device-confirmed; see §5 above and §3's status row. Item S4
-(client trust list via an attestation plug) remains not built, blocked on an attestation plug —
-`docs/wiki/milestones.md` §6.5.)
+scan-pane cleanup — are built and device-confirmed; see §5 above and §3's status row.)
 
 ---
 

@@ -32,8 +32,8 @@ The verifier core is:
 - Any server we run (NO-GO #3 — no CA, no issuer, no enrollment server, no
   trust list run by us).
 - Tier-C verbs (Q22 — deferred).
-- Rung 2 (agent delegation, RFC 9421 signing) — frozen until rung 1 ships
-  (D18).
+- Rung 2 (agent delegation, RFC 9421 signing) — originally frozen until rung 1 ships
+  (D18); now backlog, not planned (D108).
 
 ## 2. Public API (target)
 

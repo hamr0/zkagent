@@ -1,5 +1,7 @@
 # apps/demo — M3 age-gate demo (PRD §6.3, D73–D76)
 
+**Status: complete (shipped with v0.6.0 and later releases); the project is closed as a complete experiment (D108).** This is the reference adopter of `chiproof`, run locally for demonstration, not a hosted service. Tests: `npm test` (node:test).
+
 The M3 vanilla demo: a plain HTML/CSS/JS website (no framework, no build step) that plays the
 role of an adopter's OWN verifier around `chiproof` (the M1 verdict core). It is meant as a
 mockup any operator can run and test the M2 scanner app against right away — "clean and
@@ -76,7 +78,7 @@ differ too, every time, because each challenge is minted fresh (`Date.now()`) at
 button is tapped, not at page load. The page's caption states this honestly and computes the
 differing-fields list live from the real diff rather than asserting the PRD's literal sentence,
 which would be untrue for this build's actual payload shape. Flagged for the owner; not decided
-here — see the "Open questions" section below.
+here — resolved by D77, see "Decided since (D77, D78)" below.
 
 ## Tier-B "already registered" (§6.3 item 3/4)
 
@@ -125,7 +127,7 @@ actually specifies is scanner-side work (§6.5 S1/S2), not M3 scope.
 
 §6.3 item 8 requires the verifier to pin the M2 scanner's package name and signing-cert digest
 as its one accepted client identity. **This does not exist anywhere in this demo or in
-`chiproof` today**, and it is NOT added by this change — see "Open questions" below. Nothing
+`chiproof` today**, and it is NOT added by this change — resolved by D78, see "Decided since (D77, D78)" below. Nothing
 in the current OpenID4VP-shaped wire contract (`POST /wallet/direct_post`) carries a package
 name or signing-cert digest at all; the scanner's HTTP client is indistinguishable from any
 other HTTP client at this layer. Building this would mean adding a new field to what the

@@ -1,7 +1,10 @@
 # zkagent M2 reference scanner
 
-The real Android reference-scanner app for zkagent, PRD `docs/product/zkagent-prd.md`
-§6.2, items 1-11. This is a **rewrite**, not a graduated spike — code was
+The Android reference-scanner app for zkagent (PRD `docs/product/zkagent-prd.md`
+§6.2). **Status: complete and released as v0.7.1 (signed APK on GitHub Releases); the project
+is closed as a complete experiment (D108) and no further scanner work is planned.** Tiers A and B
+are built; tier C is refused by the app and is parked (`docs/wiki/backlog.md`). The item table
+below covers §6.2 items 1-11; items 12-25 are in the PRD and the CHANGELOG. This is a **rewrite**, not a graduated spike — code was
 drawn from `spikes/m2-scan` (masterlist/passive-auth read path) and
 `spikes/m2-session-poc` (StrongBox key + biometric composition, item 12's
 already-PASSED POC), but restructured wherever §6.2 requires it. Everything
@@ -17,13 +20,14 @@ Package/namespace kept as the upstream fork's (`com.tananaev.passportreader`)
 `com.zkagent.scanner`, distinct from every spike APK, so it installs
 independently. Base app forked (transitively, through the spikes) from
 [tananaev/passport-reader](https://github.com/tananaev/passport-reader);
-resolve the missing upstream `LICENSE` file before any distribution (carried
-over, unresolved, from every prior spike's README).
+upstream states Apache-2.0 in its README but ships no `LICENSE` file; `NOTICE` records
+the basis on which the Apache-2.0 text here is supplied and says to revisit it if upstream's
+licensing is ever clarified otherwise. Not independently resolved.
 
 ## Build
 
 ```
-export JAVA_HOME=$HOME/opt/jdk-21.0.12.1+1 ANDROID_HOME=$HOME/Android/Sdk
+export JAVA_HOME=$HOME/.gradle/jdks/eclipse_adoptium-17-amd64-linux.2 ANDROID_HOME=$HOME/Android/Sdk
 ./gradlew :app:assembleRegularDebug      # debug — one cleartext exception (10.0.2.2/localhost)
 ./gradlew :app:assembleRegularRelease    # release — NO cleartext exception anywhere (unsigned unless KEYSTORE_FILE etc. are set)
 ```
@@ -41,18 +45,18 @@ shipping a silent default. It sets the per-deployment verifier hostname
 allowlist, the D74 threshold subset, tier mode (A+B vs B-only), and the
 `app_name` string. See `docs/wiki/milestones.md` §6.7 for the schema and the
 nine build-time validation rules; `apps/scanner/scripts/operator-json-negative.sh`
-exercises five deliberately-bad variants against `:app:assembleRegularDebug`.
+exercises fifteen deliberately-bad cases (covering all nine rules) against `:app:assembleRegularDebug`.
 
 ## Unit tests (no device needed)
 
 ```
-export JAVA_HOME=$HOME/opt/jdk-21.0.12.1+1 ANDROID_HOME=$HOME/Android/Sdk
+export JAVA_HOME=$HOME/.gradle/jdks/eclipse_adoptium-17-amd64-linux.2 ANDROID_HOME=$HOME/Android/Sdk
 ./gradlew :app:testRegularDebugUnitTest
 ```
 
 Covers: the canonical-JSON claim encoding (`CanonicalTest`), the §6.2 item 9
 signed-message byte layout against a known vector produced independently by
-`spikes/m2-handoff/sig-ed25519-plug.mjs` (`EvidenceSignerTest`), and the §6.2
+`spikes/m2-handoff/sig-ed25519-plug.mjs` (`EvidenceSignerTest`; that spike was removed when `spikes/m2-handoff` became `apps/demo` under D73, so the vector is no longer reproducible from this tree — `packages/chiproof/src/plugs/attester-sig.js` is the live equivalent), and the §6.2
 item 7 masterlist CMS integrity + two-bucket rule against the REAL bundled
 `assets/DE_ML.ml` (`MasterlistVerifierTest`) — including a real half-truncated
 negative and a flipped-signature-byte negative, both asserted to refuse

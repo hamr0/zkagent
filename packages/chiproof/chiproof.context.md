@@ -30,9 +30,8 @@ you at construction.
   version, is **tier-A-only** — see "What's NOT in chiproof, and why".
 - `sig-ed25519/1` and `sig-p256/1` (D30/FR12, PRD §6.2 items 1/9/11) are the
   attester-key plug family, tier ceiling **B** — see "Attester-key evidence
-  plug family" below. `sig-p256/1` is a **candidate plug name under a
-  pending decision number (`Dn`)**, not an owner-numbered decision the way
-  `sig-ed25519/1`/D30 is.
+  plug family" below. `sig-p256/1` is a co-equal alternative to
+  `sig-ed25519/1` (D31), not a second-class candidate.
 - It does not run an HTTP server, a queue, or a background job. There is no
   `gate`-style helper in this version (M1 spec §5 B4) — you wire challenge
   issuance and verification into your own request handlers.
@@ -120,7 +119,7 @@ Every export below is re-exported from the package root (`import { ... } from 'c
 | `paramCommitment(threshold)` | Pure. Returns the pinned 32-byte `Buffer` for a threshold from the vendored table, or `undefined` if unpinned. |
 | `sigEd25519({keys, attesterStore})` | **Throws** `TypeError` at registration if `keys` is malformed, has a duplicate `key_id`, or is empty/absent WITHOUT an `attesterStore` also supplied (D38: a store-only registration, no pinned keys at all, is valid); also throws if `attesterStore` is supplied but doesn't implement `{get, bind}`. Returns a `Plug` (linkability `'signer'`, tier ceiling `'B'`, `binds.zktag: true`) whose `verify()` never throws — see "Attester-key evidence plug family" for the D38 pinned/store key-resolution order. |
 | `sigEd25519Message(claim, nonce, scopeDomain, zktag)` | Pure. Returns the exact `Buffer` an attester must sign for `sig-ed25519/1` — `sha256(preimage)`. Propagates `canonicalize`'s throw if `claim` is unsignable. |
-| `sigP256({keys, attesterStore})` | Same contract as `sigEd25519({keys, attesterStore})`, for the candidate `sig-p256/1` plug (`Dn` pending). |
+| `sigP256({keys, attesterStore})` | Same contract as `sigEd25519({keys, attesterStore})`, for the `sig-p256/1` plug (co-equal alternative, D31). |
 | `sigP256Message(claim, nonce, scopeDomain, zktag)` | Pure. Returns the exact `Buffer` an attester must sign for `sig-p256/1` — the raw `preimage`, unhashed (see "Attester-key evidence plug family"). |
 | `keyIdFor(publicKeyDer)` | Pure (D38). `sha256(publicKeyDer)` as lowercase hex, truncated to 16 chars (8 bytes) — MUST stay byte-identical to the scanner's Kotlin `EvidenceSigner.keyIdFor`. Used to recompute and verify a presented item's `key_id` from its carried `pubkey`; exported so a client/adopter can produce the same id. |
 
@@ -293,7 +292,7 @@ The D30 attester-key plugs (PRD §6.2 items 1/9/11, FR12): an app's own
 device-bound signing key (its Android Keystore attester key, D30 — never fed
 into zktag derivation) signs the challenge binding. `sig-ed25519/1` is the
 reference default for mode-B presentations (D30); `sig-p256/1` is a
-**candidate plug name under a pending decision number (`Dn`)**, added because
+co-equal alternative (D31), added because
 Ed25519 is unavailable as an AndroidKeyStore key on the Pixel 6a, at either
 security level, by either entry point (`docs/logs/M2-SESSION-POC.md` F2) —
 P-256 is what StrongBox actually offers on that device.
