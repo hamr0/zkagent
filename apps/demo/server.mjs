@@ -379,8 +379,13 @@ function renderCompare(tier, presentation) {
   for (const r of rows) {
     const tr = document.createElement('tr');
     const fmt = (v) => (v === undefined ? '(absent)' : JSON.stringify(v));
-    tr.innerHTML = '<td>' + r.field + '</td><td>' + fmt(r.a) + '</td><td>' + fmt(r.b) + '</td>'
-      + '<td class="' + (r.same ? '' : 'differs') + '">' + (r.same ? 'same' : 'differs') + '</td>';
+    const cells = [r.field, fmt(r.a), fmt(r.b), r.same ? 'same' : 'differs'];
+    cells.forEach((text, i) => {
+      const td = document.createElement('td');
+      td.textContent = text;
+      if (i === 3 && !r.same) td.className = 'differs';
+      tr.appendChild(td);
+    });
     compareTbody.appendChild(tr);
     if (!r.same) differingFields.push(r.field);
   }
