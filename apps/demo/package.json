@@ -1,7 +1,7 @@
 {
   "name": "zkagent-demo",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.8.0",
   "type": "module",
   "description": "M3 demo (§6.3): EU-Blueprint-shaped operator-run test verifier website around chiproof. Moved from spikes/m2-handoff (D73, git mv, history preserved).",
   "scripts": {

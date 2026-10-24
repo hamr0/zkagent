@@ -3,7 +3,21 @@
 All notable changes to zkagent are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.8.0] — 2026-10-24
+
+Lockstep release (D72): `packages/chiproof` and `apps/scanner` move 0.7.1 →
+0.8.0 together (`packages/chiproof/package.json` + lockfile, `apps/scanner`
+versionCode 6 → 7 / versionName "0.8.0"). Minor bump per D108(b): the project
+stays 0.x and there is no 1.0 ("v1" in the PRD means scope, not a version).
+`apps/demo` now tracks lockstep too (`package.json` + lockfile, 0.0.0 →
+0.8.0); it was previously unversioned. `packages/chiproof`'s own source is
+untouched apart from its npm package description (below) — it republishes
+under D72's one-version-across-the-repo rule.
+
+- **Docs (customer guide, D87 / finding #23).** New customer-guide §6.13
+  "Tapping a broken or truncated link": explains the non-blocking
+  "link looks broken" notice the scanner shows for a malformed `av://` link:
+  no popup, no Log-tab entry, no read attempted; device-confirmed 2026-10-24.
 
 - **Close-out polish (D108, 2026-10-24; FIX).** Finding #23 / D87 (malformed `av://` guard) is
   now closed with three recorded proofs: the pure `AvLinkRules` truth table (11 tests; scanner

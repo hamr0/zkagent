@@ -1,6 +1,6 @@
 {
   "name": "chiproof",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Verifier SDK for attested, windowed disclosure from ICAO 9303 chip documents. Part of the zkagent project. Exercised end to end against the project's reference scanner and demo on real hardware (a Pixel 6a, a US passport and an NL ID card); no external adopter, not independently audited. With no evidence plug configured it is captcha-grade, not identity-grade. The project is closed as a complete experiment (D108).",
   "type": "module",
   "main": "src/index.js",
