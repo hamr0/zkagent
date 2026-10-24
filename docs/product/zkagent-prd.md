@@ -2,12 +2,21 @@
 type: reference
 title: zkagent — PRD
 status: stable
-sources: [docs/archive/zkagent-prd.md]
+sources: [docs/archive/zkagent-prd.md, docs/wiki/decisions.md D108]
 ---
 
 # zkagent — PRD
 
-This page is the product specification of zkagent: the problem, what v1 is, the core invariant, the rung structure, goals/non-goals, requirements, and the NO-GO table. Milestones and build status live in `milestones.md`; owner decisions in `decisions.md`; open questions in `questions.md`; version history in `history.md` (same directory).
+> **Status (2026-10-24, D108): complete experiment. Closed cleanly, not abandoned.**
+> v1 — rung 1, milestones M0–M3 — is delivered; current release **v0.7.1** (chiproof 0.7.1 on npm,
+> scanner APK on GitHub Releases); the next release is 0.8.0 and the project stays on 0.x (no 1.0).
+> The owner may revive it, reuse parts, or reuse the whole. Parked and unbuilt work (M3b tier C,
+> S4, Play track, rung 2, Track Z, and others) is listed in [`../wiki/backlog.md`](../wiki/backlog.md);
+> the liftable components are in [`reuse-map.md`](reuse-map.md). Success criteria and evidence:
+> §15 Close-out. NO-GO #10 (the scope gate) applies to any revival. The owner's agent-delegation work
+> now lives in the individual Internet-Draft `draft-hamr-oauth-agent-delegation` (no IETF endorsement).
+
+This page is the product specification of zkagent: the problem, what v1 is, the core invariant, the rung structure, goals/non-goals, requirements, and the NO-GO table. Milestones and build status live in `milestones.md`; owner decisions in `decisions.md`; open questions in `questions.md`; parked work in `backlog.md`; version history in `history.md` (all in `docs/wiki/`).
 
 ## 1. Problem
 
@@ -52,12 +61,12 @@ Corollary (8een's recurring bug shape, found 7+ times there): never trust a heal
 
 ## 4. Rungs — what ships when, and what is deliberately not yet built
 
-Two rungs; only the first is v1. Rung 2 is real and decided but not being built — it stays in the source PRD so it is not re-invented.
+Two rungs; only the first is v1. Rung 2 is not being built and is not planned — it stays in the source PRD so it is not re-invented.
 
 | Rung | Contents | Milestones | Status |
 |---|---|---|---|
-| 1 — the core | Chip read, government-signature verification, mode A age bit, mode B zktag, attestation, verifier SDK, demo. Published as `chiproof`. | M0–M3 | **This is v1.** Nothing else is. |
-| 2 — the agent layer | Delegation certs, RFC 9421 request signing, per-serial revocation, blocklist + pseudonymous appeal. | M4–M5 | Decided, specified (FR5/FR8, Q8), not started; requires rung 1 shipped and at least one real adopter. |
+| 1 — the core | Chip read, government-signature verification, mode A age bit, mode B zktag, attestation, verifier SDK, demo. Published as `chiproof`. | M0–M3 | **This is v1. Delivered** (v0.7.1; see §15). Nothing else is v1. |
+| 2 — the agent layer | Delegation certs, RFC 9421 request signing, per-serial revocation, blocklist + pseudonymous appeal. | M4–M5 | **Backlog, not planned (D108).** Specified in outline (FR5/FR8, Q8), never designed or built here; gated on at least one real adopter, of which there is none. See `backlog.md`. |
 
 Rung 1 ships both modes together — the zktag is opt-in per presentation (D13), so it does not delay the age wedge. Track Z (parallel, gated by D23) covers ZK over the passport; no milestone until the gates hold. The core is borrowable: anyone, including a government, may embed `chiproof` in their own app — a one-sided sale that mitigates the two-sided-market problem (§14). Two hard prerequisites: the derivation must be a published spec (FR11), or two clients fork the identity space; and the verifier must decide which clients it accepts (FR10), or openness becomes forgeability. (zkagent-prd.md:816-830)
 
@@ -155,3 +164,30 @@ The dominant risk is not a break in the chain — it is that no one installs the
 - **Standing warning (NO-GO #10 lineage):** this document is the filter, not the collector — see `decisions.md` and `questions.md` for the current counts. M0 evidence status lives in `milestones.md`.
 
 (zkagent-prd.md:2214-2224)
+
+## 15. Close-out (D108, 2026-10-24)
+
+zkagent is closed as a complete experiment. This section is the filter's final word; detail lives in
+the wiki pages it points to.
+
+**What shipped.**
+- `chiproof` — the verifier SDK, on npm (`chiproof@0.7.1`, Apache-2.0, zero runtime dependencies), `packages/chiproof`.
+- The reference scanner — signed Android APK on GitHub Releases (`zkagent-scanner-0.7.1.apk`, with its sha256), `apps/scanner`.
+- The demo verifier — `apps/demo`, a local site acting as the requesting party, its own adopter of `chiproof`; run over USB with `adb reverse tcp:8787 tcp:8787` (D76).
+- What each tier does: tier A returns one yes/no bit and carries no signature by design (D27, D77); tier B adds a per-site tag and a phone-key signature that the site binds on first sight (D38). The honest limits are in `docs/product/customer-guide.md` §10 and the README.
+
+**Versioning.** Lockstep (D72): `packages/chiproof/package.json`, scanner `versionName`, one `CHANGELOG.md` section. The project stays on 0.x — the next release is 0.8.0, "no v 1.0" (D108(b)). "v1" in this PRD names a scope (rung 1), not a version number.
+
+**Success criteria (§13) against evidence.**
+
+| # | Criterion | Result | Evidence |
+|---|---|---|---|
+| S1 | M0 shows the same zktag twice from a real document, numbers measured | Met | `docs/logs/M0-EVIDENCE.md` Finding 3 (candidate tags byte-identical across two taps and two app processes; timing marks recorded). Caveat stated there: static signed data, so any correct read reproduces it; renewal stability untestable. |
+| S2 | M1b: mode-A presentations compared, a planted stable field proven to break the check | Met, as revised by D22/D26 (not as literally worded) | `docs/logs/M1B-EVIDENCE.md` §4–5 and (d): salted fields differ per presentation; the planted-field control is caught; one cross-site-stable bucket (`vk_sha256` circuit class) is disclosed, not hidden (D26). The word "byte-identical" in S2 no longer holds: D22 made the requirement "nothing stable across sites". For the bare tier-A presentation the shipped demo shows exactly `challenge.nonce`, `challenge.issued_at`, `challenge.expires_at` differing (D77; `docs/logs/M3-POC-EVIDENCE-2026-09-04.md`). |
+| S3 | A service integrates the verifier with zero PII handling and one documented dependency decision | Met | `apps/demo` is `chiproof`'s own adopter (`apps/demo/README.md`: tiers A/B carry no PII; `docs/logs/M3-POC-EVIDENCE-2026-09-04.md`). The integration dependency is `chiproof` itself; the demo also pulls `qrcode` (D68(b)) to render a page QR, which is not part of verification. |
+| S4 | The demo shows a mode-B ban that survives identity reset | Met in substance; there is NO explicit "ban" UI | Duplicate-zktag refusal ("Already registered at this site") survives a server restart on both real documents (`docs/logs/M3-EXIT-ROWS-v0.6.0-2026-09-05.md` §4; `docs/logs/M3-POC-EVIDENCE-2026-09-04.md`). The zktag is stable across app reinstall + re-scan (`docs/logs/M2-SCAN-EVIDENCE.md` TEST 1, both documents; re-run on the real build, NL, `docs/logs/M2-DEVICE-SESSION-2026-09-03-PM-EVIDENCE.md`). A fresh device key presenting an already-bound zktag is refused `attester_key_mismatch`, device-confirmed after a full uninstall/reinstall (`docs/logs/M3-POC-EVIDENCE-2026-09-04.md` Session 4). The demo has no operator blocklist or ban control, and "new IP / new bots" were not exercised. |
+| S5 | Every milestone has an evidence doc with deviations and retractions recorded | Met | M0 `M0-EVIDENCE.md`; M1 `M1-POC-EVIDENCE.md`, `M1-Q23-EVIDENCE.md`; M1b `M1B-EVIDENCE.md`; M2 `M2-SCAN-EVIDENCE.md`, `M2-DEVICE-EVIDENCE.md`, `M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` and its `-PM-` page; M3 `M3-POC-EVIDENCE-2026-09-04.md`, `M3-EXIT-ROWS-v0.6.0-2026-09-05.md`, `M3-SCANNER-S1-EVIDENCE-2026-09-05.md`, `M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md` (all under `docs/logs/`). |
+
+**Known limits, stated with the criteria.** Captcha-grade, not bank-grade (NO-GO #5). Chip-cloning is an accepted, disclosed limitation: "one human, one zktag" holds only where `chip_auth` is true (FR11, D29). Tier A is unsigned by design; the tier-B key comes from no configured trust source and is bound on first sight (D38, D78). v1 is not zero-knowledge (NO-GO #7). The reference scanner ships with no device-attestation plug (D27), so client identity is only the attester key (S4 in `backlog.md`).
+
+**Not delivered.** Everything in `backlog.md`: M3b/tier C (designed, never approved), §6.5 S4, the Play track, rung 2 (M4/M5), Track Z, the demo's own operator config, multi-threshold origins.

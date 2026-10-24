@@ -24,10 +24,10 @@ next integrates. (zkagent-prd.md:855-865)
 | **M1** — Verifier SDK core | `chiproof` verifier core: never-throw verdict; challenge nonce + signed challenges; tier negotiation; FR10 trust list; evidence slot with bare mode, `zk-passport/1`, `signed-receipt/1` plugs; masterlist stays on the phone. Spec: `docs/product/m1-verifier-core-spec.md` (zkagent-prd.md:856) | Full negative matrix (replay, expired/unsigned tier-C challenge, tier mismatch, untrusted client, missing/misbound evidence, plug-throws ⇒ `ok:false`) each paired with a non-vacuity pass; zero runtime deps; zk plug verifies real proofs and rejects planted negatives (zkagent-prd.md:856) | Done |
 | **M1b** — Mode-A unlinkability probe | Black-box byte comparison of N mode-A presentations, same device/holder/service, including a planted positive control (zkagent-prd.md:857) | No field differs across presentations except those proven independent of holder/device; a planted stable field must fail the check. Blocks M3. Answers a linkability question. Evidence: `docs/logs/M1B-EVIDENCE.md` (zkagent-prd.md:857) | Ran 2026-08-30; passes with one disclosed leak bucket; block on M3 lifted (zkagent-prd.md:857) |
 | **M2** — Scanner app (rewrite, not graduate) | Real app: Keystore/StrongBox, biometric gate, QR/app-link handoff; ships BARE (`evidence: []`) as its fixed evidence set — no on-device ZK prover; `zk-passport/1` stays verifier-side; mode-B roundtrip exercises the attester-key evidence plug end to end against the M1 core. Opens with a riskiest-assumption POC: capture real-world age-verification request flows, build a test verifier to the observed shape, and run the web→app→web handoff over the mechanism the captures show is real (zkagent-prd.md:858) | End-to-end on real device against local verifier; zktag stability across reinstall+re-scan; mode A emits no zktag even after a mode-B presentation. Half-loaded masterlist ⇒ read refused (`ok:false`), never a pass. Two-bucket rule for the masterlist checkpoint (integrity failure ⇒ `ok:false`; well-formed list lacking the issuing CSCA ⇒ `ok:true, allowed:false`). Build scope for the rewrite itself: §6.2 below (zkagent-prd.md:858) | **Closed/complete, 2026-09-03, v0.5.0.** §6.2 items 1–25 all built and device-confirmed (item 19 WITHDRAWN by D71a, number reserved); findings #18–#21 closed; every row in the Exit criteria table below is device-confirmed or FIXED-IN-<sha> device-confirmed. D66–D71 recorded. First release under D72's lockstep versioning rule. |
-| **M3** — Demo (tier A/B only, vanilla) | Web page: "prove you're over 18" (tier A) and "prove you're a unique adult human" (tier B); responsive (mandatory); no tier C (zkagent-prd.md:859) | Live flow. Tier B: second scan from same document rejected as duplicate zktag. Tier A: two presentations indistinguishable. Demo site is its own adopter with its own store — the SDK still stores nothing (zkagent-prd.md:859) | COMPLETE — released as v0.6.0 (2026-09-05), exit rows all confirmed on that build (see docs/logs/M3-EXIT-ROWS-v0.6.0-2026-09-05.md); owner signed off 2026-09-05. M3b remains open; §6.6 Play track PARKED (D83). |
-| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), pinned-issuer gated (D20); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points and §6.9's draft | **Scope DRAFTED (fix pass 2026-09-28), awaiting owner approval** — all §6.4 decision points (D89–D106) plus D107's follow-on rulings are now ruled; a candidate build-scope section (§6.9) has been drafted and revised from them but is explicitly NOT owner-approved; scope gate (NO-GO #10) still not satisfied until the owner approves §6.9 (in whole or amended) — nothing may be built until then; Q34 CLOSED (D90/D91, 2026-09-07); Q11 CLOSED by D74 (for mode B; Q11's tier-C residual tracked as §6.4 item 4 / §6.9 item 17(e), still open); Q49 CLOSED (D89/D94); scanner follow-ups §6.5 (S1–S3) precede it |
-| **M4** — Agent layer (rung 2) | Delegation certs, RFC 9421 middleware (FR8), per-serial revocation, phone→agent cert handoff (zkagent-prd.md:860) | Agent request accepted with valid chain; killed by zktag-block; single-use serial burns once; signature verifies against an off-the-shelf RFC 9421 verifier with no zkagent patches; cert reaches a headless agent host with no zkagent-run server in the path (zkagent-prd.md:860) | Frozen until rung 1 ships |
-| **M5** — Blocklist/appeal (rung 2) | Signed blocklist format, adopter store interface, prove-control-of-zktag appeal (zkagent-prd.md:861) | Store pattern fails closed, never silently falls back to in-memory (zkagent-prd.md:861) | Frozen until rung 1 ships |
+| **M3** — Demo (tier A/B only, vanilla) | Web page: "prove you're over 18" (tier A) and "prove you're a unique adult human" (tier B); responsive (mandatory); no tier C (zkagent-prd.md:859) | Live flow. Tier B: second scan from same document rejected as duplicate zktag. Tier A: two presentations indistinguishable. Demo site is its own adopter with its own store — the SDK still stores nothing (zkagent-prd.md:859) | COMPLETE — released as v0.6.0 (2026-09-05), exit rows all confirmed on that build (see docs/logs/M3-EXIT-ROWS-v0.6.0-2026-09-05.md); owner signed off 2026-09-05. M3b PARKED (D108); §6.6 Play track PARKED (D83). |
+| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), pinned-issuer gated (D20); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points and §6.9's complete (parked) design | **PARKED (D108, 2026-10-24) — see `backlog.md`.** All §6.4 decision points (D89–D106) and D107's follow-on rulings are ruled and §6.9 is a complete candidate design, but it was never owner-approved and is not scheduled. NO-GO #10 still applies if revived: the owner must approve §6.9 (in whole or amended) before anything is built. Q34 CLOSED; Q11's tier-C residual stays open. Nothing of M3b is built.
+| **M4** — Agent layer (rung 2) | Delegation certs, RFC 9421 middleware (FR8), per-serial revocation, phone→agent cert handoff (zkagent-prd.md:860) | Agent request accepted with valid chain; killed by zktag-block; single-use serial burns once; signature verifies against an off-the-shelf RFC 9421 verifier with no zkagent patches; cert reaches a headless agent host with no zkagent-run server in the path (zkagent-prd.md:860) | **Backlog, not planned (D108).** Not designed here; the owner's agent-delegation work now lives in the IETF individual Internet-Draft `draft-hamr-oauth-agent-delegation` (see `backlog.md`). Previously "Frozen until rung 1 ships"; rung 1 has shipped (v0.7.1) but nothing is scheduled.
+| **M5** — Blocklist/appeal (rung 2) | Signed blocklist format, adopter store interface, prove-control-of-zktag appeal (zkagent-prd.md:861) | Store pattern fails closed, never silently falls back to in-memory (zkagent-prd.md:861) | **Backlog, not planned (D108).** Same as M4.
 
 ## 6.1 M0 go/no-go table
 
@@ -238,13 +238,13 @@ Play Store listing: NOT an M3 item — see §6.6 (owner, 2026-09-03).
 
 Not a build scope list — a list of what must be decided before any M3b item can be written into
 this PRD (NO-GO #10 applies to M3b exactly as it does to M3). M3b is rung 1 (disclosure, not
-delegation) — it does not touch the frozen rung-2 agent layer.
+delegation) — it does not touch the rung-2 agent layer (backlog, D108).
 
-**Status (2026-09-28, revised 2026-09-28 fix pass): all items below are now ruled (D89–D106),
-with D107 recording a further round of owner rulings on points the first §6.9 draft raised. A
-candidate build-scope section drafted and revised from these rulings lives at §6.9 — scope
-DRAFTED, awaiting owner approval, NOT yet
-satisfying NO-GO #10's scope gate.**
+**Status (2026-10-24, D108): PARKED.** All items below were ruled (D89–D106), with D107 recording
+a further round of owner rulings on points the first §6.9 draft raised. A complete candidate
+build-scope design lives at §6.9. It was never owner-approved and is not scheduled; NO-GO #10's
+scope gate is NOT satisfied and, if M3b is revived, the owner must approve §6.9 (in whole or
+amended) before anything is built. See `backlog.md`.
 
 Must be decided before M3b is scoped:
 
@@ -394,6 +394,8 @@ Scanner-side (`apps/scanner`) items resolved same-day as §6.3's DP4 and by sepa
 feedback. None of these are M3 scope (§6.3 item 13 — M3 runs against the released scanner APK
 as-is); all are scope-gated (NO-GO #10) into the PRD here so they may be built ahead of or
 alongside M3b without a further gate check.
+
+**Status at close (D108, 2026-10-24):** S1, S2 and S3 are built and device-confirmed (shipped in v0.6.0; evidence `docs/logs/M3-SCANNER-S1-EVIDENCE-2026-09-05.md`, `docs/logs/M3-SCANNER-S2-S3-EVIDENCE-2026-09-05.md`). S4 is NOT built and is parked in `backlog.md`.
 
 1. **S1 (ENHANCEMENT, D74) — preset threshold list, per-origin lock, named exceptions.** The app
    MUST carry a fixed, published preset threshold list — `{15, 16, 18, 21, 60, 65}` — living in
@@ -565,6 +567,8 @@ alongside M3b without a further gate check.
    Until an attestation plug exists, M3's client identity is the attester key bound on first sight
    (D38/D39) — a per-device, per-site identity, weaker than FR10's per-app one; this is M3's
    disclosed limit, not a defect to silently work around.
+
+   **Status (D108): NOT BUILT — backlog.** It is gated on the first attestation plug, which was never built (the reference app ships bare, D27). Until then the client-identity limit above stands, disclosed. See `backlog.md`.
 
 Play Store listing: see §6.6.
 
@@ -881,10 +885,12 @@ used by a third party), fold this into
 LIBRARY_CONVENTIONS as a new section for app packages — a hamr0-repo change, not zkagent's; noted
 here only, not actioned.
 
-## 6.9 M3b scope (DRAFT — NOT OWNER-APPROVED)
+## 6.9 M3b scope (PARKED — design complete, never owner-approved)
 
-> **DRAFT — NOT OWNER-APPROVED — NO-GO #10's scope gate is NOT satisfied; nothing here may be
-> built until the owner approves this section.**
+> **PARKED (D108, 2026-10-24) — design complete, never owner-approved, not scheduled. NO-GO #10's
+> scope gate is NOT satisfied and still applies if M3b is revived: nothing here may be built until
+> the owner approves this section (in whole or amended).** Nothing in this section is built. The
+> content below is kept intact as a ready-to-revive design; see `backlog.md`.
 
 Written 2026-09-28 now that every §6.4 decision point (D89–D106), plus a further round of owner
 rulings on the items the first draft still left to the owner (D107), is ruled. This section drafts
@@ -892,12 +898,12 @@ what those rulings imply for a buildable M3b scope, in §6.2/§6.3's numbered MU
 format, so the owner has a single section to approve or amend rather than reconstructing scope
 from nineteen decisions by hand. Until the owner approves it (in whole or amended), §6.4 remains
 the decision record and this section has no force — it is a proposal, not a scope list.
-**Revised 2026-09-28 (fix pass, still DRAFT):** corrects eight internal item-numbering errors, two
+**Revised 2026-09-28 (fix pass):** corrects eight internal item-numbering errors, two
 items misdescribing `chiproof`'s role, and adds D107's five rulings (consent-list UI, the
 membership-statement signing tool, per-site lock visibility, the per-origin store's uncapped
 storage requirement, and the one-phone-per-person assumption) — see §6.9.3's traceability table
-and the CHANGELOG entry for the fix pass's full change list. This revision does NOT change the
-section's approval status: it is still DRAFT, NOT OWNER-APPROVED.
+and the CHANGELOG entry for the fix pass's full change list. That revision did not grant approval,
+and neither did the 2026-10-24 close-out (D108), which only parked the section.
 
 Components referenced below: **scanner** (`apps/scanner`), **chiproof**
 (`packages/chiproof`), **demo** (`apps/demo`), **operator.json** (`apps/scanner/operator.json`,
