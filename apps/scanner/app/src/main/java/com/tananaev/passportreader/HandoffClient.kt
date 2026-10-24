@@ -41,16 +41,20 @@ object HandoffClient {
      * app-link using the same query shape) Uri into a [PendingHandoff], or
      * null if it isn't one. */
     fun parseAvLink(uri: Uri): PendingHandoff? {
-        if (uri.scheme != "av" && !(uri.scheme == "https")) return null
-        if (uri.scheme == "av" && uri.host != "authorize") return null
-        val requestUri = uri.getQueryParameter("request_uri") ?: run {
-            // 2026-09-01 bug: an `adb shell am start` with an unquoted `&`
-            // truncated the intent's query string before this ever ran, and
-            // the app said nothing — this line is the fix for that silence.
-            Log.i(TAG, "parseAvLink: dropped — intent uri has no (or a malformed) request_uri query param: $uri")
-            return null
+        // The accept/reject rules are the pure [AvLinkRules.decide] (finding
+        // #23's unit-testable core); Uri parsing stays here, passed lazily.
+        return when (val d = AvLinkRules.decide(uri.scheme, { uri.host }, { uri.getQueryParameter(it) })) {
+            is AvLinkRules.Decision.Accepted -> PendingHandoff(clientId = d.clientId, requestUri = d.requestUri)
+            is AvLinkRules.Decision.Malformed -> {
+                if (d.reason == AvLinkRules.Reason.MISSING_REQUEST_URI) {
+                    // 2026-09-01 bug: an `adb shell am start` with an unquoted `&`
+                    // truncated the intent's query string before this ever ran, and
+                    // the app said nothing — this line is the fix for that silence.
+                    Log.i(TAG, "parseAvLink: dropped — intent uri has no (or a malformed) request_uri query param: $uri")
+                }
+                null
+            }
         }
-        return PendingHandoff(clientId = uri.getQueryParameter("client_id"), requestUri = requestUri)
     }
 
     /** Accepts a raw pasted/scanned string that is either a full av:// link
