@@ -70,6 +70,7 @@ JUnit XML, not from a device run.
   survive), tab state verified programmatically via a filtered `uiautomator dump` (not a screenshot —
   the scan form renders real MRZ fields, unsafe to snapshot) rather than by eye. See
   `docs/logs/M2-D58-STEP2-EVIDENCE.md`.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** Fixed in `0d4daf7` (D58 step 2), device-confirmed; see the 2026-09-02 update above.
 
 ### 2026-09-02 — #2/#3: `verifiedRequest`/`pendingHandoff` — three writers, cross-thread reads, non-volatile
 
@@ -124,6 +125,7 @@ JUnit XML, not from a device run.
   device narrative; this run exercises the guard/refusal path primarily, not a targeted #2/#3
   cross-thread-corruption repro, so treat it as corroborating rather than dispositive for this
   specific finding). See `docs/logs/M2-D58-STEP3-EVIDENCE.md`.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** Closed by construction in `65096b9` (D58 step 3). Device evidence is corroborating, not a targeted repro, as the update above states.
 
 ### 2026-09-02 — #4: 11 of 16 app fields lost on rotation; only two persist
 
@@ -162,6 +164,7 @@ JUnit XML, not from a device run.
   apply to non-rotation recreation (font-scale change, locale change, low-memory process death).
   The `lastMrzHash` diagnostic mislabel and the other ten lost fields remain OPEN, carried forward
   to the next module's `SessionState` design item, not fixed by D63.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — PARTIALLY FIXED; remainder KNOWN-LIMITATION.** The rotation vector is closed (D63, portrait lock). The `lastMrzHash` diagnostic mislabel and the other ten lost fields after a NON-rotation recreation (font scale, locale, process death) were never fixed: a logcat mislabel and form-state loss only, no gating effect (see the 2026-09-02 trace above). Listed in `docs/wiki/backlog.md`.
 
 ### 2026-09-02 — #5: zero async-cancellation discipline
 
@@ -270,6 +273,7 @@ JUnit XML, not from a device run.
   as the criterion for new sites. `fix-ledger` is now cleared (0 bullets). This is a doc-drift fix
   only, not new coverage — the `72e0b2c` BiometricPrompt fence guard itself remains without device
   evidence, unchanged this session (no device attached).
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** The unfenced async landings are fenced (13 sites, `72e0b2c` corrected the first 11); the BiometricPrompt fence was device-confirmed by the #16 repro (see #16). Later sites that are not main-thread landings of the hazard class were swept with no further gap, as the update above records.
 
 ### 2026-09-02 — #6: `handleIncomingIntent` tag guard ignores `readInProgress`
 
@@ -329,6 +333,7 @@ JUnit XML, not from a device run.
   defence-in-depth against a state this platform already prevents, not a device-provable path. The
   fix itself (`c60354e`) is unaffected and remains FIXED — this update is scoped to residual (b)'s
   device-coverage claim only.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED (FIXED-IN-`c60354e`).** The mid-read path is proven by the unit truth table and the wiring trace only; the platform prevents the state on device (see the last update above).
 
 ### 2026-09-02 — #7: `reportView.text` written outside `emitReport`, contradicting its own KDoc
 
@@ -350,6 +355,7 @@ JUnit XML, not from a device run.
   (auto-rotate is off on this device; recreation forced via `adb shell settings put system
   font_scale 1.15`/`1.0` with the app foregrounded), all three prior scan entries intact. See
   `docs/logs/M2-D58-STEP1-EVIDENCE.md`.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** Fixed in D58 step 1, device-confirmed (`docs/logs/M2-D58-STEP1-EVIDENCE.md`).
 
 ### 2026-09-02 — #8: chip-auth three-state logic has no unit test; DG14 handling inline
 
@@ -383,6 +389,7 @@ JUnit XML, not from a device run.
   JMRTD I/O stays inline in `M0Probe`; detail strings byte-identical to before. 5 new hand-written
   tests added TDD-style (compile-error red confirmed first, then green). Tests 208 → 213, 0 failures.
   No device evidence for this change; none was available this session.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED (FIXED-IN-`651ecd5`+`840779c`).** Unit-tested; no device evidence for this change.
 
 ### 2026-09-02 — #9: `lockButton.isEnabled` — four writers, nothing reads it; joins the session and handoff clusters
 
@@ -410,6 +417,7 @@ JUnit XML, not from a device run.
   tests 168→180 (JUnit XML, 0 failures), new `SessionDisplayTest` (12 tests) covers all six legal
   locked×handoff-state projections including two "locked wins" cases. See
   `docs/logs/M2-D58-STEP4-EVIDENCE.md`.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** Closed by construction by `SessionDisplay` in D58 step 4 (`docs/logs/M2-D58-STEP4-EVIDENCE.md`).
 
 ### 2026-09-02 — owner UX observations from the device run (deferred under freeze, PRD Q38/Q39/Q40)
 
@@ -432,6 +440,7 @@ JUnit XML, not from a device run.
   WONTFIX-D55 (owner considered and rejected it); the incoming-handoff-switch half and (i) and (iii)
   remain OPEN, tracked as PRD Q38/Q39/Q40 respectively, blocked by D57 until the ownership
   refactor's exit criterion is met.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED (all three parts resolved against the D-codes that ruled on them).** (i) log lifetime: PRD Q38, ruled D64 (accept and disclose the in-flight-mint loss) and D70(b) (the value-free log persists across restart under the D59 cap), device-confirmed 2026-09-03 PM. (ii) tab switching: the auto-switch-on-read-completion half is WONTFIX-D55; the incoming-handoff switch half is PRD Q39, approved D67, device-confirmed 2026-09-03 PM. (iii) the Lock-button copy: PRD Q40, 'Tap and scan' shipped and owner-signed-off 2026-09-03; the underlying four-writer state was closed under #9.
 
 ### 2026-09-02 — #10: `av://` intent hijack mid-session — no lock/read-in-progress guard, unauthenticated origin binds real biometric+chip read to attacker's site
 
@@ -551,6 +560,7 @@ JUnit XML, not from a device run.
   attester=matched`; `127.0.0.1:18787` (the hostile origin) shows both its transactions still
   `pending`, never receiving evidence. **Finding #10 is now device-proven against a genuinely
   foreign origin, with no remaining open item under this entry.**
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** Closed by construction (D61) and device-proven against a genuinely foreign origin (2026-09-03 device session), as the updates above record.
 
 ### 2026-09-02 — #11: biometric prompt shows no origin/site/tier — consent defect, independent of and surviving #10's mitigations
 
@@ -619,6 +629,7 @@ JUnit XML, not from a device run.
 - Status update 2026-09-03: n/a — the 2026-09-03 device session
   (`docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md`) did not re-examine the prompt's content; D62
   already closed this entry by owner eye-confirmation and nothing this session touches it.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** D62 (site-named biometric prompt, owner-confirmed on device).
 
 ### 2026-09-02 — #12: reused `showBlockingOutcomeDialog` for the #10 refusal path would have let a refused foreign intent wipe the legitimate locked session — CLOSED-BY-CONSTRUCTION before commit
 
@@ -638,6 +649,7 @@ JUnit XML, not from a device run.
   **CALL**, not only those it tells it to change.
 - **Status**: CLOSED-BY-CONSTRUCTION in `730ef09`. **Rule**: no refusal/ignore path may use
   `showBlockingOutcomeDialog`; that dialog's contract is terminal-outcome-with-state-transition.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED (CLOSED-BY-CONSTRUCTION in `730ef09`).** The rule stands: no refusal path may use `showBlockingOutcomeDialog`.
 
 ### 2026-09-02 — #13: unbounded `ReportLog.entries` growth — the #10 refusal path is the first externally-triggerable APPEND, `TransactionTooLargeException` reachable via looped `av://` intents
 
@@ -673,6 +685,7 @@ JUnit XML, not from a device run.
   unchanged. That constant change landed in commit `ff15629` (`ReportLog.MAX_ENTRIES = 200 → 20`),
   replacing the PROVISIONAL 200 from `c856f42`. Both bound tests already referenced `MAX_ENTRIES`
   symbolically rather than by literal, so they scaled to the new value untouched — 168/0/0, unchanged.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED (FIXED).** `ReportLog.MAX_ENTRIES = 20` (D59, `ff15629`).
 
 ### 2026-09-02 — #14: `handoffStatus.text` — stale "verified/waiting" status survives a consumed or wiped session, misled the owner into two unintended mode-A scans
 
@@ -718,6 +731,7 @@ JUnit XML, not from a device run.
   (the owner was on the Log tab, where that view does not render, during the confirming runs) — this
   finding is confirmed at the log/behaviour level, not re-verified by eye on screen. See
   `docs/logs/M2-D58-STEP4-EVIDENCE.md`.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** Closed by construction (`c38833d`, D58 step 4); confirmed at the log/behaviour level, not by eye, as the update above states.
 
 ### 2026-09-02 — #15: `applyPendingHandoffText` (QR-scan/manual-paste handoff path) has NO `HandoffAdmission` gate at all — only the `av://` intent path is guarded
 
@@ -759,6 +773,7 @@ JUnit XML, not from a device run.
   this step used only the `av://` path, same as step 3); the underlying `HandoffAdmission` guard itself
   remains KEPT-by-recommendation per #10/#11's own status updates for this commit, and this path now
   shares that same status rather than having none. See `docs/logs/M2-D58-STEP4-EVIDENCE.md`.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** Fixed in D58 step 4 (the handoff text path now has the same admission gate). The QR-capture half of that path was removed by D69; the manual-paste path was not exercised on device in that step.
 
 ### 2026-09-02 — #16: mint-report loss after Activity destruction (evidence left the device, nothing recorded or shown)
 
@@ -806,6 +821,7 @@ JUnit XML, not from a device run.
   (`72e0b2c`, finding #5)'s own outstanding verification debt: `M2-FENCE-EVIDENCE.md` stated that fix
   was "code-verified and bytecode-verified only... NO device evidence" — it now has direct device
   confirmation.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** D64 (Option A, accept and disclose), reproduced live on device.
 
 ### 2026-09-02 — #17: Q47 focus-steal — investigated, not fixed; root cause not isolable from source, needs device repro
 
@@ -849,6 +865,7 @@ JUnit XML, not from a device run.
   `clearFocus()`-plus-hide-keyboard fix (`0b71957`) is device-confirmed by owner eye: "cursor
   fixed," after tapping OK on the `DatePickerDialog` for both date fields. No log line exists for
   this by design. See `docs/wiki/questions.md` Q47 (now FIXED, device-confirmed).
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** Device-confirmed fix `0b71957` (2026-09-03), see the update above.
 
 ### 2026-09-03 — #18: "Scan QR" thumbnail capture does not decode a laptop-screen `av://` link; three unlogged Snackbars on that path (FIXED, both halves)
 
@@ -899,6 +916,7 @@ JUnit XML, not from a device run.
   (origin `http://127.0.0.1:8788`, `signature_verified=true`) — see
   `docs/logs/M2-DEVICE-SESSION-2026-09-03-EVIDENCE.md` check 7. See milestones.md §6.2 item 8/11
   amendment and decisions.md D69.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** Logging half FIXED; decode half closed by D69 (the in-app QR scanner was removed; the camera app is the route, device-proven).
 
 ### 2026-09-03 — #19: two live `RegularActivity` instances across two tasks; unlocked `TECH_DISCOVERED` starts blocked by BAL hardening, not by app logic (FIXED-IN-039fee7, device re-check pending)
 
@@ -944,6 +962,7 @@ JUnit XML, not from a device run.
   `M2-SCAN-EVIDENCE.md` checkpoints is in progress: one mode-B mint completed on the real build
   (12:54, against the 8787 spike, US passport); reinstall, negatives, and mode-A steps are still
   pending.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED (FIXED-IN-`039fee7`, device-confirmed).** The header's 'device re-check pending' is superseded by the 2026-09-03 device-session update above.
 
 ### 2026-09-03 — #20: `lockModeAndArm`'s two early-exit guards (incomplete MRZ fields; handoff still verifying) had no matching `Log` call — a real "Verify" tap looked like nothing happened
 
@@ -985,6 +1004,7 @@ JUnit XML, not from a device run.
   incomplete (doc_present=false dob_present=false exp_present=false)` fired on a real
   incomplete-field tap on build `7f25f40`, closing the fix's only remaining residual (no prior
   device evidence of the guard's dialog/log actually firing).
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED (FIXED-IN-`8c063ec`, device-confirmed).
 
 ### 2026-09-03 — #21: mode A never delivers a presentation — item 9's "ships bare" MUST unmet, item 15's modal missing for that outcome (consequence HIGH)
 
@@ -1033,6 +1053,7 @@ JUnit XML, not from a device run.
   matching item 9's bare-mode requirement. This is the actual compiled Kotlin running on real
   hardware, not the JVM-side hand-mirrored proof this entry's prior update flagged as unverified
   against the real bytecode.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED (FIXED-IN-`40737a2`, device-confirmed).
 
 ### 2026-09-05 — #22: hardcoded `report += "\nverdict: PASS (...)"` line ignored `deliveryResult` for EVERY outcome, not only the non-2xx case this session fixed
 
@@ -1121,6 +1142,7 @@ JUnit XML, not from a device run.
   errors / 0 skipped, up from 383 by the 15 new cases this session's three fixes added combined (not
   isolated per-fix in this count). Status stays CLOSED — this is the wording note's own resolution,
   not a new finding.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED.** The wording note in the entry is its own resolution.
 
 ### 2026-09-06 — #23: a malformed `av://` VIEW intent (missing `request_uri`) launches the app with no log line and no user-facing notice
 
@@ -1175,6 +1197,7 @@ JUnit XML, not from a device run.
 - **Status**: OPEN (test-procedure note, not a code fix candidate) — recorded so a future device
   round doesn't misread a stale-task replay as a new result. `force-stop` before every scripted
   `am start` is the mitigation, already applied for the rest of this session's own device runs.
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED as a test-procedure note (the record stays).** It was never an app defect: `force-stop` before every scripted `am start` avoids the stale-recents replay. The header's 'OPEN' status is superseded.
 
 ### 2026-09-07 — #25: `DroppedOutcomeRelay` orphaned-stash residual — accepted as documented risk, D85
 
@@ -1202,3 +1225,4 @@ JUnit XML, not from a device run.
   device-confirmed behavior — do not describe it as verified.
 - **Status**: CLOSED-BY-OWNER-ACCEPTANCE (D85). Not a defect to fix; a documented, bounded residual
   risk. Fix-ledger bullet for this item removed 2026-09-07 (this entry is now the durable record).
+- Status update 2026-10-24 (D108 close-out triage, docs only, no code touched): **FINAL STATUS — CLOSED (CLOSED-BY-OWNER-ACCEPTANCE, D85).
