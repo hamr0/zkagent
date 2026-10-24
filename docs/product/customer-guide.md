@@ -203,6 +203,16 @@ Both readings are correct at once, and neither is a bug: the app's dialog report
 Device-confirmed 2026-09-03: this route worked twice via the stock Pixel Camera app scanning a
 verifier-rendered QR image.
 
+### 6.13 Tapping a broken or truncated link
+
+| Step | You do | Page shows | App shows | Verifier logs |
+|---|---|---|---|---|
+| 1 | Open an `av://` link that is cut off or malformed (for example, missing its `request_uri`) | That transaction never gets a result | The app opens (or comes to the front) with a short, non-blocking notice: "That link looks broken — nothing was scanned." No popup, no entry in the app's Log tab, no read attempted; nothing about any session already in progress changes | Nothing — the link never reached the verifier |
+
+Device-confirmed 2026-10-24 (finding #23 / D87, Pixel 6a): the notice appeared both when the app was
+cold-started by the link and when it was already open. A link with the wrong host never reaches the
+app at all (the manifest filter only accepts host `authorize`).
+
 ## 7. Operator's choice of attestation
 
 What "attestation" means here, and how much of it an operator can change:
