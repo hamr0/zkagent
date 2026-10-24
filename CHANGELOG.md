@@ -287,6 +287,26 @@ under D72's one-version-across-the-repo rule.
   open; `milestones.md` §6.4 item 5's "Still OPEN" line split into a
   DECIDED ceiling paragraph and an OPEN floor paragraph — see
   `docs/wiki/decisions.md` D105.
+- **Release evidence (§6.8 row 6).** Tag `v0.8.0` (the tag this section ships
+  under; created on `main` after the FF merge); signed
+  `apps/scanner/app/build/outputs/apk/regular/release/app-regular-release.apk`,
+  20,864,025 bytes, sha256
+  `b60b86b076ebc1575a7c817361bb128d87c4bc68a25481cc2aa46d9ac83d3d36`;
+  `apksigner verify --print-certs` (build-tools 36.1.0) exit 0, signer #1
+  `CN=zkagent showcase`, certificate SHA-256 digest
+  `1f6bceae0ffe9c2b326f2aab2202f0bdf3df7e5bdd8fac50aba2e1d318407264` (matches
+  the showcase keystore, customer-guide §7.1 and
+  `M3-KEYSTORE-EVIDENCE-2026-09-06.md`); `aapt2 dump badging` confirms
+  `com.zkagent.scanner` versionName `0.8.0` / versionCode `7`, compileSdk 36;
+  manifest `allowBackup="false"` with `networkSecurityConfig` set, and the
+  `/branch-review` aapt2 check found `cleartextTrafficPermitted="false"` with
+  no `domain-config`. Built with JDK 21 (`jdk-21.0.12.1+1`) because this box
+  has no JDK 17; earlier signed builds used Gradle's JDK 17. Tests at the
+  release commit, all exit 0: scanner `:app:testRegularDebugUnitTest`
+  495/0/0/0 (JUnit XML parsed); `packages/chiproof` 191 pass + `tsc --noEmit`
+  clean; `apps/demo` 41 pass; `operator-json-negative.sh` 16 PASS (at
+  review). Lockstep (D72): chiproof, the demo `package.json` files and
+  lockfiles, and the scanner all at 0.8.0, versionCode 7.
 
 ## [0.7.1] — 2026-09-07
 
