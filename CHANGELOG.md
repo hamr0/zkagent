@@ -5,6 +5,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: 
 
 ## [Unreleased]
 
+- **Docs: close-out (D108, 2026-10-24; docs only, no code touched).** The owner closed zkagent as
+  a complete experiment, to stay in clean, inspectable, usable standing (it is cited by the
+  owner's individual Internet-Draft `draft-hamr-oauth-agent-delegation`, which has no IETF
+  endorsement). D108 records five rulings: (a) the finish is docs close-out, D87 proof,
+  `/branch-review`, `/release`, final stash; (b) versioning stays 0.x, the next release is 0.8.0,
+  no 1.0 (lockstep, D72); (c) the README says what was built; (d) the NGI Zero grant draft is
+  dropped; (e) a one-page reuse map is approved. Changes: new `docs/wiki/backlog.md` (every parked
+  or unbuilt item with its reason, plus how to revive); new `docs/product/reuse-map.md`; PRD gets
+  a status block and a §15 Close-out with the success criteria checked against the evidence docs
+  (S2's "byte-identical" wording noted as revised by D22; S4 met in substance, with no explicit
+  ban UI); `milestones.md` §6.9 (M3b) reclassified from DRAFT to PARKED and M4/M5 to backlog, not
+  planned; every question Q1-Q52 and every findings entry except #23 given a final status;
+  README rewritten with the tier facts as built (tier A unsigned, tier B signed with a phone key
+  and bound on first sight, passive authentication only, not zero-knowledge, clone and
+  trust-source gaps); customer guide §10/§13 and stale status lines, the scanner, demo and
+  chiproof READMEs, and `chiproof.context.md` (which ships on npm: `sig-p256/1` is a co-equal
+  alternative per D31, not a pending candidate) corrected. `docs/wiki/ngi-zero-application-draft.md`
+  deleted (git history keeps it); D88 and the two history rows that cite it keep their text with a
+  note that the file is gone. Verified this session: `chiproof` 191/191 tests and `apps/demo`
+  41/41 tests pass (`node --test`); the scanner suite was not re-run. Finding #23 and the D87
+  proof are left to the next step.
+
 - **Docs (D107; §6.9 M3b draft fix pass, STILL NOT owner-approved).** Orchestrator review of the
   §6.9 M3b draft (commit `ab6bcf8`) found internal item-numbering off-by-one errors in about eight
   places and two items misdescribing `chiproof`'s role; the owner then ruled on five remaining
