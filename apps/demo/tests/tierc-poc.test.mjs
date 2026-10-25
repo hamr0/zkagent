@@ -346,3 +346,17 @@ test('the CLI helper builds the five kinds from flags and --ttl reaches the veri
   // a lone --given-names without --surname is a usage error, not a half request
   await assert.rejects(promisify(execFile)(process.execPath, [script, '--tier', 'C', '--host', u.hostname, '--port', u.port, '--given-names', 'x']));
 });
+
+test('POC raw-predicates hook: ignored unless TIERC_POC_ALLOW_RAW=1, and then signed exactly as given', async () => {
+  const offList = [{ name: 'expiry_beyond', months: 6 }, { name: 'dob_at_least', age: 19 }];
+  // off: rawPredicates is ignored, the (absent) validated predicates fall back to the default, and the off-list one is NOT signed
+  const off = await (await create({ mode: 'C', rawPredicates: offList })).json();
+  assert.deepEqual((await requestObject(off)).zkagent.predicates, [{ name: 'expiry_beyond', months: 3 }]);
+  // the validated path still refuses the same list when it is sent as `predicates`
+  assert.equal((await create({ mode: 'C', predicates: offList })).status, 400);
+  process.env.TIERC_POC_ALLOW_RAW = '1';
+  try {
+    const on = await (await create({ mode: 'C', rawPredicates: offList })).json();
+    assert.deepEqual((await requestObject(on)).zkagent.predicates, offList);
+  } finally { delete process.env.TIERC_POC_ALLOW_RAW; }
+});

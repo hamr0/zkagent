@@ -22,6 +22,8 @@
 // With none of them a tier-C request asks --months 3. The name, number and codes are signed into the request for the
 // app and are NEVER printed by this script or logged by the verifier. Pass them as environment variables
 // (TIERC_GIVEN_NAMES, TIERC_SURNAME, TIERC_DOC_NUMBER) to keep them out of the process list and shell history.
+// --raw '<json array>'      send these predicates UNVALIDATED (the verifier must run with TIERC_POC_ALLOW_RAW=1); this is
+//                            how the app's whole-request refusal of an off-list boundary is device-checked.
 // --ttl SECONDS sets the request lifetime (default 120, the verifier clamps at 600) for human-paced device checks.
 //
 // Prints transaction ids, link, status, ok/allowed/reason, predicate names and boolean answers. It never prints a
@@ -65,16 +67,17 @@ function buildPredicates(get, env) {
   if (num !== undefined) preds.push({ name: 'document_number_is', number: num });
   return preds.length > 0 ? preds : [{ name: 'expiry_beyond', months: 3 }];
 }
-const predicates = tier === 'C' ? buildPredicates((n) => opt(n, undefined), process.env) : [];
+const rawArg = opt('raw', undefined);
+const predicates = tier === 'C' ? (rawArg !== undefined ? JSON.parse(rawArg) : buildPredicates((n) => opt(n, undefined), process.env)) : [];
 if (predicates === null) { console.error('--given-names and --surname must be given together'); process.exit(2); }
-const body = tier === 'C' ? { mode: 'C', predicates } : { mode: tier };
+const body = tier === 'C' ? (rawArg !== undefined ? { mode: 'C', rawPredicates: predicates } : { mode: 'C', predicates }) : { mode: tier };
 if (ttlSec > 0) body.ttlMs = ttlSec * 1000;
 const res = await fetch(`${base}/ui/presentations`, {
   method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
 });
 if (res.status !== 201) { console.error(`create failed: HTTP ${res.status}`); process.exit(1); }
 const tx = await res.json();
-console.log(`transaction=${tx.transactionId} tier=${tier} origin_host=${host}${tier === 'C' ? ` asks=${predicates.map((p) => predicateLabel(p)).join(',')}` : ''}${ttlSec > 0 ? ` ttl_s=${ttlSec}` : ''}`);
+console.log(`transaction=${tx.transactionId} tier=${tier} origin_host=${host}${tier === 'C' ? ` asks=${predicates.map((p) => predicateLabel(p)).join(',')}${rawArg !== undefined ? ' (raw, unvalidated)' : ''}` : ''}${ttlSec > 0 ? ` ttl_s=${ttlSec}` : ''}`);
 console.log('adb_am_start_arg (quote it, the & is eaten by adb shell otherwise):');
 console.log(`'${tx.app_link_av}'`);
 

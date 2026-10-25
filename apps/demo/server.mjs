@@ -505,7 +505,10 @@ export function createApp() {
       // bad request is a 400 here, never a half-made transaction.
       let tierC = null;
       if (mode === 'C') {
-        const v = validatePredicates(body.predicates);
+        // POC-ONLY test hook (device check of the app's whole-request refusal): with TIERC_POC_ALLOW_RAW=1 the verifier
+        // signs `rawPredicates` exactly as given, so an off-list boundary can reach the app. Off by default.
+        const raw = process.env.TIERC_POC_ALLOW_RAW === '1' && Array.isArray(body.rawPredicates) ? body.rawPredicates : null;
+        const v = raw ? { ok: true, predicates: raw } : validatePredicates(body.predicates);
         if (!v.ok) { sendJson(res, 400, { error: v.reason }); return; }
         tierC = { predicates: v.predicates, challenge: issueTierCChallenge({ ttlMs }) };
       }
