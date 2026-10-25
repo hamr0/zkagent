@@ -1035,6 +1035,8 @@ something, not merely fail to be exercised):
    the setting gates tier C only. There is no per-predicate case and no cap case: all five
    predicates are allowed to every pinned site in this build (D109(h)).
 
+**Run 2026-10-25: PASSED** (criteria 1-4 all met against their pre-registered rules; Pixel 6a, APKs built from `2720daa`) — see `docs/logs/M3B-POC-EVIDENCE-2026-10-25.md`. Name order stays an OPEN owner decision; UX findings in `.claude/remember/findings.md` #27.
+
 Criteria 1 and 2 MUST run on BOTH real documents the owner holds (US passport, NL ID card);
 criteria 3 and 4 MAY run once. **No PII or document values go into any evidence artifact:** record
 field names, verdicts and timings only (including read-to-boolean timing per predicate). The

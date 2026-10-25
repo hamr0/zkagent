@@ -1,7 +1,7 @@
-# M3b — opening riskiest-assumption POC (Pixel 6a, 2026-10-25) — PRE-REGISTERED, RESULTS EMPTY
+# M3b — opening riskiest-assumption POC (Pixel 6a, 2026-10-25) — PRE-REGISTERED, RESULTS FILLED 2026-10-25: PASSED
 
-**Status**: pre-registration skeleton for milestones.md §6.9.1 (D109(f)), written BEFORE any device
-run. Every device result cell below is empty (`—`) on purpose. The criteria, the planted negatives and
+**Status**: pre-registration for milestones.md §6.9.1 (D109(f)), written BEFORE any device
+run; device results (sections 6-10) were filled in after the 2026-10-25 run and are marked as such. The cells were empty (`—`) on purpose until then. The criteria, the planted negatives and
 their paired passes are fixed here first; the owner runs the device steps; results are read back from
 logcat and the demo verifier's stdout and entered afterwards. A cell that is filled in later with
 something other than what was pre-registered is a FINDING, not an edit to the criterion.
@@ -125,51 +125,68 @@ different refusal and would NOT count as the pin refusing; it would be a finding
 
 ## 5 — Owner-declared expectations for the "today" lines (fill BEFORE the run; booleans only)
 
+**Not pre-filled by the owner before the run.** The owner was asked to fill this table and did not; every cell is
+left blank on purpose. No expectation has been reconstructed or invented after the fact, so the "today"
+answers (which are info-only, not a pass condition) have no pre-registered expected value to be compared against.
+
 | Question about the document | US passport expected | NL ID card expected |
 |---|---|---|
-| expires more than 3 months from today | — | — |
-| expires more than 6 months from today | — | — |
-| expires more than 12 months from today | — | — |
-| holder is at least 15 / 16 / 18 / 21 / 60 / 65 | — / — / — / — / — / — | — / — / — / — / — / — |
+| expires more than 3 months from today | not pre-filled | not pre-filled |
+| expires more than 6 months from today | not pre-filled | not pre-filled |
+| expires more than 12 months from today | not pre-filled | not pre-filled |
+| holder is at least 15 / 16 / 18 / 21 / 60 / 65 | not pre-filled | not pre-filled |
 
 ## 6 — Results: criteria 1 and 2 (both documents)
 
-Read back from `adb logcat -d` lines tagged `M3b probe:` (verdicts only) and the Diagnostics-tab report.
+Source: value-free verdict lines captured by the orchestrator while reading the device and demo output live on
+2026-10-25 (US passport armed 13:24:44, run 13:24:57; NL ID card armed 13:30:18, run 13:30:25). The phone's logcat ring
+buffer has since rolled over, so the captured lines are the record; the raw `adb logcat -d` is no longer
+available to re-read. Build: both APKs built from `2720daa` (see section 9).
 
 | Group (from the `group ...` lines) | US passport `pos_confirmed / neg_excluded / non_vacuous` | NL ID card |
 |---|---|---|
-| field_reads | — | — |
-| expiry | — | — |
-| dob_range | — | — |
-| document_number | — | — |
-| nationality | — | — |
-| name | — | — |
-| unreadable | — | — |
-| integrity | — | — |
-| `summary checks / pass / fail / all_groups_non_vacuous` | — | — |
+| field_reads | 7 / 2 / true | 7 / 2 / true |
+| expiry | 3 / 3 / true | 3 / 3 / true |
+| dob_range | 6 / 6 / true | 6 / 6 / true |
+| document_number | 2 / 1 / true | 2 / 1 / true |
+| nationality | 2 / 3 / true | 2 / 3 / true |
+| name | 6 / 1 / true | 6 / 1 / true |
+| unreadable | 1 / 6 / true | 1 / 6 / true |
+| integrity | 1 / 1 / true | 1 / 1 / true |
+| `observe` (observe-only group, by design; not a criterion-1 group) | 0 / 0 / false | not separately recorded for NL; the US line shows the same by design |
+| `summary checks / pass / fail / all_groups_non_vacuous` | 60 / 60 / 0 / true | 60 / 60 / 0 / true |
+
+Notable check lines (US passport run): `nat.exclusion_over_cap_refused` expected `cannot_tell`, actual
+`cannot_tell(exclusion_set_size)`; `expiry_{3,6,12}mo.corrupted_field_is_refusal` gave `cannot_tell(expiry_unreadable)`;
+missing nationality, name and DOB gave `cannot_tell(*_unreadable)`; `integrity.tampered_dg1_not_answerable`
+expected `false`, actual `false`. Path: the US passport reported "PACE unavailable (CardServiceException)" and fell back to
+BAC (normal for this passport); the NL ID card used PACE (no such line).
 
 | Per-check "today" answers (observe lines) vs section 5 | US passport | NL ID card |
 |---|---|---|
-| `expiry_beyond_3mo.today` / `6mo` / `12mo` | — | — |
-| `dob_at_least_N.today` for the six ages | — | — |
+| `expiry_beyond_3mo.today` / `6mo` / `12mo` | not captured in the verdict-line record (info-only); no section-5 expectation exists to compare to | same |
+| `dob_at_least_N.today` for the six ages | not captured in the verdict-line record (info-only); no section-5 expectation exists to compare to | same |
 
 | Name observations (criterion 2) | US passport | NL ID card |
 |---|---|---|
-| `mrz_form` | — | — |
-| `name_field length_known / at_capacity` | — | — |
-| `uses_angle_filler / uses_space_separator / contains_hyphen / all_ascii / has_secondary` | — | — |
-| order the typed name matched (`given_first` / `surname_first`) | — | — |
-| `name_rule_exercised case / hyphen / accent / angle_filler` | — | — |
-| ß / Ø / Æ / apostrophe observed on the real name | — | — |
-| `secondary_identifier present` | — | — |
+| `mrz_form` | TD3 | TD1 |
+| `name_field length_known / at_capacity` | true / false | true / false |
+| `uses_angle_filler / uses_space_separator / contains_hyphen / all_ascii / has_secondary` | true / false / false / true / true | true / false / false / true / true |
+| order the typed name matched (`given_first` / `surname_first`) | `given_first` result=true; `surname_first` result=false | `given_first` result=true; `surname_first` result=false |
+| `name_rule_exercised case / hyphen / accent / angle_filler` | true / false / false / true | true / false / false / true |
+| ß / Ø / Æ / apostrophe observed on the real name | not observable on this document (all_ascii=true; no hyphen, no accent). The record carries no per-character flag for ß/Ø/Æ/apostrophe beyond these booleans, so the claim rests on them | same |
+| `secondary_identifier present` | true | true |
+
+Accepted as "not observable on these two documents" under D109(g)6; the synthetic unit table (labelled synthetic) is the
+only coverage of those edge cases.
 
 | Read-to-boolean timing (`read_to_boolean_us`, microseconds): min / median / max across checks | US passport | NL ID card |
 |---|---|---|
-| all checks | — | — |
+| all checks | min and median not captured; "mostly 1-60 us"; max 359 us (the one-character-changed name check) | not captured (the record states only the 60/60 summary) |
 
 | Failed checks (id and `actual` only) | US passport | NL ID card |
 |---|---|---|
-| — | — | — |
+| none (fail=0) | none | none |
 
 ## 7 — Results: criteria 3 and 4
 
@@ -178,28 +195,83 @@ the demo's stdout, `tx created`, `request_uri GET`, `verdict` (the third absent 
 
 | Run | App build | Setting | Request | App verdict line | Verifier `request_uri GET` seen | Verifier `verdict` line | Pass? |
 |---|---|---|---|---|---|---|---|
-| 4a | ON | OFF | tier C, `127.0.0.1` | — | — | — | — |
-| 4b | ON | OFF | tier A, `127.0.0.1` | — | — | — | — |
-| 3a | ON | ON | tier C, `127.0.0.1` | — | — | — | — |
-| 3b | ON | ON | tier C, `localhost` | — | — | — | — |
-| 3c | OFF | ON | tier C, `127.0.0.1` | — | — | — | — |
+| 4a (tx `_SiH0nYiMnb5vrQa`) | ON | OFF | tier C, `127.0.0.1` | 14:59:25.264 REFUSED before any read or mint, `cause=holder_setting_off chip_read=false mint=false` | yes (`tx created mode=C predicates=expiry_beyond:3`; `request_uri GET`) | none | PASS |
+| 4b (tx `P7rv4US8IHqg3bPc`) | ON | OFF | tier A, `127.0.0.1` | 15:03:53.640 `direct_post http_status=200`, DELIVERED (bare presentation sent) | yes | `verdict tier=A threshold=18 ok=true allowed=true reason=no-evidence-required evidence=[] attester=n/a` | PASS |
+| 3a (tx `6uBD2D2KDr_AXsh9`) | ON | ON | tier C, `127.0.0.1` | 15:06:19.315 `gate=allow predicates=1`; 15:06:24.865 answered `expiry_beyond months=3 result=true`; 15:06:24.873 `http_status=200`, DELIVERED (tier-C answer sent) | yes | `verdict tier=C ok=true allowed=true reason=answers-received answered=expiry_beyond:3=true` | PASS |
+| 3b (tx `YQKGfUHjalA3_3iJ`) | ON | ON | tier C, `localhost` | 15:08:34.579 REFUSED before any read or mint, `cause=not_pinned chip_read=false mint=false` | yes (`tx created` and `request_uri GET` present) | none | PASS |
+| 3c (tx `njh3hYn_P5_QCKFu`) | OFF | ON | tier C, `127.0.0.1` | 16:52:14.594 REFUSED before any read or mint, `cause=operator_switch_off chip_read=false mint=false` | yes (`tx created` and `request_uri GET`) | none | PASS |
 
 | Detail | Result |
 |---|---|
-| 3a presentation non-empty, verdict `ok` / `allowed` / `reason` / `answered=` booleans | — |
-| 3a app read-to-boolean time (`M3b tier-C: answered ... read_to_boolean_us`) | — |
-| 3b: gate cause in the app log, and `chip_read=false mint=false` | — |
-| 4a: gate cause in the app log, and `chip_read=false mint=false` | — |
-| 3c: gate cause in the app log | — |
-| `localhost` reachable from the phone through `adb reverse` (3b non-vacuity) | — |
+| 3a presentation non-empty, verdict `ok` / `allowed` / `reason` / `answered=` booleans | verdict `ok=true`, `allowed=true`, `reason=answers-received`, `answered=expiry_beyond:3=true`. The record states the answer was received and accepted; it does not state a byte count for the presentation, so "non-empty" is evidenced by `answers-received` plus the answered boolean, not by a size |
+| 3a app read-to-boolean time (`M3b tier-C: answered ... read_to_boolean_us`) | 269 us |
+| 3b: gate cause in the app log, and `chip_read=false mint=false` | `cause=not_pinned`, `chip_read=false mint=false`; request object verified first (15:07:24.772, `origin=http://localhost:8787 signature_verified=true key_kind=dev-pinned`); dialog: "This site is not approved to ask additional verifications. Nothing was read and nothing was sent." |
+| 4a: gate cause in the app log, and `chip_read=false mint=false` | `cause=holder_setting_off`, `chip_read=false mint=false`; request object verified first (14:58:58.353, `origin=http://127.0.0.1:8787 signature_verified=true key_kind=dev-pinned`); dialog: "Additional verifications are turned off. Nothing was read and nothing was sent." |
+| 3c: gate cause in the app log | `cause=operator_switch_off`, `chip_read=false mint=false`; request object verified first (16:51:42.300). The dialog showed "handoff: REFUSED — tier C requested, not supported in this build (no tier-C flow)" (the pre-registered "existing wording"; see UX finding in section 10) |
+| `localhost` reachable from the phone through `adb reverse` (3b non-vacuity) | yes: the demo log shows `request_uri GET` for the `localhost` transaction, and the app log shows the request object verified for `origin=http://localhost:8787` before the `not_pinned` refusal. This is not a fetch failure |
+
+Holder-setting state: the log shows `allow_additional_verifications=true` at 15:05:20.350, after 4a (14:59) and 4b (15:03) ran with the
+setting OFF. Whether 4a and 3a ran inside one app process (the criterion's "same app run") is not stated in the captured record.
 
 ## 8 — Verdict (filled after the run)
 
+**Overall: the POC PASSED all four pre-registered criteria, each judged against the pass rule written in this file.**
+One qualification is stated rather than hidden: the criterion-1 rule says "every group non-vacuous"; the `observe`
+group reads `non_vacuous=false` by design (it is observe-only, and not one of the eight criterion-1 groups in section 4),
+and the run's own `all_groups_non_vacuous=true` summary agrees. Other evidence gaps, none of which breaks a rule: the
+"today" lines were not captured, section 5 was not pre-filled, per-check timing min and median were not captured, and the
+"same app run" wording of 4a/3a is unconfirmed (section 7).
+
 | Criterion | Pre-registered pass condition | Result |
 |---|---|---|
-| 1 | every group non-vacuous on BOTH documents, zero failed checks | — |
-| 2 | observations recorded on BOTH documents; unobservable edge cases reported as such | — |
-| 3 | 3a answered, 3b refused (not_pinned, fetched and verified first), 3c refused (operator switch) | — |
-| 4 | 4a refused (holder setting), 3a answered, 4b answered | — |
+| 1 | every group non-vacuous on BOTH documents, zero failed checks | PASS. All eight groups non-vacuous on both documents (pos_confirmed and neg_excluded above 0 everywhere); 60 checks, 60 pass, 0 fail on each document |
+| 2 | observations recorded on BOTH documents; unobservable edge cases reported as such | PASS. All booleans recorded for TD3 (US passport) and TD1 (NL ID card); ß/Ø/Æ/apostrophe reported as not observable on these documents |
+| 3 | 3a answered, 3b refused (not_pinned, fetched and verified first), 3c refused (operator switch) | PASS. 3a answered (`ok=true`), 3b `cause=not_pinned` with request fetched and verified and `request_uri GET` seen, 3c `cause=operator_switch_off` |
+| 4 | 4a refused (holder setting), 3a answered, 4b answered | PASS. 4a `cause=holder_setting_off`, 3a answered, 4b answered (tier A, `ok=true`) |
 
-Findings that fall out of the run go to `.claude/remember/findings.md`, never into this file as prose.
+## 9 — Device, build and run facts
+
+| Item | Value |
+|---|---|
+| Device | Pixel 6a, Android 17 |
+| Security patch / build | 2026-10-05 / CP3A.261005.002.A1 |
+| APK (tier-C switch ON) sha256 | `f56dde7a9d77fca1d70e42f529528a9623f4f72e4ccf66b95996c19cabf771f4` |
+| APK (tier-C switch OFF) sha256 | `74ff5f8b9b1cfb0d4bcd6d161e733994dcdad2b294b5701c496546076b5bb652` |
+| Built from | `2720daa` (the opening-POC commit; the header's `96bdb3b` is the base it was built on) |
+| Run date | 2026-10-25, orchestrator reading verdict lines live, device run by the owner |
+
+### Attempts that did NOT count
+
+| Attempt | Why not counted |
+|---|---|
+| First 4a attempt, tx `okK5SHDJ4MSlLkx-` | The session expired before the lock: "Verification session expired". Correct behaviour; the owner was too slow for the 120 s TTL. 4a was re-run (tx `_SiH0nYiMnb5vrQa`) and that run counts |
+| 15:01 two plain local scans (one "Couldn't read", one "Read OK") before the 4b request was sent | Plain scans with no request; no gate or predicate was exercised |
+| 13:28 NL ID card scan | An unarmed plain read ("Read OK"); the probe was not armed, so it produced no criterion-1/2 lines. The armed NL run is 13:30:18/13:30:25 |
+
+### Pre-run incident (not a POC failure and not an M3b defect)
+
+13:05-13:07: the US passport BAC read was refused with `AccessDeniedException SW=0x6982` (mutual authentication failed). The owner
+had typed a wrong date. Diagnosed by an A/B: a v0.8.0 (`942c9a5`) debug build was installed and failed identically, so the cause was not
+the M3b code. The owner then found the mistyped date, and both documents read OK on v0.8.0, before the M3b run above.
+
+### Observations (reported, not rulings)
+
+- The typed name matched given-names-first on both documents and did NOT match surname-first (both results identical across the two documents).
+- US passport is TD3; NL ID card is TD1. The US passport fell back from PACE to BAC; the NL ID card used PACE.
+- ß/Ø/Æ and the apostrophe are not observable (`all_ascii=true`, no hyphen, no accent on either name).
+- Timings: US passport read-to-boolean mostly 1-60 us, max 359 us; 3a tier-C answer 269 us. NL timings not captured.
+
+## 10 — Open items and findings for the real build
+
+**Open owner decision (informed by this result, not ruled here): name order.** The evidence shows the typed
+(given-names-first) form matches and the surname-first form does not, on both documents. D101 still does not say which
+order a site's name string uses. Left OPEN for the owner (also finding #26 item 1).
+
+UX findings, owner-observed, for the real build and NOT POC failures. Quoted verbatim where the owner said it:
+
+1. No confirmation pop-up after a probe run: "no conf pop up msg" (the report is only on the Diagnostics tab and in the log).
+2. Probe inputs sit on the Diagnostics tab, away from the Scan-tab details: "why did you put it far and not same place"; "one scan for all".
+3. Developer wording on the operator-switch-off refusal (3c): "handoff: REFUSED — tier C requested, not supported in this build (no tier-C flow)".
+4. The 120 s request TTL is tight for human-paced device testing (it expired once, on the first 4a attempt).
+
+Recorded as one finding in `.claude/remember/findings.md` (#27). Other findings that fall out of the run go there, never into this file as prose.
