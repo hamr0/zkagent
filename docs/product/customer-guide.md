@@ -92,7 +92,10 @@ hostname is on that build's pin list (an unlisted site is refused before anythin
 document), and you turned on the app setting **"Allow additional verifications"**, which is OFF by
 default. With the setting off the app answers age verification (tiers A and B) only. With it on,
 every pinned site may ask any of the five questions (expiry, name match, date-of-birth range,
-nationality, document-number match), as yes/no answers; the number itself and your other fields are
+nationality, document-number match), as yes/no answers (a name-match question carries given names
+and surname as two separate fields, so there is no order to get wrong; given names must match in
+full as on your document, and a very long name that your document's machine-readable line cut
+short may read as "no match"); the number itself and your other fields are
 never sent. Before you confirm each scan the app shows the questions being asked, read from the
 site's signed request. The app answers every question in a request or refuses the whole request,
 never part of it, and a refusal tells the site only "refused". Age verification (tiers A and B) is

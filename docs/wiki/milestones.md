@@ -1035,7 +1035,7 @@ something, not merely fail to be exercised):
    the setting gates tier C only. There is no per-predicate case and no cap case: all five
    predicates are allowed to every pinned site in this build (D109(h)).
 
-**Run 2026-10-25: PASSED** (criteria 1-4 all met against their pre-registered rules; Pixel 6a, APKs built from `2720daa`) — see `docs/logs/M3B-POC-EVIDENCE-2026-10-25.md`. Name order stays an OPEN owner decision; UX findings in `.claude/remember/findings.md` #27.
+**Run 2026-10-25: PASSED** (criteria 1-4 all met against their pre-registered rules; Pixel 6a, APKs built from `2720daa`) — see `docs/logs/M3B-POC-EVIDENCE-2026-10-25.md`. Name order is RULED (D109(k): two labelled fields, `given_names` and `surname`, so no order exists; finding #26 item 1 closed); UX findings in `.claude/remember/findings.md` #27.
 
 Criteria 1 and 2 MUST run on BOTH real documents the owner holds (US passport, NL ID card);
 criteria 3 and 4 MAY run once. **No PII or document values go into any evidence artifact:** record
@@ -1143,9 +1143,18 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
    simplest form. Touches: **scanner** (one settings boolean plus a Settings-tab switch; extend the
    question line for tier C). Tag: ENHANCEMENT. Implements: D89 (simplified), D109(h)3.
 8. **Tier-C verb vocabulary (D90, D101, D102).** The scanner's tier-C predicate set is exactly:
-   (a) expiry-bucket booleans (item 9's fixed buckets); (b) name-match — boolean only, normalized
-   per D101 (case-insensitive, hyphen-insensitive, accent-stripped, MRZ `<` treated as a
-   separator), no similarity score (Q22 unchanged); (c) DOB-range boolean (item 9's fixed ages, and the site's shared age lock, item 9);
+   (a) expiry-bucket booleans (item 9's fixed buckets); (b) name-match — boolean only, **two fields (D109(k)):
+   the site sends `given_names` and `surname`, each compared against its own MRZ identifier (given
+   names against the secondary identifier, surname against the primary), and BOTH must match; never
+   a single combined string, so there is no name order for a site to know or get wrong. Given names
+   must match IN FULL, as on the document ("John" against "JOHN PAUL" is `false`). Each side is
+   normalized per D101 (case-insensitive, accent-stripped, MRZ `<` treated as a separator) with the
+   hyphen treated as a separator equal to `<` ("Jean-Pierre" equals `JEAN<PIERRE`), after the
+   site's names are transliterated by the ICAO 9303 Part 3 rules: ß to SS, Ø to OE, Æ to AE,
+   apostrophe dropped; every other mapping "per ICAO 9303 Part 3 table, verify at build". The
+   transliteration is covered by a synthetic table, labelled synthetic (D109(g)6). Orchestrator
+   default, announced to owner 2026-10-25, not objected (D109(k)1-4)**; no similarity score (Q22
+   unchanged); (c) DOB-range boolean (item 9's fixed ages, and the site's shared age lock, item 9);
    (d) nationality, exclusion mode (site names a set, MUST NOT exceed 10 countries per D102, else
    fail loudly/no mint) and confirmation mode (site names one nationality, boolean); **codes
    (D109(g)3): ISO 3166 alpha-3 exactly as written in the MRZ; ICAO special codes (for example
@@ -1274,7 +1283,9 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     enforces) and tier-C presentation verification — validating an incoming presentation's
     predicate-name/boolean pairs against item 8's fixed vocabulary and item 9's fixed boundary
     lists (no per-presentation cap in this build, D109(h)2), returning `ok:false` for an off-list boundary or an
-    out-of-vocabulary predicate, mirroring the existing never-throw verdict contract (D4). (b)
+    out-of-vocabulary predicate, mirroring the existing never-throw verdict contract (D4). **The
+    name-match predicate's request shape carries two labelled fields, `given_names` and `surname`
+    (D109(k)1), never one combined string; the exact wire encoding is still decided at build.** (b)
     ~~A helper to embed an operator-issued membership statement into the site's request~~
     **DROPPED (D109)** with items 3-6: there are no statements. The letter is reserved. **`chiproof`
     has no knowledge of the pin list:** the pin list lives only in the holder's app build (item 2);
@@ -1304,7 +1315,9 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     (distinct from a successful disclosure, mirroring M3 item 4's "already registered" pattern);
     the reasons and the lock state are shown in the app only. D92 is UNCHANGED. The page keeps the
     demo's own server-side per-origin state only. The demo's verifier and its logs MUST record predicate names and verdicts only,
-    never the site-supplied name or number being tested. Touches: **demo** (`apps/demo/server.mjs`
+    never the site-supplied name or number being tested. **Name match on the demo page (D109(k)):
+    the demo's input is two labelled fields, given names and surname, so the page never asks for or
+    implies a name order.** Touches: **demo** (`apps/demo/server.mjs`
     and its page), **chiproof** (item 14's tier-C shape). Tag: ENHANCEMENT. Implements: the §6
     table's M3b deliverable line ("demo page extension over M3").
 16. **Standing rules carried forward, unchanged, restated because they govern new UI/paths.** (a)
@@ -1329,7 +1342,10 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     successor is (h) below. Letter (c) is reserved. (d) **MRZ name-match truncation** — a
     sufficiently long, correctly-typed name can fail item 8(b)'s match against a document whose MRZ
     field truncated it; flagged as the orchestrator's own recommendation from D101, NOT an owner
-    ruling, and stays a stated, disclosed limitation rather than a "MUST fix." (e) **Q11
+    ruling, and stays a stated, disclosed limitation rather than a "MUST fix." **Narrowed by D109(k)
+    (open note, not a ruling):** with two fields and the strict full-given-names match, a
+    truncated given-names field cannot match the full names a site types, so the answer is `false`;
+    the guide MUST say a very long name may read as "no match" for this reason. (e) **Q11
     residual** — even against item 9's fixed boundary lists, DOB-range predicates still yield
     bits of information about a holder's date of birth; since the shared age lock (item 9, D109(i)3) each site gets one boundary, so one bit at its single locked age (across many hostnames see (b)); nothing resolves Q11 itself. (f) **Document-number linkage residual (D90 item 5)** — a `true`
     document-number-match answer confirms to the asking site that this holder is the person behind
@@ -1530,7 +1546,7 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
 | D98 | SUPERSEDED (D109(b)); former items 5/17(c) DROPPED |
 | D99 | SUPERSEDED (D109(b)); former item 4 DROPPED |
 | D100 | SUPERSEDED (D109(b)); former items 4/5 DROPPED |
-| D101 | 8, 17(d), §6.9.1 |
+| D101 | 8, 17(d), §6.9.1 (name order and fields refined by D109(k)) |
 | D102 | 8 |
 | D103 | SUPERSEDED (D109(b)); former items 5/6 DROPPED |
 | D104 | SUPERSEDED (D109(b)); former item 6 DROPPED |
@@ -1547,6 +1563,7 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
 | D109(d) | 7, 9-17 as adjusted (7, 10-13 further changed by D109(h)); 17(c) DROPPED, 17(h), 17(i) new |
 | D109(e) | 18, 19, 20, 21, 22 |
 | D109(f) | §6.9.1 |
+| D109(k) | 8(b) (two fields, full given-names match, hyphen-as-separator, ICAO 9303 Part 3 transliteration); 14 (request shape); 15 (two input fields); 17(d) (narrowed); §6.9.1; §6.9.4; customer-guide §4 |
 | D109(h) | 1, 2 (gate unchanged; all five predicates to every pinned site); 7 (single switch); 8; 10-12 (DEFERRED, numbers reserved); 13 (simplified); 14; 15; 17(a), (e), (g), (k) NEW; §6.9.1 criterion 4; 22 (status flip, done); `backlog.md` items 8 and 9 |
 | D109(i)1 | 23 (open age verification, `"verifiers": "any"`); §6.7.3, §6.7.4 rule 12; §6.9.1 criterion 3 (reworded, tier C only); 17(b), 17(l), 17(m) |
 | D109(i)2 | 1, 2, 7 (restates D109(h)1 and (h)3; consistent, nothing new); `backlog.md` item 10 (registration and signing for allowlisted sites, later) |
@@ -1629,12 +1646,20 @@ Resolved by D109(g), 2026-10-25 ("all recommended"):
 Standing open points, NOT owner questions and unchanged by D109 (no ruling is pending; each is
 handled by a disclosed limitation or by the POC reporting what it observes):
 
-- **Normalisation beyond D101's accent-stripping rule (ß/Ø, further transliteration)** — D101
-  itself left it open. D109(g)6 only settles how the POC reports it ("not observable on these
-  documents" is acceptable); the normalisation rule itself is still unruled.
-- **MRZ name-match truncation behaviour** — D101 left it unruled (orchestrator recommendation
-  only); item 17(d) states it as disclosed, not fixed. D109(g)6 settles only the evidence
-  handling, not the behaviour.
+- **Name order** — RULED, D109(k) (two labelled fields, `given_names` and `surname`; no order
+  exists). No longer OPEN. Finding #26 item 1 closed.
+- **Normalisation beyond the D109(k)4 transliteration (narrowed)** — D109(k)4 (orchestrator
+  default, announced to owner, not objected) adopts ICAO 9303 Part 3 transliteration: ß to SS,
+  Ø to OE, Æ to AE, apostrophe dropped. Still OPEN: the full ICAO table beyond those four
+  ("verify at build"), including whether Ø is written O or OE and how the German umlauts are
+  written (D101 strips them to the base letter; ICAO allows a two-letter form), and the
+  synthetic table's coverage.
+- **MRZ name-match truncation behaviour (narrowed)** — D101 left it unruled (orchestrator
+  recommendation only); item 17(d) states it as disclosed, not fixed. Open note from D109(k)5, not
+  a ruling: with strict full-given-names matching a truncated given-names field reads `false`.
+  Whether a truncated field should instead match as a prefix is undecided. D109(g)6 settles only
+  the evidence handling, not the behaviour.
+- **First-given-name-only mode** — not built; a possible later owner change (D109(k)2).
 - **Q11's residual** (DOB-range predicates are still bits about a date of birth, even from a
   fixed list, and with no caps in this build a pinned site can accumulate them across requests) —
   no item closes it; items 17(e) and 17(k) state it as a disclosed limitation.
