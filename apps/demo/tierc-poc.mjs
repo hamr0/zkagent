@@ -8,27 +8,72 @@
 // verdict in this project keeps); nothing here throws.
 //
 // WHAT IT NEVER HANDLES. No document value, no name, no number, no zktag: the POC request names an expiry
-// bucket, the POC answer carries a name / bucket / boolean triple. Nothing in this module logs a tested value
-// because there is none.
+// bucket, the POC answer carries a name / boundary / boolean triple. Nothing in this module logs a tested value:
+// the name, number and codes a request carries are only ever signed into the request, never logged or echoed.
 
 import { randomBytes } from 'node:crypto';
 
 export const POC_SPEC = 'zkagent-poc-tierc/0';
 /** Item 9 / D97: the fixed expiry buckets, in calendar months. */
 export const EXPIRY_BUCKET_MONTHS = Object.freeze([3, 6, 12]);
+/** Item 9 / D97: the fixed date-of-birth ages, identical to D74's list. */
+export const DOB_AGES = Object.freeze([15, 16, 18, 21, 60, 65]);
+/** Item 8(d) / D102: an exclusion set may name at most this many countries. */
+export const MAX_EXCLUSION_SET = 10;
 const DEFAULT_PREDICATES = Object.freeze([{ name: 'expiry_beyond', months: 3 }]);
 
-/** Validates the predicates a caller wants to ask. Returns {ok:true, predicates} or {ok:false, reason}. */
+const isCode = (c) => typeof c === 'string' && /^[A-Za-z]{1,3}$/.test(c.trim());
+const nonBlank = (s) => typeof s === 'string' && s.replace(/[<\s-]/g, '').length > 0;
+
+/** Validates the predicates a caller wants to ask: all five item-8 kinds, POC-local wire. This mirrors what the scanner
+ * enforces holder-side (site-side enforcement is the point of item 14, which replaces this with chiproof in chunk 2).
+ * Returns {ok:true, predicates} or {ok:false, reason}. Nothing here logs a value. */
 export function validatePredicates(input) {
   const list = input === undefined ? DEFAULT_PREDICATES : input;
   if (!Array.isArray(list) || list.length === 0) return { ok: false, reason: 'predicates_invalid' };
   const out = [];
   for (const p of list) {
-    if (p === null || typeof p !== 'object' || p.name !== 'expiry_beyond') return { ok: false, reason: 'predicate_not_in_poc' };
-    if (!Number.isInteger(p.months) || !EXPIRY_BUCKET_MONTHS.includes(p.months)) return { ok: false, reason: 'boundary_off_list' };
-    out.push({ name: 'expiry_beyond', months: p.months });
+    if (p === null || typeof p !== 'object') return { ok: false, reason: 'predicate_not_in_poc' };
+    switch (p.name) {
+      case 'expiry_beyond':
+        if (!Number.isInteger(p.months) || !EXPIRY_BUCKET_MONTHS.includes(p.months)) return { ok: false, reason: 'boundary_off_list' };
+        out.push({ name: 'expiry_beyond', months: p.months });
+        break;
+      case 'dob_at_least':
+        if (!Number.isInteger(p.age) || !DOB_AGES.includes(p.age)) return { ok: false, reason: 'boundary_off_list' };
+        out.push({ name: 'dob_at_least', age: p.age });
+        break;
+      case 'nationality_is':
+        if (!isCode(p.code)) return { ok: false, reason: 'code_invalid' };
+        out.push({ name: 'nationality_is', code: p.code.trim().toUpperCase() });
+        break;
+      case 'nationality_not_in':
+        if (!Array.isArray(p.codes) || p.codes.length === 0 || p.codes.length > MAX_EXCLUSION_SET) return { ok: false, reason: 'exclusion_set_size' };
+        if (!p.codes.every(isCode)) return { ok: false, reason: 'code_invalid' };
+        out.push({ name: 'nationality_not_in', codes: p.codes.map((c) => c.trim().toUpperCase()) });
+        break;
+      case 'name_match':
+        if (!nonBlank(p.given_names) || !nonBlank(p.surname)) return { ok: false, reason: 'name_fields_invalid' };
+        out.push({ name: 'name_match', given_names: p.given_names, surname: p.surname });
+        break;
+      case 'document_number_is':
+        if (!nonBlank(p.number)) return { ok: false, reason: 'number_invalid' };
+        out.push({ name: 'document_number_is', number: p.number });
+        break;
+      default:
+        return { ok: false, reason: 'predicate_not_in_poc' };
+    }
   }
   return { ok: true, predicates: out };
+}
+
+/** The fixed boundary an answer must echo, or undefined for kinds with none. */
+const boundaryOf = (p) => (p.name === 'expiry_beyond' ? p.months : p.name === 'dob_at_least' ? p.age : undefined);
+
+/** Value-free label of one predicate for logs: its name and fixed boundary, never a name, number or code. */
+export function predicateLabel(p) {
+  const b = boundaryOf(p);
+  return b === undefined ? p.name : `${p.name}:${b}`;
 }
 
 /** The POC challenge: a nonce and an expiry. Deliberately no `threshold` (tier C asks no age question here, so the
@@ -63,27 +108,34 @@ export function verifyTierCPoc(presentation, tx, now = Date.now()) {
     if (now > tx.challenge.expires_at) return realNo('challenge_expired');
     const answers = presentation.answers;
     if (!Array.isArray(answers) || answers.length !== tx.predicates.length) return realNo('answers_do_not_match_request');
-    const seen = new Set();
-    for (const a of answers) {
+    // One answer per predicate, in request order: the name and the fixed boundary (months / age) must echo what was asked.
+    for (let i = 0; i < answers.length; i += 1) {
+      const a = answers[i];
+      const asked = tx.predicates[i];
       if (a === null || typeof a !== 'object') return realNo('answers_do_not_match_request');
       if (typeof a.result !== 'boolean') return realNo('answer_not_boolean');
-      const asked = tx.predicates.find((p) => p.name === a.name && p.months === a.months);
-      if (!asked || seen.has(`${a.name}:${a.months}`)) return realNo('answers_do_not_match_request');
-      seen.add(`${a.name}:${a.months}`);
+      if (a.name !== asked.name || a.months !== asked.months || a.age !== asked.age) return realNo('answers_do_not_match_request');
     }
     return {
       ok: true, allowed: true, tier: 'C', reason: 'answers-received',
-      answers: answers.map((a) => ({ name: a.name, months: a.months, result: a.result })),
+      answers: answers.map((a, i) => {
+        const o = { name: a.name };
+        const b = boundaryOf(tx.predicates[i]);
+        if (tx.predicates[i].name === 'expiry_beyond') o.months = b;
+        if (tx.predicates[i].name === 'dob_at_least') o.age = b;
+        o.result = a.result;
+        return o;
+      }),
     };
   } catch {
     return cannotCheck('verifier_internal_error');
   }
 }
 
-/** Value-free log fragment: predicate names, boundaries and the boolean answers, nothing else. */
+/** Value-free log fragment: predicate names, fixed boundaries and the boolean answers, nothing else. */
 export function describeVerdictForLog(verdict) {
   if (!verdict || !Array.isArray(verdict.answers)) return 'answered=none';
-  return `answered=${verdict.answers.map((a) => `${a.name}:${a.months}=${a.result}`).join(',')}`;
+  return `answered=${verdict.answers.map((a) => `${predicateLabel(a)}=${a.result}`).join(',')}`;
 }
 
 export const SCANNER_PACKAGE = 'com.zkagent.scanner';

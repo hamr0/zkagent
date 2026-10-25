@@ -56,7 +56,12 @@ async function poll(tx) {
 function answerFor(req, results) {
   return {
     spec: POC_SPEC, tier: 'C', challenge: req.zkagent.challenge,
-    answers: req.zkagent.predicates.map((p, i) => ({ name: p.name, months: p.months, result: results[i] })),
+    answers: req.zkagent.predicates.map((p, i) => {
+      const a = { name: p.name };
+      if (p.months !== undefined) a.months = p.months;
+      if (p.age !== undefined) a.age = p.age;
+      return { ...a, result: results[i] };
+    }),
   };
 }
 
@@ -222,4 +227,122 @@ test('the CLI helper --launch runs force-stop THEN the quoted launch, and --wait
   assert.ok(lines[start].endsWith("' -p com.zkagent.scanner"));
   assert.match(out, /RESULT status=pending/);
   assert.doesNotMatch(out, /expiry_beyond:\d+=(true|false)/, 'nothing was answered, so no answer may be printed');
+});
+
+// ---------------------------------------------------------------- chunk 1: all five predicate kinds in one request
+
+const ALL_FIVE = [
+  { name: 'expiry_beyond', months: 6 },
+  { name: 'dob_at_least', age: 21 },
+  { name: 'nationality_is', code: 'nld' },
+  { name: 'nationality_not_in', codes: ['cub', 'rus'] },
+  { name: 'name_match', given_names: 'Zqxjw Pl', surname: 'Vbnmlk' },
+  { name: 'document_number_is', number: 'ZZ9988776' },
+];
+
+test('one request carries all five predicate kinds (six predicates), signed, and the answer comes back per predicate in order', async () => {
+  const res = await create({ mode: 'C', predicates: ALL_FIVE });
+  assert.equal(res.status, 201);
+  const tx = await res.json();
+  const req = await requestObject(tx);
+  assert.deepEqual(req.zkagent.predicates.map((p) => p.name),
+    ['expiry_beyond', 'dob_at_least', 'nationality_is', 'nationality_not_in', 'name_match', 'document_number_is']);
+  assert.deepEqual(req.zkagent.predicates[2], { name: 'nationality_is', code: 'NLD' }, 'codes are upper-cased');
+  assert.deepEqual(req.zkagent.predicates[4], { name: 'name_match', given_names: 'Zqxjw Pl', surname: 'Vbnmlk' }, 'two labelled fields');
+  assert.equal('threshold' in req.zkagent.challenge, false);
+  assert.equal((await post(req, answerFor(req, [true, false, true, true, true, false]))).status, 200);
+  const s = await poll(tx);
+  assert.equal(s.verdict.ok, true);
+  assert.equal(s.verdict.allowed, true);
+  assert.deepEqual(s.verdict.answers, [
+    { name: 'expiry_beyond', months: 6, result: true },
+    { name: 'dob_at_least', age: 21, result: false },
+    { name: 'nationality_is', result: true },
+    { name: 'nationality_not_in', result: true },
+    { name: 'name_match', result: true },
+    { name: 'document_number_is', result: false },
+  ]);
+  // the verdict the verifier keeps carries no site-supplied value
+  const kept = JSON.stringify(s.verdict);
+  for (const secret of ['Zqxjw', 'Vbnmlk', 'ZZ9988776', 'CUB', 'RUS', 'NLD']) assert.equal(kept.includes(secret), false, secret);
+});
+
+test('validatePredicates: every kind validates, and each bad shape is refused beside the passing control', () => {
+  assert.equal(validatePredicates(ALL_FIVE).ok, true); // control
+  const bad = [
+    [{ name: 'dob_at_least', age: 19 }], [{ name: 'dob_at_least', age: '18' }], [{ name: 'expiry_beyond', months: 24 }],
+    [{ name: 'nationality_is', code: 'N1D' }], [{ name: 'nationality_is', code: 'NLDX' }], [{ name: 'nationality_not_in', codes: [] }],
+    [{ name: 'nationality_not_in', codes: Array.from({ length: 11 }, () => 'CUB') }],
+    [{ name: 'nationality_not_in', codes: ['CUB', 5] }],
+    [{ name: 'name_match', given_names: 'Jan' }], [{ name: 'name_match', surname: 'Vries' }], [{ name: 'name_match', given_names: ' ', surname: 'x' }],
+    [{ name: 'document_number_is', number: '' }], [{ name: 'document_number_is', number: '<<<' }], [{ name: 'shoe_size' }],
+  ];
+  let refused = 0;
+  for (const b of bad) { assert.equal(validatePredicates(b).ok, false, JSON.stringify(b)); refused += 1; }
+  assert.equal(refused, bad.length);
+  assert.ok(refused > 0);
+  assert.equal(validatePredicates([{ name: 'nationality_not_in', codes: Array.from({ length: 10 }, () => 'CUB') }]).ok, true); // cap is 10
+  assert.equal(validatePredicates([{ name: 'nationality_is', code: 'D' }]).ok, true, 'ICAO special code is valid');
+});
+
+test('negatives for the new kinds: a wrong boundary, a wrong order and a missing answer are real noes', async () => {
+  const mk = async () => { const tx = await (await create({ mode: 'C', predicates: ALL_FIVE })).json(); return [tx, await requestObject(tx)]; };
+  const cases = [];
+  { const [tx, req] = await mk(); const p = answerFor(req, [true, true, true, true, true, true]); p.answers[1].age = 18;
+    cases.push([tx, req, p, 'answers_do_not_match_request']); }
+  { const [tx, req] = await mk(); const p = answerFor(req, [true, true, true, true, true, true]); [p.answers[2], p.answers[3]] = [p.answers[3], p.answers[2]];
+    cases.push([tx, req, p, 'answers_do_not_match_request']); }
+  { const [tx, req] = await mk(); const p = answerFor(req, [true, true, true, true, true, true]); p.answers.pop();
+    cases.push([tx, req, p, 'answers_do_not_match_request']); }
+  { const [tx, req] = await mk(); const p = answerFor(req, [true, true, true, true, true, true]); p.answers[0].age = 18; // a boundary of the wrong kind
+    cases.push([tx, req, p, 'answers_do_not_match_request']); }
+  assert.ok(cases.length > 0);
+  for (const [tx, req, presentation, reason] of cases) {
+    await post(req, presentation);
+    const s = await poll(tx);
+    assert.equal(s.verdict.ok, true);
+    assert.equal(s.verdict.allowed, false, reason);
+    assert.equal(s.verdict.reason, reason);
+  }
+  const [tx, req] = await mk(); // paired pass
+  await post(req, answerFor(req, [true, true, true, true, true, true]));
+  assert.equal((await poll(tx)).verdict.allowed, true);
+});
+
+test('logging: no name, number or code is ever logged by the verifier for an all-five request', async () => {
+  const lines = [];
+  const orig = console.log;
+  console.log = (...a) => { lines.push(a.join(' ')); };
+  try {
+    const tx = await (await create({ mode: 'C', predicates: ALL_FIVE })).json();
+    const req = await requestObject(tx);
+    await post(req, answerFor(req, [true, true, true, true, true, true]));
+  } finally { console.log = orig; }
+  const all = lines.join('\n');
+  assert.match(all, /tx created transactionId=\S+ mode=C ttlMs=\d+ predicates=expiry_beyond:6,dob_at_least:21,nationality_is,nationality_not_in,name_match,document_number_is/);
+  assert.match(all, /answered=expiry_beyond:6=true,dob_at_least:21=true,nationality_is=true/);
+  for (const secret of ['Zqxjw', 'Vbnmlk', 'ZZ9988776', 'CUB', 'RUS', 'NLD']) assert.equal(all.includes(secret), false, secret);
+  assert.ok(lines.length >= 2);
+});
+
+test('the CLI helper builds the five kinds from flags and --ttl reaches the verifier; it never prints a value', async () => {
+  const script = fileURLToPath(new URL('../scripts/tierc-poc-request.mjs', import.meta.url));
+  const u = new URL(srv.url);
+  const seen = [];
+  const orig = console.log;
+  console.log = (...a) => { seen.push(a.join(' ')); };
+  let out;
+  try {
+    ({ stdout: out } = await promisify(execFile)(process.execPath, [script, '--tier', 'C', '--host', u.hostname, '--port', u.port,
+      '--months', '6', '--age', '21', '--nationality-is', 'nld', '--nationality-not-in', 'cub,rus', '--ttl', '300'],
+    { env: { ...process.env, TIERC_GIVEN_NAMES: 'Zqxjw Pl', TIERC_SURNAME: 'Vbnmlk', TIERC_DOC_NUMBER: 'ZZ9988776' }, encoding: 'utf8' }));
+  } finally { console.log = orig; }
+  assert.ok(seen.some((l) => l.includes('mode=C ttlMs=300000')), 'the 300 s lifetime reached the verifier');
+  assert.match(out, /asks=expiry_beyond:6,dob_at_least:21,nationality_is,nationality_not_in,name_match,document_number_is ttl_s=300/);
+  for (const secret of ['Zqxjw', 'Vbnmlk', 'ZZ9988776', 'CUB', 'RUS', 'NLD', 'nld', 'cub']) assert.equal(out.includes(secret), false, secret);
+  // the transaction really was made with a 300 s lifetime
+  const txId = /transaction=(\S+)/.exec(out)[1];
+  assert.ok(txId.length > 5);
+  // a lone --given-names without --surname is a usage error, not a half request
+  await assert.rejects(promisify(execFile)(process.execPath, [script, '--tier', 'C', '--host', u.hostname, '--port', u.port, '--given-names', 'x']));
 });

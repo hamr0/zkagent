@@ -50,7 +50,7 @@ import { DEV_REQUEST_SIGNER } from './dev-request-signer-key.mjs';
 import { JsonFileStore, defaultStorePath } from './store.mjs';
 // M3b opening POC (milestones.md §6.9.1): the minimal tier-C round trip. POC-local, NOT chiproof; see the module.
 import {
-  validatePredicates, issueTierCChallenge, buildTierCRequestMember, verifyTierCPoc, describeVerdictForLog,
+  validatePredicates, issueTierCChallenge, buildTierCRequestMember, verifyTierCPoc, describeVerdictForLog, predicateLabel,
 } from './tierc-poc.mjs';
 
 // D31 (2026-09-01): the verifier accepts EITHER attester-sig plug, not one
@@ -595,7 +595,7 @@ export function createApp() {
       // eslint-disable-next-line no-console
       console.log(
         mode === 'C'
-          ? `[apps/demo] tx created transactionId=${transactionId} mode=C ttlMs=${ttlMs} predicates=${tierC.predicates.map((p) => `${p.name}:${p.months}`).join(',')}`
+          ? `[apps/demo] tx created transactionId=${transactionId} mode=C ttlMs=${ttlMs} predicates=${tierC.predicates.map((p) => predicateLabel(p)).join(',')}`
           : `[apps/demo] tx created transactionId=${transactionId} mode=${mode} ttlMs=${ttlMs} threshold=${THRESHOLD} embedded_threshold=${challenge.threshold}`,
       );
 
