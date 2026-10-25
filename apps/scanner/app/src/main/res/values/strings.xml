@@ -41,11 +41,6 @@
     <string name="button_lock_and_scan">Scan</string>
     <string name="button_masterlist_probe">Run masterlist checks (no tap needed)</string>
     <string name="button_devicekey_probe">Run device key self-test (no tap needed)</string>
-    <!-- M3b opening POC (milestones.md §6.9.1). Item 7: the one holder setting, OFF by default. -->
-    <string name="switch_allow_additional_verifications">Allow additional verifications</string>
-    <string name="input_probe_name">Tier-C probe: your name, typed as a person would</string>
-    <string name="input_probe_nationality">Tier-C probe: nationality code as printed in the MRZ</string>
-    <string name="button_tierc_probe">Arm tier-C probe (uses the Scan-tab details)</string>
     <!-- §6.2 item 23 (D70(b)) — empties the persisted, value-free log
          (memory + disk); see MainActivity.clearLog(). -->
     <string name="button_clear_log">Clear log</string>
@@ -77,6 +72,7 @@
     <string name="tab_scan">Scan</string>
     <string name="tab_log">Log</string>
     <string name="tab_diagnostics">Diagnostics</string>
+    <string name="tab_settings">Settings</string>
 
     <!-- §6.2 item 15 (D43) — blocking acknowledgment dialogs -->
     <string name="dialog_ok">OK</string>

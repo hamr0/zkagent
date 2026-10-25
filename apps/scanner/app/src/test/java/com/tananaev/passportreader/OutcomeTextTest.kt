@@ -52,7 +52,7 @@ class OutcomeTextTest {
     @Test
     fun `mode C names a tier-C scan as answering questions, never as anonymous`() {
         val result = OutcomeText.withModeSentence("Delivered.", SessionDisplay.LockedMode.C)
-        assertEquals("Delivered. This scan was Mode C, answers named questions about your document.", result)
+        assertEquals("Delivered. This scan answered specific questions about your document.", result)
         assertTrue(!result.contains("anonymous"))
     }
 }

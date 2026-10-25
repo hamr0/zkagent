@@ -3,7 +3,6 @@ package com.tananaev.passportreader
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -199,97 +198,121 @@ class TierCPredicatesTest {
         assertEquals("", TierCPredicates.normalizeName("<<<"))
     }
 
-    @Test
-    fun `order is a caller choice and each order matches only its own arrangement`() {
-        val f = fields(primary = "DE VRIES", secondary = "JAN<PIETER")
-        // given names first, as a person types it
-        assertEquals(Answer.True, TierCPredicates.nameMatches("Jan Pieter de Vries", f, NameOrder.GIVEN_FIRST))
-        assertEquals(Answer.False, TierCPredicates.nameMatches("Jan Pieter de Vries", f, NameOrder.SURNAME_FIRST))
-        // surname first, as the MRZ prints it
-        assertEquals(Answer.True, TierCPredicates.nameMatches("DE VRIES JAN PIETER", f, NameOrder.SURNAME_FIRST))
-        assertEquals(Answer.False, TierCPredicates.nameMatches("DE VRIES JAN PIETER", f, NameOrder.GIVEN_FIRST))
-    }
+    // ---------------------------------------------------------------- name match (D101, D109(k))
+    // Every document and site string below is SYNTHETIC. Expected values are written by hand from the ICAO Part 3
+    // forms; none is read from TierCNameMatch's own table.
+
+    private fun name(given: String, surname: String, docGiven: String?, docSurname: String?): Answer =
+        TierCPredicates.nameMatches(given, surname, fields(primary = docSurname, secondary = docGiven))
 
     @Test
-    fun `a one-character change is a real false under both orders, with the unchanged name as the paired pass`() {
+    fun `two fields - both must match, given names in full, with each half failing alone beside the paired pass`() {
         val f = fields(primary = "DE VRIES", secondary = "JAN<PIETER")
+        assertEquals(Answer.True, TierCPredicates.nameMatches("Jan Pieter", "de Vries", f)) // pass pair
         var excluded = 0
-        for (order in NameOrder.values()) {
-            val typed = if (order == NameOrder.GIVEN_FIRST) "Jan Pieter de Vries" else "de Vries Jan Pieter"
-            val changed = TierCProbe.mutateOneCharacter(typed)!!
-            assertNotEquals(typed, changed)
-            assertEquals(Answer.True, TierCPredicates.nameMatches(typed, f, order))   // pass
-            assertEquals(Answer.False, TierCPredicates.nameMatches(changed, f, order)) // exclusion
+        for ((g, s) in listOf("Jan Pieter" to "de Vrees", "Jan Pietr" to "de Vries", "Jan" to "de Vries", "Pieter Jan" to "de Vries", "Jan Pieter Karel" to "de Vries")) {
+            assertEquals("$g/$s", Answer.False, TierCPredicates.nameMatches(g, s, f))
             excluded++
         }
-        assertEquals(2, excluded)
+        assertEquals(5, excluded)
+        // the fields are not interchangeable: surname typed as given names does not match
+        assertEquals(Answer.False, TierCPredicates.nameMatches("de Vries", "Jan Pieter", f))
     }
 
     @Test
     fun `the four D101 rules each match on their own`() {
         val f = fields(primary = "MULLER", secondary = "JEAN<PIERRE")
-        assertEquals(Answer.True, TierCPredicates.nameMatches("jean pierre muller", f, NameOrder.GIVEN_FIRST))   // case
-        assertEquals(Answer.True, TierCPredicates.nameMatches("Jean-Pierre Müller", f, NameOrder.GIVEN_FIRST))   // hyphen + accent
-        assertEquals(Answer.True, TierCPredicates.nameMatches("JEAN<PIERRE<MULLER", f, NameOrder.GIVEN_FIRST))   // angle filler
-        assertEquals(Answer.False, TierCPredicates.nameMatches("Jean Pierre Mueller", f, NameOrder.GIVEN_FIRST)) // ICAO UE is NOT the accent rule
+        assertEquals(Answer.True, TierCPredicates.nameMatches("jean pierre", "muller", f))        // case
+        assertEquals(Answer.True, TierCPredicates.nameMatches("Jean-Pierre", "Müller", f))        // hyphen + umlaut as plain letter
+        assertEquals(Answer.True, TierCPredicates.nameMatches("JEAN<PIERRE", "MULLER", f))        // angle filler in the site string
+        assertEquals(Answer.True, TierCPredicates.nameMatches("Jean\u2010Pierre", "Muller", f))   // unicode hyphen
+        assertEquals(Answer.False, TierCPredicates.nameMatches("JeanPierre", "Muller", f))        // hyphen is a separator, not deleted
+        assertEquals(Answer.True, TierCPredicates.nameMatches("Jose", "X", fields(primary = "X", secondary = "JOSE")))
+        assertEquals(Answer.True, TierCPredicates.nameMatches("Jos\u00e9", "X", fields(primary = "X", secondary = "JOSE")))  // accent, composed
+        assertEquals(Answer.True, TierCPredicates.nameMatches("Jose\u0301", "X", fields(primary = "X", secondary = "JOSE"))) // accent, decomposed
     }
 
     @Test
-    fun `UNRULED edge cases are pinned as current behaviour only, not as a ruling`() {
-        // D101 does not name these; the POC reports and does not rule (§6.9.1 criterion 2). The assertions record what
-        // the code does TODAY so a change is visible; none of them says what the behaviour SHOULD be.
-        // ICAO writes ß as SS, Ø as O, Æ as AE, and omits apostrophes. This code leaves ß/Ø/Æ/' alone.
-        assertEquals(Answer.False, TierCPredicates.nameMatches("Strauß", fields(primary = "STRAUSS", secondary = null), NameOrder.GIVEN_FIRST))
-        assertEquals(Answer.False, TierCPredicates.nameMatches("Søren X", fields(primary = "X", secondary = "SOREN"), NameOrder.GIVEN_FIRST))
-        assertEquals(Answer.False, TierCPredicates.nameMatches("O'Brien", fields(primary = "OBRIEN", secondary = null), NameOrder.GIVEN_FIRST))
-        // control: the same names typed the way the MRZ prints them do match, so the lines above are real exclusions.
-        assertEquals(Answer.True, TierCPredicates.nameMatches("Strauss", fields(primary = "STRAUSS", secondary = null), NameOrder.GIVEN_FIRST))
-        assertEquals(Answer.True, TierCPredicates.nameMatches("Soren X", fields(primary = "X", secondary = "SOREN"), NameOrder.GIVEN_FIRST))
-        assertEquals(Answer.True, TierCPredicates.nameMatches("OBrien", fields(primary = "OBRIEN", secondary = null), NameOrder.GIVEN_FIRST))
+    fun `SYNTHETIC ICAO transliteration table - one row per mapping, each beside its excluded neighbour`() {
+        // (site given, site surname, doc given, doc surname, expected). Document forms are what ICAO Part 3 lets a state print.
+        data class Row(val g: String, val s: String, val dg: String?, val ds: String, val expect: Boolean, val why: String)
+        val rows = listOf(
+            // German umlauts: AE/OE/UE (German documents) AND plain A/O/U (other states) both accepted
+            Row("Hans", "Müller", "HANS", "MUELLER", true, "u-umlaut as UE"),
+            Row("Hans", "Müller", "HANS", "MULLER", true, "u-umlaut as U"),
+            Row("Hans", "Mueller", "HANS", "MUELLER", true, "site already wrote UE"),
+            Row("Hans", "Mueller", "HANS", "MULLER", false, "site UE does not collapse to U"),
+            Row("Hans", "Müller", "HANS", "MUELER", false, "one letter short"),
+            Row("Jörg", "Schmidt", "JOERG", "SCHMIDT", true, "o-umlaut as OE"),
+            Row("Jörg", "Schmidt", "JORG", "SCHMIDT", true, "o-umlaut as O"),
+            Row("Jörg", "Schmidt", "JEORG", "SCHMIDT", false, "wrong letter"),
+            Row("Käthe", "Schmidt", "KAETHE", "SCHMIDT", true, "a-umlaut as AE"),
+            Row("Käthe", "Schmidt", "KATHE", "SCHMIDT", true, "a-umlaut as A"),
+            Row("Käthe", "Schmidt", "KAATHE", "SCHMIDT", false, "AA is not the umlaut form"),
+            Row("Käse", "Schmidt", "KAESE", "SCHMIDT", true, "ambiguous char, long form"),
+            Row("Käse", "Schmidt", "KASE", "SCHMIDT", true, "ambiguous char, short form"),
+            Row("Käse", "Schmidt", "KAEESE", "SCHMIDT", false, "too long for either form"),
+            // sharp s, ligature AE, O-slash, A-ring, thorn
+            Row("Hans", "Strauß", "HANS", "STRAUSS", true, "sharp s as SS"),
+            Row("Hans", "Strauss", "HANS", "STRAUSS", true, "site already wrote SS"),
+            Row("Hans", "Strauß", "HANS", "STRAUS", false, "sharp s is two letters"),
+            Row("Ægir", "Holm", "AEGIR", "HOLM", true, "AE ligature as AE"),
+            Row("Ægir", "Holm", "EGIR", "HOLM", false, "AE ligature is not E"),
+            Row("Søren", "Holm", "SOEREN", "HOLM", true, "O-slash as OE"),
+            Row("Søren", "Holm", "SOREN", "HOLM", true, "O-slash as O"),
+            Row("Søren", "Holm", "SEREN", "HOLM", false, "O-slash is not E"),
+            Row("Åse", "Holm", "AASE", "HOLM", true, "A-ring as AA"),
+            Row("Åse", "Holm", "ASE", "HOLM", true, "A-ring as A (accent strip)"),
+            Row("Þór", "Holm", "THOR", "HOLM", true, "thorn as TH, o-acute as O"),
+            Row("Þór", "Holm", "TOR", "HOLM", false, "thorn is not T"),
+            // apostrophe dropped, other diacritics stripped
+            Row("Sean", "O'Brien", "SEAN", "OBRIEN", true, "ascii apostrophe dropped"),
+            Row("Sean", "O\u2019Brien", "SEAN", "OBRIEN", true, "typographic apostrophe dropped"),
+            Row("Sean", "O'Brien", "SEAN", "O BRIEN", false, "apostrophe is not a space"),
+            Row("François", "Lefèvre", "FRANCOIS", "LEFEVRE", true, "cedilla and grave stripped"),
+            Row("Zoë", "Da Silva", "ZOE", "DA SILVA", true, "diaeresis on e stripped"),
+        )
+        var excluded = 0
+        var confirmed = 0
+        for (r in rows) {
+            val got = name(r.g, r.s, r.dg, r.ds)
+            assertEquals(r.why, Answer.of(r.expect), got)
+            if (r.expect) confirmed++ else excluded++
+        }
+        assertTrue(excluded > 0 && confirmed > 0)
+        assertEquals(rows.size, excluded + confirmed)
     }
 
     @Test
-    fun `a name truncated by the MRZ field cannot match its full typed form (disclosed limitation 17(d))`() {
+    fun `many ambiguous characters stay fast and still decide correctly`() {
+        // 300 a-umlauts: each may be A or AE. 300 'A' is one valid reading; 300 'AE' another; 'AAE...' a mix; 301 'A' is none.
+        val site = "\u00c4".repeat(300)
+        val f = { s: String -> fields(primary = "X", secondary = s) }
+        assertEquals(Answer.True, TierCPredicates.nameMatches(site, "X", f("A".repeat(300))))
+        assertEquals(Answer.True, TierCPredicates.nameMatches(site, "X", f("AE".repeat(300))))
+        assertEquals(Answer.True, TierCPredicates.nameMatches(site, "X", f("A".repeat(150) + "AE".repeat(150))))
+        assertEquals(Answer.False, TierCPredicates.nameMatches(site, "X", f("A".repeat(301))))
+        assertEquals(Answer.False, TierCPredicates.nameMatches(site, "X", f("AE".repeat(300) + "E")))
+    }
+
+    @Test
+    fun `a name truncated by the MRZ field cannot match its full form (disclosed limitation 17(d))`() {
         // TD1 name field is 30 chars; the chip holds only the first 30 of this long name.
-        val full = "Alexandra Wilhelmina Sophia de Vries van der Berg" // typed in full
-        val truncatedSecondary = "ALEXANDRA<WILHELMINA" // what fits after "DE VRIES VAN DER BERG<<" in 30 chars
-        val f = fields(primary = "DE VRIES VAN DER BERG", secondary = truncatedSecondary, form = TierCFields.MrzForm.TD1)
-        assertEquals(Answer.False, TierCPredicates.nameMatches(full, f, NameOrder.GIVEN_FIRST))
-        assertEquals(Answer.True, TierCPredicates.nameMatches("Alexandra Wilhelmina de Vries van der Berg", f, NameOrder.GIVEN_FIRST)) // pass: the part that fits
-        val obs = TierCPredicates.observeName(f)!!
-        assertEquals(true, obs.atCapacity) // 21 + 2 + 20 = 43 >= 30
+        val f = fields(primary = "DE VRIES VAN DER BERG", secondary = "ALEXANDRA<WILHELMINA", form = TierCFields.MrzForm.TD1)
+        assertEquals(Answer.False, TierCPredicates.nameMatches("Alexandra Wilhelmina Sophia", "de Vries van der Berg", f))
+        assertEquals(Answer.True, TierCPredicates.nameMatches("Alexandra Wilhelmina", "de Vries van der Berg", f)) // pass: the part that fits
     }
 
     @Test
-    fun `a missing primary identifier is cannot tell and a mononym is legitimate`() {
-        assertTrue(TierCPredicates.nameMatches("X", fields(primary = null), NameOrder.GIVEN_FIRST) is Answer.CannotTell)
-        assertTrue(TierCPredicates.nameMatches("", fields(), NameOrder.GIVEN_FIRST) is Answer.CannotTell)
-        assertEquals(Answer.True, TierCPredicates.nameMatches("Sukarno", fields(primary = "SUKARNO", secondary = null), NameOrder.GIVEN_FIRST))
-    }
-
-    // ---------------------------------------------------------------- name observations (criterion 2)
-
-    @Test
-    fun `name observation reports capacity by MRZ form and the separator shapes`() {
-        val short = TierCPredicates.observeName(fields(primary = "DE VRIES", secondary = "JAN<PIETER", form = TierCFields.MrzForm.TD1))!!
-        assertEquals(true, short.lengthKnown)
-        assertEquals(false, short.atCapacity)       // 8 + 2 + 10 = 20 < 30
-        assertTrue(short.usesAngleFiller)           // JAN<PIETER
-        assertTrue(short.usesSpaceSeparator)        // DE VRIES
-        assertFalse(short.containsHyphen)
-        assertTrue(short.allAscii)
-        assertTrue(short.hasSecondary)
-        // the same name field is ALSO under a TD3 passport's 39
-        assertEquals(false, TierCPredicates.observeName(fields(form = TierCFields.MrzForm.TD3))!!.atCapacity)
-        // exactly at capacity on TD1: 8 + 2 + 20 = 30
-        val atCap = TierCPredicates.observeName(fields(primary = "DE VRIES", secondary = "A".repeat(20), form = TierCFields.MrzForm.TD1))!!
-        assertEquals(true, atCap.atCapacity)
-        assertEquals(false, TierCPredicates.observeName(fields(primary = "DE VRIES", secondary = "A".repeat(19), form = TierCFields.MrzForm.TD1))!!.atCapacity)
-        // unknown form: capacity cannot be judged, and says so rather than guessing
-        val unknown = TierCPredicates.observeName(fields(form = TierCFields.MrzForm.UNKNOWN))!!
-        assertEquals(false, unknown.lengthKnown)
-        assertNull(unknown.atCapacity)
-        assertNull(TierCPredicates.observeName(fields(primary = null)))
+    fun `a missing primary identifier or an empty site field is cannot tell, and a mononym document is a real false`() {
+        assertTrue(TierCPredicates.nameMatches("X", "Y", fields(primary = null)) is Answer.CannotTell)
+        assertTrue(TierCPredicates.nameMatches("", "DE VRIES", fields()) is Answer.CannotTell)
+        assertTrue(TierCPredicates.nameMatches("Jan", "  ", fields()) is Answer.CannotTell)
+        assertTrue(TierCPredicates.nameMatches("'", "DE VRIES", fields()) is Answer.CannotTell) // only an apostrophe: nothing to compare
+        // pass pair: complete input on the same fields is a real answer
+        assertEquals(Answer.True, TierCPredicates.nameMatches("Jan Pieter", "de Vries", fields()))
+        // a document with no given names: a site that sends given names gets a real false, never a refusal
+        assertEquals(Answer.False, TierCPredicates.nameMatches("Sukarno", "Sukarno", fields(primary = "SUKARNO", secondary = null)))
     }
 
     // ---------------------------------------------------------------- fields never print

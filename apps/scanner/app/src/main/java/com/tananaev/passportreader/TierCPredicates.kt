@@ -85,10 +85,6 @@ sealed class Answer {
     }
 }
 
-/** How a typed or site-supplied full name is ordered against the MRZ name (§6.9.1
- * leaves this open; see [TierCPredicates.nameMatches]). */
-enum class NameOrder { GIVEN_FIRST, SURNAME_FIRST }
-
 /**
  * The five item-8 predicate evaluators as pure functions of ([TierCFields],
  * coarsened current date). Boundary lists are FIXED (item 9, D95/D97): an
@@ -145,6 +141,14 @@ object TierCPredicates {
         return Answer.of(over)
     }
 
+    /** A site-supplied nationality code, normalised, or null if it is not 1 to 3 letters A-Z (an ICAO special code
+     * such as `D` is valid and stays its own value, D109(g)3). */
+    fun validCode(code: String?): String? {
+        if (code == null) return null
+        val c = normalizeCode(code)
+        return if (c.isEmpty() || c.length > 3 || !c.all { it in 'A'..'Z' }) null else c
+    }
+
     private fun normalizeCode(code: String): String = code.trim().trimEnd('<').uppercase(Locale.ROOT)
 
     /** Nationality, confirmation mode: TRUE iff the holder's nationality code equals [claimed]
@@ -181,10 +185,9 @@ object TierCPredicates {
      * one-for-one (`Char.uppercaseChar`, never a locale or multi-character expansion); collapse runs
      * of whitespace.
      *
-     * Interpretations the owner may overturn (the POC reports, it does not rule): a hyphen is a
-     * SEPARATOR (so `Jean-Pierre` equals the MRZ's `JEAN<PIERRE`), not deleted; and characters D101 does
-     * not name are left alone: `ß`, `Ø`, `Æ` and apostrophes are NOT transliterated (ICAO writes `SS`,
-     * `O`, `AE` and omits apostrophes in the MRZ, so such names are an unruled gap, §6.9.1 criterion 2).
+     * A hyphen is a SEPARATOR (so `Jean-Pierre` equals the MRZ's `JEAN<PIERRE`, D109(k)3), not deleted.
+     * This is applied to the DOCUMENT side; the site's string goes through [TierCNameMatch], which also applies the
+     * ICAO Part 3 transliteration (ß, Ø, Æ, umlauts, apostrophes) before comparing.
      */
     fun normalizeName(raw: String): String {
         val sb = StringBuilder(raw.length)
@@ -198,58 +201,7 @@ object TierCPredicates {
         return sb.toString().trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
     }
 
-    /**
-     * Name match, boolean only (Q22: no score). The comparison is on the whole name as one string.
-     * WHICH ORDER a site's string follows (given names first, as a person types it, or surname first,
-     * as the MRZ prints it) is NOT ruled by D101 or §6.9.1, so the caller names the order and the POC
-     * probe evaluates both; this function does not choose one. A missing primary identifier is
-     * CannotTell; a missing secondary is legitimate (a mononym) and is simply absent.
-     */
-    fun nameMatches(claimed: String, fields: TierCFields, order: NameOrder): Answer {
-        val primary = fields.primaryIdentifier ?: return Answer.CannotTell("name_unreadable")
-        val given = fields.secondaryIdentifier.orEmpty()
-        val wanted = normalizeName(claimed)
-        if (wanted.isEmpty()) return Answer.CannotTell("claimed_invalid")
-        val document = normalizeName(
-            when (order) {
-                NameOrder.GIVEN_FIRST -> "$given $primary"
-                NameOrder.SURNAME_FIRST -> "$primary $given"
-            },
-        )
-        return Answer.of(wanted == document)
-    }
-
-    /**
-     * Value-free facts about the REAL name field, for §6.9.1 criterion 2: is it at its capacity
-     * (possible truncation, D101/17(d)), and which separator shapes does it show. Booleans and a
-     * length only.
-     */
-    data class NameObservation(
-        val lengthKnown: Boolean,
-        val atCapacity: Boolean?,
-        val usesAngleFiller: Boolean,
-        val usesSpaceSeparator: Boolean,
-        val containsHyphen: Boolean,
-        val allAscii: Boolean,
-        val hasSecondary: Boolean,
-    )
-
-    fun observeName(fields: TierCFields): NameObservation? {
-        val primary = fields.primaryIdentifier ?: return null
-        val secondary = fields.secondaryIdentifier
-        // MRZ name field = PRIMARY<<SECONDARY with word separators written as '<'; JMRTD returns the
-        // primary with spaces for those separators and the secondary with '<' kept.
-        val rawLength = primary.length + if (secondary != null) 2 + secondary.length else 0
-        val cap = fields.form.nameFieldCapacity
-        val all = primary + (secondary ?: "")
-        return NameObservation(
-            lengthKnown = cap != null,
-            atCapacity = cap?.let { rawLength >= it },
-            usesAngleFiller = all.contains('<'),
-            usesSpaceSeparator = all.contains(' '),
-            containsHyphen = all.contains('-'),
-            allAscii = all.all { it.code < 128 },
-            hasSecondary = secondary != null,
-        )
-    }
+    /** Name match, boolean only (Q22: no score), two labelled fields (D109(k)); see [TierCNameMatch]. */
+    fun nameMatches(givenNames: String, surname: String, fields: TierCFields): Answer =
+        TierCNameMatch.matches(givenNames, surname, fields)
 }

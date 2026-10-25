@@ -56,7 +56,11 @@ object ThresholdPolicy {
     /** Case-insensitive ASCII-lowercase EXACT match only — never a suffix
      * or regex match. `sub.example.com` and `xexample.com` never match an
      * allowlisted `example.com`. */
-    fun isExempt(hostname: String): Boolean = NAMED_EXCEPTIONS.contains(hostname.lowercase())
+    fun isExempt(hostname: String): Boolean = isExempt(hostname, NAMED_EXCEPTIONS)
+
+    /** Same match against an explicit list (so the exemption rows are testable with a non-empty list, since the
+     * reference build's list is empty). */
+    fun isExempt(hostname: String, exemptHosts: Set<String>): Boolean = exemptHosts.contains(hostname.lowercase())
 
     sealed class Decision {
         /** Admit — the threshold is a preset, and either no lock exists yet
@@ -85,11 +89,19 @@ object ThresholdPolicy {
      */
     fun evaluate(hostname: String, requestedThreshold: Int, lockedThreshold: Int?): Decision {
         if (!isPreset(requestedThreshold)) return Decision.RefuseNotPreset(requestedThreshold)
-        if (lockedThreshold != null && lockedThreshold != requestedThreshold && !isExempt(hostname)) {
-            return Decision.RefuseDifferentThreshold(lockedThreshold, requestedThreshold)
+        return if (conflictsWithLock(hostname, requestedThreshold, lockedThreshold)) {
+            Decision.RefuseDifferentThreshold(lockedThreshold!!, requestedThreshold)
+        } else {
+            Decision.Admit
         }
-        return Decision.Admit
     }
+
+    /** Rule 2 on its own: true iff [hostname] already locked a DIFFERENT age and is not exempt. The ONE
+     * implementation of the lock comparison, shared by [evaluate] (tiers A and B) and the tier-C
+     * date-of-birth-range predicate ([TierCAdmission], D109(i)3): there is one map and one rule, not two.
+     * Does not check rule 1 (the tier-C boundary list is its own fixed list, item 9). */
+    fun conflictsWithLock(hostname: String, requestedAge: Int, lockedAge: Int?, exemptHosts: Set<String> = NAMED_EXCEPTIONS): Boolean =
+        lockedAge != null && lockedAge != requestedAge && !isExempt(hostname, exemptHosts)
 
     /** Whether [hostname]'s first-seen threshold should now be recorded —
      * true only on genuine first sight (no existing lock) for a
@@ -99,8 +111,8 @@ object ThresholdPolicy {
      * arguments — this function does not re-check rule 1. The lock MUST be
      * written only when a request is ACCEPTED as pending (first-seen),
      * never on a refusal. */
-    fun shouldRecordLock(hostname: String, lockedThreshold: Int?): Boolean =
-        lockedThreshold == null && !isExempt(hostname)
+    fun shouldRecordLock(hostname: String, lockedThreshold: Int?, exemptHosts: Set<String> = NAMED_EXCEPTIONS): Boolean =
+        lockedThreshold == null && !isExempt(hostname, exemptHosts)
 
     /** Extracts the lowercased hostname from an already-verified origin
      * string (`scheme://host:port`, [RequestTrust.originOf]'s shape) — or

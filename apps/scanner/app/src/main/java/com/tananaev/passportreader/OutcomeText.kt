@@ -47,6 +47,8 @@ object OutcomeText {
      */
     fun withModeSentence(message: String, locked: SessionDisplay.LockedMode?): String {
         val mode = locked ?: return message
+        // M3b chunk 1 (finding #27): tier C gets plain wording, not "Mode C, ...".
+        if (mode == SessionDisplay.LockedMode.C) return "$message ${TierCText.SCAN_SENTENCE}"
         val label = when (mode) {
             SessionDisplay.LockedMode.A -> "A"
             SessionDisplay.LockedMode.B -> "B"

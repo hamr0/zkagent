@@ -205,7 +205,11 @@ object SessionDisplay {
         val verified = handoff as? HandoffState.Verified ?: return MintPromptText.NO_HANDOFF_FALLBACK
         // M3b POC (item 7): a tier-C request shows the exact question(s) taken from the signed request,
         // never the age sentence, so what is shown is what will be sent.
-        if (verified.tier == "C") return "This website asks: ${verified.tierCLine ?: "something about your document"}"
+        if (verified.tier == "C") {
+            val line = verified.tierCLine ?: "something about your document"
+            // several predicates are bullets on their own lines; a single neutral phrase stays inline
+            return if (line.contains('\n') || line.startsWith("\u2022")) "This website asks:\n$line" else "This website asks: $line"
+        }
         val base = if (verified.threshold != null) {
             "This website asks if you are over ${verified.threshold}"
         } else {

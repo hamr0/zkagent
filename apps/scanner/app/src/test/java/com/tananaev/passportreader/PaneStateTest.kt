@@ -226,4 +226,23 @@ class PaneStateTest {
             PaneVisibility.choosePane(state.readInProgress, state.selectedTab),
         )
     }
+
+    // ---- M3b chunk 1: Settings tab
+
+    @Test
+    fun `the Settings tab can be selected, survives a recreate, and an admitted handoff intent returns to Scan`() {
+        val state = PaneState()
+        state.userSelectedTab(PaneState.TAB_SETTINGS)
+        assertEquals(PaneState.TAB_SETTINGS, state.selectedTab)
+        val recreated = PaneState()
+        recreated.restoreTabIndex(state.tabIndexToSave())
+        assertEquals(PaneState.TAB_SETTINGS, recreated.selectedTab)
+        assertEquals(PaneVisibility.Pane.SETTINGS, PaneVisibility.choosePane(recreated.readInProgress, recreated.selectedTab))
+        recreated.onIncomingHandoffIntent(admitted = true)
+        assertEquals(PaneState.TAB_SCAN, recreated.selectedTab)
+        // an unknown saved index still normalises to Scan
+        val other = PaneState()
+        other.restoreTabIndex(99)
+        assertEquals(PaneState.TAB_SCAN, other.selectedTab)
+    }
 }

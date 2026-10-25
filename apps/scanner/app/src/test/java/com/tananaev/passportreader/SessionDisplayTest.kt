@@ -405,11 +405,11 @@ class SessionDisplayTest {
 
     @Test
     fun `a locked tier-C session says Mode C and never the age sentence`() {
-        val line = "does your document expire more than 6 months from today"
+        val line = "\u2022 Whether your document is valid for more than 6 months from today"
         val verified = SessionDisplay.HandoffState.Verified("127.0.0.1:8787", "C", threshold = null, tierCLine = line)
         val p = SessionDisplay.render(locked = SessionDisplay.LockedMode.C, handoff = SessionDisplay.HandoffState.None, handoffDrivenLock = true, lockedQuestionHandoff = verified)
         assertEquals("Locked: mode C — tap your document now", p.modeStatusText)
-        assertEquals("This website asks: $line", p.questionText)
+        assertEquals("This website asks:\n$line", p.questionText)
         assertFalse(p.questionText.contains("over"))
     }
 
@@ -422,6 +422,9 @@ class SessionDisplayTest {
         // a tier-C request whose line could not be built still never prints an age sentence
         assertEquals("This website asks: something about your document",
             SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("h", "C")).questionText)
+        // several predicates: one bullet per line under the header, in request order
+        val multi = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("h", "C", tierCLine = "\u2022 first\n\u2022 second"))
+        assertEquals("This website asks:\n\u2022 first\n\u2022 second", multi.questionText)
         // control: tier B still gets the age sentence
         assertEquals("This website asks if you are over 18, and may recognise you again on this site",
             SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("h", "B", 18)).questionText)

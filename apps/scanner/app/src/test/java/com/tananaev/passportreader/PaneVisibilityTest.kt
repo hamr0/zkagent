@@ -1,6 +1,7 @@
 package com.tananaev.passportreader
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 /**
@@ -60,5 +61,16 @@ class PaneVisibilityTest {
     @Test
     fun `finishing a read while the Diagnostics tab is selected returns to DIAGNOSTICS`() {
         assertEquals(PaneVisibility.Pane.DIAGNOSTICS, PaneVisibility.choosePane(readInProgress = false, selectedTabPosition = 2))
+    }
+
+    // ---- M3b chunk 1: Settings tab (index 3)
+
+    @Test
+    fun `no read in progress, Settings tab selected, shows SETTINGS and a read still shows LOADING`() {
+        assertEquals(PaneVisibility.Pane.SETTINGS, PaneVisibility.choosePane(readInProgress = false, selectedTabPosition = 3))
+        assertEquals(PaneVisibility.Pane.LOADING, PaneVisibility.choosePane(readInProgress = true, selectedTabPosition = 3))
+        // the other three tabs are not Settings (non-vacuity of the new arm)
+        for (i in 0..2) assertNotEquals(PaneVisibility.Pane.SETTINGS, PaneVisibility.choosePane(false, i))
+        assertEquals(PaneVisibility.Pane.SCAN, PaneVisibility.choosePane(false, 4)) // beyond the last tab falls back to Scan
     }
 }

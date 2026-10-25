@@ -68,15 +68,16 @@ class MrzFieldsTest {
         val f = MrzFields.from(td3("SUKARNO"))
         assertEquals("SUKARNO", f.primaryIdentifier)
         assertNull(f.secondaryIdentifier)
-        assertEquals(TierCPredicates.observeName(f)!!.hasSecondary, false)
     }
 
     @Test
-    fun `the TD1 name field is judged against 30 and a full one is at capacity`() {
-        // DE VRIES<<  + 20 given-name characters = exactly 30
+    fun `the TD1 name field keeps its length through the adapter, so a full 30-character field is visible as such`() {
+        // DE VRIES<<  + 20 given-name characters = exactly 30; one fewer given-name character = 29
         val f = MrzFields.from(td1(name = "DE<VRIES<<" + "A".repeat(20)))
-        assertEquals(true, TierCPredicates.observeName(f)!!.atCapacity)
+        assertEquals(TierCFields.MrzForm.TD1, f.form)
+        assertEquals(30, f.form.nameFieldCapacity)
+        assertEquals(30, f.primaryIdentifier!!.length + 2 + f.secondaryIdentifier!!.length)
         val g = MrzFields.from(td1(name = "DE<VRIES<<" + "A".repeat(19)))
-        assertEquals(false, TierCPredicates.observeName(g)!!.atCapacity)
+        assertEquals(29, g.primaryIdentifier!!.length + 2 + g.secondaryIdentifier!!.length)
     }
 }

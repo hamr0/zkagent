@@ -41,7 +41,7 @@ object PaneVisibility {
     // of the scan pane into their own tab. Same "always names exactly ONE
     // pane" invariant this object's class doc already establishes — now
     // four overlapping siblings, still mutually exclusive by construction.
-    enum class Pane { SCAN, LOG, DIAGNOSTICS, LOADING }
+    enum class Pane { SCAN, LOG, DIAGNOSTICS, SETTINGS, LOADING }
 
     /**
      * @param readInProgress true while a chip read is in flight (mirrors
@@ -57,6 +57,7 @@ object PaneVisibility {
         readInProgress -> Pane.LOADING
         selectedTabPosition == 1 -> Pane.LOG
         selectedTabPosition == 2 -> Pane.DIAGNOSTICS
+        selectedTabPosition == 3 -> Pane.SETTINGS
         else -> Pane.SCAN
     }
 }

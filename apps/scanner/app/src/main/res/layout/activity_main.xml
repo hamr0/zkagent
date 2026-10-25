@@ -33,6 +33,7 @@
          HorizontalScrollView needed. -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tab_layout"
+        app:tabMode="auto"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
@@ -53,6 +54,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/tab_diagnostics" />
+
+        <com.google.android.material.tabs.TabItem
+            android:id="@+id/tab_settings"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/tab_settings" />
 
     </com.google.android.material.tabs.TabLayout>
 
@@ -470,60 +477,6 @@
                     android:layout_marginBottom="@dimen/activity_vertical_margin"
                     android:text="@string/button_devicekey_probe" />
 
-                <!-- M3b opening POC (milestones.md §6.9.1, D109(f)). Holder setting
-                     (item 7): the ONE switch, OFF by default. Placed here because no Settings
-                     tab exists yet; where it finally lives is a UI decision the POC does not make. -->
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switch_allow_additional"
-                    android:saveEnabled="false"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin"
-                    android:text="@string/switch_allow_additional_verifications" />
-
-                <!-- M3b POC, criteria 1-2: values the OWNER types here are held in memory for ONE
-                     read and never saved, logged or screenshotted. Do NOT accessibility-snapshot this
-                     tab while these fields hold text. -->
-                <com.google.android.material.textfield.TextInputLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/input_probe_name"
-                        android:saveEnabled="false"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="textPersonName|textNoSuggestions"
-                        android:importantForAutofill="no"
-                        android:hint="@string/input_probe_name" />
-
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/input_probe_nationality"
-                        android:saveEnabled="false"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="textCapCharacters|textNoSuggestions"
-                        android:importantForAutofill="no"
-                        android:maxLength="3"
-                        android:hint="@string/input_probe_nationality" />
-
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <Button
-                    android:id="@+id/button_tierc_probe"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin"
-                    android:text="@string/button_tierc_probe" />
-
                 <!-- Device fix (2026-09-05, round 4, "yield nothing when
                      pressed") — both probes RAN (confirmed in logcat) but
                      their output had nowhere to show on THIS tab: it went
@@ -541,6 +494,42 @@
                     android:textIsSelectable="true"
                     android:textSize="12sp"
                     android:text="" />
+
+            </LinearLayout>
+
+        </ScrollView>
+
+        <!-- M3b chunk 1 (item 7): the Settings tab. ONE holder setting, "Allow additional verifications", OFF by
+             default; its text is set from TierCText so the wording is unit-tested. When the build has tier C off
+             (operator.json), the switch is hidden and only the unavailable note shows. Hidden unless the "Settings"
+             tab is selected (MainActivity.showPane). -->
+        <ScrollView
+            android:id="@+id/settings_layout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingLeft="@dimen/activity_horizontal_margin"
+                android:paddingRight="@dimen/activity_horizontal_margin"
+                android:orientation="vertical">
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switch_allow_additional"
+                    android:saveEnabled="false"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/activity_vertical_margin"
+                    android:layout_marginBottom="@dimen/activity_vertical_margin" />
+
+                <TextView
+                    android:id="@+id/settings_help"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/activity_vertical_margin"
+                    android:textSize="14sp" />
 
             </LinearLayout>
 

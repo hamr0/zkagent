@@ -138,6 +138,7 @@ class PaneState {
     private fun normalizeTab(index: Int): Int = when (index) {
         TAB_LOG -> TAB_LOG
         TAB_DIAGNOSTICS -> TAB_DIAGNOSTICS
+        TAB_SETTINGS -> TAB_SETTINGS // M3b chunk 1: the holder's "Allow additional verifications" switch
         else -> TAB_SCAN
     }
 
@@ -145,5 +146,6 @@ class PaneState {
         const val TAB_SCAN = 0
         const val TAB_LOG = 1
         const val TAB_DIAGNOSTICS = 2
+        const val TAB_SETTINGS = 3
     }
 }
