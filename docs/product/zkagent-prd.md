@@ -10,11 +10,16 @@ sources: [docs/archive/zkagent-prd.md, docs/wiki/decisions.md D108]
 > **Status (2026-10-24, D108): complete experiment. Closed cleanly, not abandoned.**
 > v1 — rung 1, milestones M0–M3 — is delivered; current release **v0.7.1** (chiproof 0.7.1 on npm,
 > scanner APK on GitHub Releases); the next release is 0.8.0 and the project stays on 0.x (no 1.0).
-> The owner may revive it, reuse parts, or reuse the whole. Parked and unbuilt work (M3b tier C,
-> S4, Play track, rung 2, Track Z, and others) is listed in [`../wiki/backlog.md`](../wiki/backlog.md);
+> The owner may revive it, reuse parts, or reuse the whole. Parked and unbuilt work (S4,
+> Play track, rung 2, Track Z, and others) is listed in [`../wiki/backlog.md`](../wiki/backlog.md);
 > the liftable components are in [`reuse-map.md`](reuse-map.md). Success criteria and evidence:
 > §15 Close-out. NO-GO #10 (the scope gate) applies to any revival. The owner's agent-delegation work
 > now lives in the individual Internet-Draft `draft-hamr-oauth-agent-delegation` (no IETF endorsement).
+> **Update 2026-10-25 (D109, D109(h)): M3b / tier C was revived by the owner and is IN BUILD (approved
+> 2026-10-25, scope in `../wiki/milestones.md` §6.9); it is not built yet. D109(i) (2026-10-25) also
+> opens age verification (tiers A and B) to any site in the build's `operator.json` and shares one age
+> lock per site across tiers (§6.9.2 items 9 and 23); tier C stays gated behind the operator's list
+> and the holder's setting.**
 
 This page is the product specification of zkagent: the problem, what v1 is, the core invariant, the rung structure, goals/non-goals, requirements, and the NO-GO table. Milestones and build status live in `milestones.md`; owner decisions in `decisions.md`; open questions in `questions.md`; parked work in `backlog.md`; version history in `history.md` (all in `docs/wiki/`).
 
@@ -190,4 +195,4 @@ the wiki pages it points to.
 
 **Known limits, stated with the criteria.** Captcha-grade, not bank-grade (NO-GO #5). Chip-cloning is an accepted, disclosed limitation: "one human, one zktag" holds only where `chip_auth` is true (FR11, D29). Tier A is unsigned by design; the tier-B key comes from no configured trust source and is bound on first sight (D38, D78). v1 is not zero-knowledge (NO-GO #7). The reference scanner ships with no device-attestation plug (D27), so client identity is only the attester key (S4 in `backlog.md`).
 
-**Not delivered.** Everything in `backlog.md`: M3b/tier C (designed, never approved), §6.5 S4, the Play track, rung 2 (M4/M5), Track Z, the demo's own operator config, multi-threshold origins.
+**Not delivered.** Everything in `backlog.md`: M3b/tier C is no longer parked (revived 2026-10-25, IN BUILD, D109(h); not delivered yet), and the rest: §6.5 S4, the Play track, rung 2 (M4/M5), Track Z, the demo's own operator config, multi-threshold origins.

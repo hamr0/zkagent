@@ -10,8 +10,9 @@ sources: [docs/wiki/milestones.md, docs/wiki/decisions.md, docs/wiki/questions.m
 zkagent was closed on 2026-10-24 as a complete experiment (D108). v1 as the PRD defines it —
 rung 1, M0–M3, "and nothing else is" (`docs/product/zkagent-prd.md` §2, §4) — is delivered. This
 page is the one place that lists everything that was designed or discussed but not built. Nothing
-here is scheduled. **If any of it is revived, NO-GO #10 still applies: the owner approves the
-scope in the PRD first, then it is built.**
+here is scheduled, with one exception: M3b / tier C was revived and approved on 2026-10-25 (item 1,
+D109(h)) and is in build. **If any of the rest is revived, NO-GO #10 still applies: the owner
+approves the scope in the PRD first, then it is built.**
 
 Pointers: decisions in `decisions.md`, scope text in `milestones.md`, open-question triage in
 `questions.md`, findings in `.claude/remember/findings.md`, reusable parts in
@@ -19,17 +20,19 @@ Pointers: decisions in `decisions.md`, scope text in `milestones.md`, open-quest
 
 ## Parked items
 
-### 1. M3b / tier C (attributed disclosure) — complete design, never approved
+### 1. M3b / tier C (attributed disclosure) — REVIVED, IN BUILD (approved 2026-10-25, D109(h)); no longer parked
 
-Tier C answers identifying questions (expiry buckets, name match, date-of-birth range,
-nationality in two modes, document-number match) as booleans, only for a site whose issuer key is
-pinned in the app, with a holder-side consent list. Every decision point was ruled (D89–D106,
-plus D107), and `milestones.md` §6.9 turns them into a numbered build scope (an opening POC plus
-17 scope items, a traceability table, and a list of what is still open). The owner never approved
-§6.9, so under NO-GO #10 nothing was built. The scanner still refuses tier C (§6.2 item 13), and
-the README, customer guide and PRD describe tier C as designed and parked.
-**Why parked:** the owner closed the project instead of building further. Pointers: D19, D20,
-D74, D89–D107; `milestones.md` §6.4, §6.9; Q22, Q34, Q49; Q11 (tier-C residual).
+Was parked by D108 (2026-10-24). Kept at this number so older references resolve. The owner
+revived it (D109(a)) and approved the scope as amended on 2026-10-25 (D109(h)), which satisfies
+NO-GO #10 for that scope. Tier C answers identifying questions (expiry buckets, name match,
+date-of-birth range, nationality in two modes, document-number match) as booleans, only for a site
+whose exact hostname is pinned in the app build, and only when the holder has turned on one app
+setting, "Allow additional verifications" (OFF by default). All five questions are allowed to
+every pinned site, with no per-site question permissions and no caps in this build. Scope text:
+`milestones.md` §6.9 (an opening POC plus 15 scope items, including item 23, open age verification, D109(i)). Not built yet: the scanner still
+refuses tier C (§6.2 item 13) until the build lands. Pointers: D19, D20, D74, D89–D109;
+`milestones.md` §6.4, §6.9; Q22, Q34, Q49; Q11 (tier-C residual). The deferred pieces are items 8
+and 9 below.
 
 ### 2. §6.5 S4 — client trust list (FR10) via an attestation plug
 
@@ -86,6 +89,41 @@ One operator serving two thresholds (for example seniors and minors) from one ho
 scanner already supports an exact-hostname exception allowlist (`multi_threshold_verifiers`,
 default empty, D84). **Why deferred:** owner — "follows broad adoption", which did not happen.
 Pointers: D74, D82, D84; Q52.
+
+### 8. Per-site tier-C question permissions and limits (allowlist entries naming which questions a site may ask; caps such as 3 questions)
+
+Deferred by D109(h)2 and 5. In the tier-C build every pinned site may ask all five predicates with
+no cap. Later, a pin-list entry could name which questions that site may ask, and caps could
+bound how many a request or a site's lifetime may use (the owner floated 3). The design already
+exists in `milestones.md` §6.9.2 items 10 (per-presentation cap and per-origin lifetime predicate
+set), 11 (shared per-person ceiling) and 12 (Log-tab per-site lock view), kept as text with the
+numbers reserved; a holder-side "limit to 3-4 questions or assign certain questions" idea is in
+the owner's D109(h) words. Earlier decisions thereby deferred: D91, D93, D107(c), D107(d),
+D107(e). **Why deferred:** the owner chose a simpler binary control first (D109(h)3); the cost of
+no caps is disclosed limitation 17(k) (a pinned site can narrow facts down over repeated
+requests). Pointers: D109(h); `milestones.md` §6.9.2 items 10-12, 17(k).
+
+### 9. PROPOSAL / open question (not built, not scheduled): pin the site's request-signing key thumbprint as well as the hostname
+
+Today the tier-C pin is by exact hostname only (D109(g)1-2), so it trusts whoever controls that
+hostname's DNS and TLS (limitation 17(i), kept). The proposal is to also pin a thumbprint of the
+site's request-signing key per entry (the previously rejected option K), so a DNS or TLS takeover
+alone is not enough to pass the gate. Cost: a new APK on every site key rotation, plus a new
+entry shape and validation rules. Raised by the owner at D109(h)6 ("unless you see a workaround
+and would still go to backlog as a proposal or open question"); no ruling is pending and nothing
+is decided. Pointers: D109(g)1, D109(h)6; `milestones.md` §6.9.2 item 2, 17(i).
+
+### 10. Registration and signing for allowlisted sites (the dropped membership statements)
+
+Deferred by D109(b) and restated by D109(i)2. The owner's words (D109(i)): everything beyond age
+verification is "per registeration/allowlist only (later to build and sigining)". The first M3b
+draft had an operator-signed membership statement per site (D96-D100, D103-D107(b)); D109(b)
+replaced it with a plain exact-hostname pin list in `operator.json`, and this build does only the
+tier-C verifications plus that allowlist/pin. What stays for later is the registration process and
+signing: an operator vetting and adding third-party sites without a rebuild, and a signed statement
+the app can check. Related: item 9 (key-thumbprint pin) and item 8 (per-site question
+permissions). **Why deferred:** the owner chose the pin list first. Pointers: D96, D109(b),
+D109(i)2; `milestones.md` §6.9.2 items 2 and 3 (DROPPED, number reserved), 17(h)-(j).
 
 ### Smaller carried items (not scheduled)
 

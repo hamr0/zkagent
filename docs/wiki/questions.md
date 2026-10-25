@@ -163,6 +163,7 @@ in-range citation is given for them.
   Remaining OPEN: MRZ truncation behavior and any further normalization beyond D101's rule.
   See decisions.md D90, D101, D102. (zkagent-prd.md:1839-1844)
   **Final status (D108, 2026-10-24): CLOSED for the vocabulary (D90, D101, D102). The remaining edge cases (MRZ truncation, normalisation beyond accent-stripping) are BACKLOG with M3b.**
+  **Later note (D109, 2026-10-25): M3b is revived and §6.9 as amended was approved by the owner on 2026-10-25 (D109(h)); it is IN BUILD. The whole vocabulary is in scope (item 8), and the remaining edge cases are observed, not ruled, by the retargeted opening POC (§6.9.1). Nationality code namespace and expiry-bucket month arithmetic are ruled (D109(g)3, 4); the approval is recorded in D109(h).**
 - **Q23 (resolved by D23)** — Whether tier A's attestation requirement is compatible
   with the "nothing stable across sites" unlinkability bar. Status: CLOSED by D23 —
   Play Integrity measured with no device-unique field; owner's call could still be
@@ -522,6 +523,7 @@ in-range citation is given for them.
   downgraded, D19/D20). Both halves now resolved — **Q49 is fully CLOSED.** See
   milestones.md §6.4 item 3; decisions.md D19, D20, D73, D89, D94.
   **Final status (D108, 2026-10-24): CLOSED (D89, D94).**
+  **Later note (D109, 2026-10-25): the mechanism half is AMENDED, not reopened. The tier-C gate is now a build-time pin list (exact hostnames only, no key pin, D109(g)1-2), not a list of issuer keys plus membership statements. D89 (holder-side consent) stands in its simplest form: D109(h)3 replaces the per-predicate list with one setting, "Allow additional verifications" (OFF by default).**
 - **Q50 (opened 2026-09-04, parked by D76)** — How does a Play-installed (non-sideloaded) user
   reach a verifier over HTTPS at all? M3's origin is fixed to `http://127.0.0.1:8787` via
   `adb reverse` against a sideloaded debug build (D76) precisely because the scanner's network

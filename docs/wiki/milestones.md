@@ -25,7 +25,7 @@ next integrates. (zkagent-prd.md:855-865)
 | **M1b** — Mode-A unlinkability probe | Black-box byte comparison of N mode-A presentations, same device/holder/service, including a planted positive control (zkagent-prd.md:857) | No field differs across presentations except those proven independent of holder/device; a planted stable field must fail the check. Blocks M3. Answers a linkability question. Evidence: `docs/logs/M1B-EVIDENCE.md` (zkagent-prd.md:857) | Ran 2026-08-30; passes with one disclosed leak bucket; block on M3 lifted (zkagent-prd.md:857) |
 | **M2** — Scanner app (rewrite, not graduate) | Real app: Keystore/StrongBox, biometric gate, QR/app-link handoff; ships BARE (`evidence: []`) as its fixed evidence set — no on-device ZK prover; `zk-passport/1` stays verifier-side; mode-B roundtrip exercises the attester-key evidence plug end to end against the M1 core. Opens with a riskiest-assumption POC: capture real-world age-verification request flows, build a test verifier to the observed shape, and run the web→app→web handoff over the mechanism the captures show is real (zkagent-prd.md:858) | End-to-end on real device against local verifier; zktag stability across reinstall+re-scan; mode A emits no zktag even after a mode-B presentation. Half-loaded masterlist ⇒ read refused (`ok:false`), never a pass. Two-bucket rule for the masterlist checkpoint (integrity failure ⇒ `ok:false`; well-formed list lacking the issuing CSCA ⇒ `ok:true, allowed:false`). Build scope for the rewrite itself: §6.2 below (zkagent-prd.md:858) | **Closed/complete, 2026-09-03, v0.5.0.** §6.2 items 1–25 all built and device-confirmed (item 19 WITHDRAWN by D71a, number reserved); findings #18–#21 closed; every row in the Exit criteria table below is device-confirmed or FIXED-IN-<sha> device-confirmed. D66–D71 recorded. First release under D72's lockstep versioning rule. |
 | **M3** — Demo (tier A/B only, vanilla) | Web page: "prove you're over 18" (tier A) and "prove you're a unique adult human" (tier B); responsive (mandatory); no tier C (zkagent-prd.md:859) | Live flow. Tier B: second scan from same document rejected as duplicate zktag. Tier A: two presentations indistinguishable. Demo site is its own adopter with its own store — the SDK still stores nothing (zkagent-prd.md:859) | COMPLETE — released as v0.6.0 (2026-09-05), exit rows all confirmed on that build (see docs/logs/M3-EXIT-ROWS-v0.6.0-2026-09-05.md); owner signed off 2026-09-05. M3b PARKED (D108); §6.6 Play track PARKED (D83). |
-| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), pinned-issuer gated (D20); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points and §6.9's complete (parked) design | **PARKED (D108, 2026-10-24) — see `backlog.md`.** All §6.4 decision points (D89–D106) and D107's follow-on rulings are ruled and §6.9 is a complete candidate design, but it was never owner-approved and is not scheduled. NO-GO #10 still applies if revived: the owner must approve §6.9 (in whole or amended) before anything is built. Q34 CLOSED; Q11's tier-C residual stays open. Nothing of M3b is built.
+| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), gated by a pin list (D20, amended: exact-hostname pin list, D109); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points and §6.9's complete (parked) design | **IN BUILD (approved 2026-10-25, D109(h)).** Was PARKED by D108 (2026-10-24). The owner revived M3b (D109(a)) and approved §6.9 as amended on 2026-10-25 (D109(h)), which satisfies NO-GO #10 for that amended scope: tier C is gated by the `operator.json` switch plus an exact-hostname pin list, all five item-8 predicates are allowed to every pinned site (no per-site question permissions, no caps in this build), and the holder has one app setting, "Allow additional verifications", OFF by default. Q34 CLOSED; Q11's tier-C residual stays open. Not built yet: the scanner still refuses every tier-C request until the build lands.
 | **M4** — Agent layer (rung 2) | Delegation certs, RFC 9421 middleware (FR8), per-serial revocation, phone→agent cert handoff (zkagent-prd.md:860) | Agent request accepted with valid chain; killed by zktag-block; single-use serial burns once; signature verifies against an off-the-shelf RFC 9421 verifier with no zkagent patches; cert reaches a headless agent host with no zkagent-run server in the path (zkagent-prd.md:860) | **Backlog, not planned (D108).** Not designed here; the owner's agent-delegation work now lives in the IETF individual Internet-Draft `draft-hamr-oauth-agent-delegation` (see `backlog.md`). Previously "Frozen until rung 1 ships"; rung 1 has shipped (v0.7.1) but nothing is scheduled.
 | **M5** — Blocklist/appeal (rung 2) | Signed blocklist format, adopter store interface, prove-control-of-zktag appeal (zkagent-prd.md:861) | Store pattern fails closed, never silently falls back to in-memory (zkagent-prd.md:861) | **Backlog, not planned (D108).** Same as M4.
 
@@ -240,11 +240,20 @@ Not a build scope list — a list of what must be decided before any M3b item ca
 this PRD (NO-GO #10 applies to M3b exactly as it does to M3). M3b is rung 1 (disclosure, not
 delegation) — it does not touch the rung-2 agent layer (backlog, D108).
 
-**Status (2026-10-24, D108): PARKED.** All items below were ruled (D89–D106), with D107 recording
-a further round of owner rulings on points the first §6.9 draft raised. A complete candidate
-build-scope design lives at §6.9. It was never owner-approved and is not scheduled; NO-GO #10's
-scope gate is NOT satisfied and, if M3b is revived, the owner must approve §6.9 (in whole or
-amended) before anything is built. See `backlog.md`.
+**Status (2026-10-25, D109(h)): IN BUILD (approved 2026-10-25, D109(h)).** Was PARKED by D108
+(2026-10-24). All items below were ruled (D89–D106), with D107 recording a further round of owner
+rulings on points the first §6.9 draft raised. The build-scope design at §6.9 was approved by the
+owner on 2026-10-25 as amended (D109(h)), which satisfies NO-GO #10 for that amended scope and
+nothing wider. Nothing of tier C is built yet; the scanner still refuses every tier-C request
+until the build lands. See `backlog.md`.
+
+**D109 amendment (2026-10-25), approved as amended by D109(h):** the owner revived M3b and reduced
+its scope. Items 3-6 below that rested on operator-signed membership statements (the statement
+format, its signing tool, its lifetime bound and the lifetime-knob wording) are SUPERSEDED by
+D109(b); the tier-C gate is now a build-time pin list of exact hostnames in `operator.json`
+(D109(g)1-2). D109(h) further DEFERS the per-presentation cap, the shared ceiling and the
+per-origin lock (D91, D93, D107(c)-(e)) and replaces the holder consent list (D89, D107(a)) with
+one setting. The decision text below is kept as the historical record, not rewritten.
 
 Must be decided before M3b is scoped:
 
@@ -383,7 +392,7 @@ owner or M3b's own POC. That does NOT mean M3b is scoped: **NO-GO
 #10 still requires an owner-approved M3b scope section, written into this PRD, before any M3b
 code is written** — no such scope section exists yet, and none is written by this pass.
 
-**M3b's opening riskiest-assumption POC candidate (not yet owner-approved):** a live tier-C
+**M3b's opening riskiest-assumption POC candidate (SUPERSEDED: the POC as approved is §6.9.1, retargeted by D109(f) and amended by D109(h)):** a live tier-C
 presentation carrying exactly one verb from item 1's now-decided vocabulary, refused end-to-end
 when the requesting site's issuer key is unpinned (D20's "refused, not downgraded, if unpinned"
 rule), and accepted end-to-end when it is pinned — on both real documents.
@@ -763,7 +772,7 @@ runtime), and a bad file is a build failure, never a silent default.
 `tiers`: enum `"A+B" | "B"`. `thresholds`: non-empty subset of `{15,16,18,21,60,65}` (D74).
 `verifiers`: exact **hostnames** (D84 point 1), not full origins — no scheme, no port, no
 wildcards; matches the app's existing D74/D38 host-only key shape (`ThresholdPolicy.hostnameOf`),
-so `http://127.0.0.1:8787` (the M3 dev origin, D76) is expressed as `"127.0.0.1"`.
+so `http://127.0.0.1:8787` (the M3 dev origin, D76) is expressed as `"127.0.0.1"`. **Designed, NOT built (D109(i)1, in build):** `verifiers` may alternatively be the string `"any"` (age verification open to any site); see §6.9.2 item 23 and rule 12 below.
 `multi_threshold_verifiers`: exact hostnames (same shape as `verifiers`), default `[]` — this
 **is** D74 rule 2's named-exceptions list, already in code as `ThresholdPolicy.NAMED_EXCEPTIONS`
 (`ThresholdPolicy.kt:46`, ships empty); exposing it as a knob is the model-A-correct reading of
@@ -774,7 +783,13 @@ capability. `evidence_plug`: enum `"none"` only today — `"sig-ed25519/1"`/`"si
 device-capability fallbacks the app already always tries, not a build choice; no attestation plug
 exists in the repo to name as a second enum value yet, so the schema reserves the field but
 validates against a list of exactly one until one ships. `tier_c_verifiers`: MUST be `[]`; a
-non-empty array fails the build until M3b exists (D73). `strings`: `app_name` only, in every
+non-empty array fails the build until M3b exists (D73). **Designed, NOT built (D109, approved
+2026-10-25 by D109(h), in build; the code and the build rules above are unchanged today):** under the amended M3b design
+(§6.9.2 items 1-2, D109(g)1) this field would become the tier-C pin list, exact bare hostnames
+only (the `verifiers` shape rule: no scheme, port, wildcard, comma, quote or backslash), with no
+key pin, next to a separate tier-C on/off switch whose exact shape is settled in code. Rule 7
+below would be relaxed from "non-empty fails" to that shape rule, and rules 10 and 11 would add
+the two consistency failures. Membership statements no longer exist in the design. `strings`: `app_name` only, in every
 schema version — **not deferred to v2, permanently scoped this way (D84 point 3)**: the
 question-line template (`SessionDisplay.kt:202`) stays computed in code because D74 rule 3 makes
 its exact wording a user-protection requirement, not branding — an operator may rename their app,
@@ -792,6 +807,16 @@ or a port (same shape rule as `verifiers`; empty is valid, the default). 6. `evi
 `tier_c_verifiers` non-empty. 8. Any unknown top-level or nested key, including any key under
 `strings` other than `app_name` (typo/scope-creep protection — never silently ignored). 9. File
 missing entirely, and the build is not explicitly the reference build's own committed default.
+
+**Designed additions, NOT built (D109(g)7, approved 2026-10-25 by D109(h), in build; rules 1-9 are not renumbered):**
+rule 7 would be relaxed to the shape rule above (it forces `tier_c_verifiers` empty today);
+10. the tier-C switch is on and `tier_c_verifiers` is empty; 11. `tier_c_verifiers` is non-empty
+and the tier-C switch is off. Both are build failures, so the two knobs can never disagree
+silently.
+
+**Designed addition, NOT built (D109(i)1, in build; rules 1-11 are not renumbered):** 12.
+`verifiers` is neither a non-empty array of bare hostnames nor exactly the string `"any"`, or the
+array form contains the entry `"any"` (rule 4 keeps the array shape violations). See §6.9.2 item 23.
 
 ### 6.7.5 Riskiest assumption + POC (not built) — the allowlist gate is the target
 
@@ -885,181 +910,300 @@ used by a third party), fold this into
 LIBRARY_CONVENTIONS as a new section for app packages — a hamr0-repo change, not zkagent's; noted
 here only, not actioned.
 
-## 6.9 M3b scope (PARKED — design complete, never owner-approved)
+## 6.9 M3b scope (IN BUILD — approved 2026-10-25, D109(h))
 
-> **PARKED (D108, 2026-10-24) — design complete, never owner-approved, not scheduled. NO-GO #10's
-> scope gate is NOT satisfied and still applies if M3b is revived: nothing here may be built until
-> the owner approves this section (in whole or amended).** Nothing in this section is built. The
-> content below is kept intact as a ready-to-revive design; see `backlog.md`.
+> **IN BUILD (approved 2026-10-25, D109(h)).** Was PARKED by D108 (2026-10-24). The owner reviewed a
+> plain-language summary of the tier-C plan on 2026-10-25 and APPROVED it with amendments (D109(h)),
+> which satisfies NO-GO #10 for the scope as amended below and nothing wider. Nothing in this
+> section is built yet; the scanner still refuses every tier-C request until the build lands.
 
 Written 2026-09-28 now that every §6.4 decision point (D89–D106), plus a further round of owner
 rulings on the items the first draft still left to the owner (D107), is ruled. This section drafts
 what those rulings imply for a buildable M3b scope, in §6.2/§6.3's numbered MUST/MUST NOT house
 format, so the owner has a single section to approve or amend rather than reconstructing scope
-from nineteen decisions by hand. Until the owner approves it (in whole or amended), §6.4 remains
-the decision record and this section has no force — it is a proposal, not a scope list.
+from nineteen decisions by hand. The owner approved it as amended on 2026-10-25 (D109(h)); §6.4
+remains the decision record behind it.
 **Revised 2026-09-28 (fix pass):** corrects eight internal item-numbering errors, two
 items misdescribing `chiproof`'s role, and adds D107's five rulings (consent-list UI, the
 membership-statement signing tool, per-site lock visibility, the per-origin store's uncapped
 storage requirement, and the one-phone-per-person assumption) — see §6.9.3's traceability table
 and the CHANGELOG entry for the fix pass's full change list. That revision did not grant approval,
-and neither did the 2026-10-24 close-out (D108), which only parked the section.
+and neither did the 2026-10-24 close-out (D108), which only parked the section. Approval came on
+2026-10-25 (D109(h)).
+
+**Amended 2026-10-25 (D109, owner rulings; approved with further amendments by D109(h)).** The owner
+revived M3b (tier C) and cut the design down: the membership-statement subsystem (items 3, 4, 5, 6)
+is DROPPED, the authorization gate is a simple pin list (items 1 and 2), and item 8's whole
+vocabulary is built. Five new items (18-22) fold in four small fixes and a status procedure. Item
+numbers are stable; dropped numbers are reserved, the way §6.2 item 19 was withdrawn.
+**D109(h) (approval, 2026-10-25) then DEFERS items 10, 11 and 12 (per-site question caps and the
+lock view) and REPLACES item 7's per-predicate consent list with one app setting, "Allow
+additional verifications" (OFF by default); item 13 simplifies accordingly. Their numbers are
+reserved and their text is kept as the design for later (`backlog.md`).** The pre-D109
+text of the dropped items is in git history (commit 7075932 and earlier) and in decisions.md
+D94-D107, which are annotated, not rewritten.
+**D109(i) (2026-10-25, owner) then OPENS age verification (tiers A and B) to any site, adds
+the `"verifiers": "any"` form (new item 23, §6.7.4 rule 12), and shares ONE age lock per site across
+tiers A, B and C (items 8, 9, 13; limitation 17(k) rewritten). Tier C stays gated by the pin list,
+the operator switch and the holder setting, unchanged.** **D109(j) (2026-10-25, owner) then rules the
+two points D109(i) left: the real-TLS test point runs on an owner VPS (item 23(d)), and sites named in
+`multi_threshold_verifiers` are exempt from the shared age lock for tier C as well (items 9, 13,
+17(k)).**
 
 Components referenced below: **scanner** (`apps/scanner`), **chiproof**
 (`packages/chiproof`), **demo** (`apps/demo`), **operator.json** (`apps/scanner/operator.json`,
 schema §6.7.3), **docs** (this file / customer-guide.md).
 
-### 6.9.1 Opening riskiest-assumption POC (written first, before any other item)
+### 6.9.1 Opening riskiest-assumption POC (RETARGETED by D109(f); written first, before any other item)
 
 Per standing project practice (every module opens with a POC on real devices/documents aimed at
-its riskiest assumption before the easy parts get built — MEMORY.md), M3b's POC targets the
-riskiest assumption in the ruled design: that the two-layer trust mechanism (D94's pinned
-operator key plus D96's short-lived, verifier-carried membership statement) actually gates tier-C
-access the way D19/D20/D94/D96/D99/D100 describe, offline, on real hardware — not merely in a unit
-truth table. The membership statement's own concrete wire format is explicitly OPEN (D96 open
-point (ii), not ruled by any of D97–D107) — **this POC is where that format gets settled, not
-invented ahead of it in this document.** The POC is also the first thing that can even produce a
-statement to test against, since nothing can issue one without item 3's signing tool (D107(b)) —
-that tool is a POC prerequisite, not a later build step.
+its riskiest assumption before the easy parts get built, MEMORY.md), M3b's POC is retargeted.
+**The old target is gone.** The pre-D109 POC tested the two-layer statement mechanism (pinning gate
+via statements, statement replay, statement expiry). Items 3-6 are DROPPED, so two of its three
+criteria have nothing to test, and the third (the pin gate) is now a plain list.
 
-**Pass/fail criteria**, each with a paired non-vacuity positive/negative control (a negative must
-be shown to actually exclude something, not merely fail to be exercised):
+**Candidate riskiest assumption now (argued, for the owner to confirm):** *the five item-8
+predicates can be evaluated correctly from the DG1/MRZ fields the scanner reads off a REAL chip,
+on both of the owner's documents, with name-match the weakest.* Why this and not the pin gate:
 
-1. **Pinning gate.** A single-predicate tier-C presentation (one item-8 vocabulary predicate,
-   operator's choice) is REFUSED end-to-end when the requesting site's issuer/operator key is
-   unpinned in the build's `operator.json`, and ACCEPTED end-to-end (mint, deliver, verifier
-   returns `ok:true`) when it is pinned. Positive control: the accepted case must actually reach
-   the verifier with a non-empty presentation, not merely fail to be refused. Negative control:
-   the same request replayed against a SECOND build whose `operator.json` never pinned the key at
-   all must refuse identically — proving the refusal is keyed on pinning, not on some incidental
-   difference between the two runs.
-2. **The replay negative.** A valid membership statement lifted from an approved verifier's real
-   request and re-presented by a DIFFERENT origin, or under a different signing key, is REFUSED
-   (D99 — binding to origin and signing key). Positive control: the SAME statement, replayed by
-   the SAME origin and key it was issued to, is accepted — proving the refusal is the binding
-   check firing, not the statement being malformed or already consumed.
-3. **Expiry and ceiling.** An expired statement is refused (D100), and a statement claiming a
-   lifetime over D103's 6-month ceiling is refused (D105). Positive control: a statement inside
-   the valid window, and one claiming a lifetime under the ceiling, are both accepted. A statement
-   claiming a lifetime under D103's 1-week floor is exercised too, expecting ACCEPT (D106) — its
-   positive control is the ordinary in-range case already covered above; there is no negative to
-   pair it with, since D106 rules there is nothing to refuse.
+- The pin gate is low risk. It is a hostname-list check of the same shape as the `verifiers`
+  allowlist, whose own POC already passed on device (§6.7.5, 16 PASS lines), and the origin and
+  ES256 JAR checks under it are built and device-confirmed (D34/D37). New crypto: none.
+- The field reads are the part nobody has ever done on a real chip. A source search of the scanner
+  finds names and date of birth referenced only in `MainActivity`, and no date-of-expiry or
+  nationality field read anywhere. So two of the five predicate inputs are new reads, and the
+  other three are known only from tier A/B use.
+- Name-match compares a human-typed name to a machine-readable-zone name that is ASCII-only,
+  transliterated, `<`-padded and length-truncated (D101 itself flags this and left the ß/Ø cases
+  open). It is the likeliest predicate to be wrong on a real document and the likeliest to be wrong
+  silently, as a false `false`. The M2 lesson applies directly: a path never run live hides a HIGH
+  gap (mode A, #21), and a parser validated only on synthetic fixtures misses real wrapper layers.
+- A false answer here is a compliance error for a KYC-style site, not a UX blemish.
 
-Cases 1 and 2 MUST run on BOTH real documents the owner holds (US passport, NL ID card) — case 3
-is statement-level and document-independent, so it MAY run once, on either document, since it
-exercises no document-specific code path. No PII or document values go into any evidence artifact
-produced by this POC; record field names, verdicts, and timings only, per standing project
-practice (MEMORY.md).
+**Pass/fail criteria, pre-registered.** Each negative is planted and paired with a non-vacuity
+pass on the SAME document in the SAME run (the negative must be shown to actually exclude
+something, not merely fail to be exercised):
+
+1. **Field reads and booleans on real chips (both documents, mandatory).** For each document and
+   each of the five predicates (expiry bucket at each of the three fixed buckets, name-match,
+   DOB-range at each fixed age, nationality in exclusion mode and in confirmation mode,
+   document-number match): the required field is read non-empty; a true-input case returns
+   `true`; a planted-wrong-input case returns `false`. Pairs: name (the holder's own name typed
+   as a person would, versus a one-character-changed name); document number (right versus one
+   digit off); nationality (exclusion set without versus with the holder's own nationality;
+   confirmation right versus wrong); expiry and DOB (a boundary on each side of the true value).
+   **An unreadable or missing field MUST produce a refusal, never `false`:** a planted negative
+   (flipped DG1 byte, the M0 negative reused) MUST give `ok:false`/refused, distinct from a real
+   `false` answer, so "no" and "could not tell" are never conflated.
+2. **Name-match normalisation observed on real MRZ data (both documents).** Record per document,
+   by field name and verdict only: whether the name field is at its length limit (truncated or
+   not), the filler and separator pattern, and for each D101 rule (case, hyphen, accent-strip,
+   `<` as separator) whether it was exercised by the real name. The rules' correctness on the
+   edge cases a real document does not contain (ß, Ø, over-long names) is covered by a SYNTHETIC
+   unit table, labelled synthetic and not counted as real-chip evidence. ß/Ø normalisation stays
+   unruled; the POC reports "observed" or "not observable on these documents" and does not rule.
+   **Owner ruling (D109(g)6):** "not observable on these two documents" is ACCEPTED, covered by
+   the synthetic table clearly labelled synthetic; no third document is sourced.
+3. **Pin-list gate negative (one document is enough: the gate fires before any chip read).** With
+   the build's switch on and `127.0.0.1` pinned: a single-predicate tier-C request from `127.0.0.1`
+   is ACCEPTED end to end (positive control: the verifier receives a non-empty presentation with
+   `ok:true`); the same request from `localhost` (a second hostname served by the same spike,
+   which the scanner already treats as a dev-key origin, and which is in `verifiers` for this
+   test) is REFUSED in-app before any read or mint, and the verifier sees nothing. **Amended
+   (D109(i)1): once item 23 is built, `verifiers` may be `"any"`, and then `localhost` is ANSWERED
+   for age verification (tiers A and B) without being listed, but it is still REFUSED for tier C,
+   because tier C is gated only by the pin list, the operator switch and the holder setting, never by
+   `verifiers`. This criterion therefore holds for TIER C ONLY: it is the tier-C request from
+   `localhost`, not any age request, that must be refused, and the build under test keeps
+   `localhost` out of `tier_c_verifiers`. Before item 23 is built the criterion is unchanged and
+   `localhost` is listed in `verifiers`.** Because both
+   hostnames use the same dev key and the same code path, the only difference is the pin, so the
+   refusal is keyed on the pin and not on an incidental difference. Second negative control: a
+   build with the OPERATOR switch OFF refuses even `127.0.0.1` with the existing §6.2 item 13
+   tier-C refusal, proving the operator switch is a separate gate (the holder setting is
+   criterion 4). The pin is by exact hostname only (D109(g)1), so there is no
+   key-pin case.
+
+4. **The single holder switch (D109(h)): "Allow additional verifications" (one document is enough:
+   the gate fires before any chip read).** With the build's operator switch on and `127.0.0.1`
+   pinned, and the holder setting OFF (the default): a single-predicate tier-C request from
+   `127.0.0.1` is REFUSED in-app before any read or mint, and the verifier sees nothing. With the
+   holder setting turned ON in the same run, the identical request is ANSWERED end to end (the
+   verifier receives a non-empty presentation with `ok:true`); that paired positive makes the
+   refusal non-vacuous, so the refusal is keyed on the setting and not on an incidental
+   difference. A tier-A request from the same origin with the setting OFF is still answered, so
+   the setting gates tier C only. There is no per-predicate case and no cap case: all five
+   predicates are allowed to every pinned site in this build (D109(h)).
+
+Criteria 1 and 2 MUST run on BOTH real documents the owner holds (US passport, NL ID card);
+criteria 3 and 4 MAY run once. **No PII or document values go into any evidence artifact:** record
+field names, verdicts and timings only (including read-to-boolean timing per predicate). The
+holder's true name and number are typed on the device by the owner and are never saved, logged
+(the scanner and the test verifier MUST NOT log the site-supplied value being tested), or
+screenshotted; no screen showing a raw field is accessibility-snapshotted. The evidence document
+is `docs/logs/` by the house naming, recording verdicts only.
 
 **Also surfaced by this POC, not resolved by this document:** the ß/Ø normalisation edge cases
-D101 left open for name-match (transliteration beyond case/hyphen/accent-stripping) are OPEN items
-this POC should observe against real MRZ data and report, not rule on in advance.
+D101 left open are observations the POC should report where the real data touches them, not
+rulings. The nationality code namespace (D109(g)3: ISO alpha-3 as written in the MRZ, ICAO special
+codes distinct and never mapped) and the expiry-bucket month arithmetic (D109(g)4: calendar months
+with end-of-month clamping) are RULED; the POC checks the real data against them.
 
 ### 6.9.2 Scope items
 
-1. **Tier-C capability switch (`operator.json`, D96(1)).** `operator.json` schema gains a new
-   `tier_c: { "enabled": false }`-shaped knob (exact field name/shape settled by §6.9.1's POC,
+1. **Tier-C capability switch (`operator.json`, D96(1)). KEPT (D109(b)).** `operator.json` schema
+   gains a new `tier_c: { "enabled": false }`-shaped knob (exact field name/shape settled in code,
    consistent with the existing `tiers`/`evidence_plug` enum knobs in §6.7.3). Default MUST be
    `false`/absent for every existing and reference build — §6.2 item 13's tier-C refusal is
    UNCHANGED for any build that does not explicitly opt in. Only an opted-in build's scanner may
-   reach any of items 2 and 4–13 below (item 3, the operator's own signing tool, runs on the
-   operator's machine, not inside the app, so it is unaffected by this switch); an unopted build
-   MUST continue to fail loudly on a tier-C request exactly as it does today. Touches:
+   reach any of items 2 and 7-13 below; an unopted build MUST continue to fail loudly on a tier-C
+   request exactly as it does today. **Consistency rules (CONFIRMED, D109(g)7):** a build with the
+   switch on and an empty `tier_c_verifiers` (new §6.7.4 rule 10), or with a non-empty
+   `tier_c_verifiers` and the switch off (new §6.7.4 rule 11), MUST fail the build, so the two
+   knobs can never disagree silently. Touches:
    **operator.json** (schema), **scanner** (`RequestTrust`/item-13 gate). Tag: ENHANCEMENT.
    Implements: D96(1), D73.
-2. **Issuer/operator key pinning (`operator.json`, D94).** A new `operator.json` knob carries the
-   pinned public key(s) an opted-in build trusts for tier-C authorization, validated and baked in
-   at build time exactly like the existing `verifiers` hostname allowlist (§6.7.4-style rules: a
-   malformed or missing key fails the build, never ships a silent default). Per D94's correction of
-   the routing misunderstanding: this key is never read from the `av://` link itself and nothing is
-   published by the operator for a verifier to fetch — the pinned list lives only inside the
-   holder's own app build, checked fully offline. Touches: **operator.json** (schema, new
-   validation rule), **scanner** (`OperatorPolicy`). Tag: ENHANCEMENT. Implements: D94, closes
-   §6.4 item 3 / Q49 in code (already closed on paper).
-3. **Membership-statement signing tool (D107(b), NEW).** A small command-line tool, run by the
-   operator (not shipped inside the app or inside `chiproof`'s runtime), with which the operator
-   signs a membership statement for a given verifier — the artifact item 4's app-side verifier
-   checks and item 14's site-side `chiproof` helper embeds into a request. This tool is IN scope,
-   not a later add-on: nothing can issue a statement for §6.9.1's POC to test against without it,
-   and the demo (item 15) needs it to issue its own statement for itself. Its output format follows
-   whatever the POC (§6.9.1) settles for the statement's wire format — this item does NOT specify
-   that format, deliberately, since D96 open point (ii) leaves it open. Touches: new standalone
-   tooling (location TBD by the POC — likely `packages/chiproof/scripts/` or a sibling package,
-   not decided here). Tag: ENHANCEMENT, NEW. Implements: D107(b).
-4. **Membership statement verification, app-side (D96(2), D99, D100).** The scanner (the HOLDER's
-   app) gains an offline verifier for an operator-signed, short-lived membership statement the
-   requesting verifier carries in its request: (a) the statement's signature MUST verify against
-   item 2's pinned key(s); (b) the statement MUST bind the requesting verifier's origin AND its
-   challenge-signing key (D99) — a statement not bound to both is a bearer token and MUST be
-   rejected as such, not merely "unbound but otherwise valid"; (c) an expired statement MUST be
-   refused, never downgraded to tier A/B (D100, matching D19/D20's standing refusal shape); (d) the
-   app MUST make no live network call to the operator at presentation time — verification is fully
-   offline against item 2's already-pinned key, per D96(2)'s rejection of a live app-to-operator
-   API call (tracking channel, offline-breaking, no security benefit under D81 model A). The
-   statement's own wire format is OPEN (D96 point (ii)) — settled by §6.9.1's POC, not specified
-   here. This verification runs entirely inside the scanner app; it does not use `chiproof` (the
-   Kotlin scanner has no `chiproof` dependency at all — `chiproof` is a Node library used by the
-   SITE's own verifier, see item 14). Touches: **scanner** (new verifier module, name TBD by the
-   POC). Tag: ENHANCEMENT. Implements: D96(2), D99, D100.
-5. **Membership-statement lifetime bound (D98, D103, D105, D106).** The app MUST enforce that an
-   operator-chosen statement lifetime falls in `[1 week, 6 months]`: a statement claiming a
-   lifetime OVER 6 months MUST be refused outright (never clamped down, D105); a statement claiming
-   a lifetime UNDER 1 week MUST be accepted as claimed, not refused or clamped up (D106 — a
-   shorter lifetime is holder-neutral, the floor exists to bound operator renewal burden, not to
-   protect holders). A lifetime within range is the ordinary case and needs no special handling
-   beyond item 4(c)'s expiry check. Touches: **scanner** (statement verifier from item 4). Tag:
-   ENHANCEMENT. Implements: D98, D103, D105, D106.
-6. **Reference default and guide wording for the lifetime knob (D104).** When the operator-facing
-   lifetime knob is added to `operator.json`'s schema, the reference `operator.json` MUST default
-   it to 1 week — the short end of D103's range, not the 6-month ceiling — and
-   `docs/product/customer-guide.md` §7.2 (or its tier-C successor section) MUST state plainly, in
-   the walkthrough itself, that a longer choice is a slower ban: a site the operator drops can keep
-   asking tier-C questions of new holders until its current statement expires, up to 6 months at
-   the range's maximum. Touches: **operator.json** (reference file), **docs** (customer-guide.md).
-   Tag: ENHANCEMENT (documentation MUST, not code). Implements: D104.
-7. **Holder-side consent list, a Settings tab (D89, D107(a)).** The app maintains a per-holder set
-   of tier-C predicates the holder has consented to disclose — matching D19's framing that tiers
-   are defined by what the holder is told, not what a site is allowed to ask. **UI (D107(a)):** a
-   new Settings tab lists one checkbox per tier-C question type from item 8's vocabulary; the
-   holder may change any checkbox at any time; EVERY checkbox MUST be UNTICKED by default — owner
-   reasoning, recorded: a pre-ticked box means agreeing before looking, which is not consent. The
-   list is stored as a small JSON record inside the app (same persistence class as the item-23 log
-   store / `ThresholdPolicy`'s per-origin record); the holder never edits a file directly, only the
-   Settings-tab checkboxes. **Considered and NOT adopted (D107(a)):** an operator-shipped consent
-   list inside `operator.json` — rejected because it would reverse D89: the operator, not the
-   holder, would be ticking boxes on the holder's behalf, exactly the VERIFIER-side reading D89
-   ruled against. **Consequence, following from D92 rather than a new rule:** unticking a
-   predicate that a site had already locked into its per-origin set (item 10) means that site's
-   NEXT request is refused, all-or-nothing (item 13) — unticking does not partially narrow what a
-   locked site can ask, it removes that predicate from the holder's consent entirely, so any
-   request still naming it fails item 13's match. This list is DISTINCT from item 2's
-   issuer-pinning gate (D89's own text: "D20's issuer pinning remains the separate, unaffected gate
-   on which sites may reach tier C at all") and from item 10's per-origin locked-predicate-set
-   record — three different lists, never conflated. How a request is matched against this consent
-   list is item 13 (D92). Touches: **scanner** (new consent-list store plus a new Settings tab
-   UI). Tag: ENHANCEMENT. Implements: D89, D107(a).
+2. **Tier-C pin list (`operator.json`). KEPT and SIMPLIFIED (D109(b); amends D94).** The build's
+   `operator.json` pins the exact sites allowed to ask tier C. **This no longer depends on
+   membership statements** — it is a plain list, checked fully offline, baked in at build time
+   and validated like `verifiers` (a malformed entry fails the build, never ships a silent
+   default). A tier-C request from an origin not on the list is refused before any chip read or
+   mint, the site learns nothing, and the refusal is not downgraded to A/B (D19/D20). **What is pinned is what the scanner can already verify today:** the request object is an ES256 JAR whose
+   origin must match `client_id`, `request_uri` and `response_uri` (`RequestTrust`, D34/D37), and
+   whose signing key is resolved from that origin. **Pin type (RULED, D109(g)1): exact hostnames
+   only.** Reuse the already-reserved `tier_c_verifiers` field (today rule 7 forces it empty),
+   with the same bare-hostname validation as `verifiers` (D84/D86: no scheme, port, wildcard,
+   comma, quote, backslash). Each pinned host SHOULD also appear in `verifiers` (a build whose `verifiers` is `"any"`, item 23, needs no listing; `verifiers` never gates tier C, only this pin list does). **Consistency
+   rules (CONFIRMED, D109(g)7):** the tier-C switch on with an empty list fails the build (new
+   §6.7.4 rule 10), and a non-empty list with the switch off fails the build (new rule 11). Pro:
+   no new field, no new key format, a site's key rotation costs nothing, smallest change. Con,
+   disclosed at 17(i) and kept (D109(g)2): the gate trusts whoever controls that hostname's DNS and
+   TLS, because the key is fetched from the origin at request time. **Identity departure
+   ACCEPTED (D109(g)2):** D20/D94 say the issuer's public key is its identity; for tier-C pinning
+   identity is the exact hostname, consistent with D37 for tiers A/B (the key is resolved from the
+   origin).
+   **Rejected alternative (D109(g)1), noted only: "K", hostname plus the site's request-signing
+   key** (a JWK thumbprint per entry baked into the build). It would survive a DNS or TLS hijack and
+   match D20/D94's wording, but needs a new entry shape and validation rules and a new APK for
+   every site key rotation. The owner chose not to build it; D109(h)6 keeps it as a PROPOSAL / open
+   question in `backlog.md` (not built, not scheduled).
+
+   **What a pinned site may ask (D109(h)2):** all five item-8 predicates, with no per-site question
+   permission and no cap in this build. An unlisted site is refused before any chip read.
+   Allowlist entries that name which questions a site may ask are LATER (`backlog.md`).
+
+   The pin list is the ONLY tier-C authorization: there is no authority behind
+   it and no operator-side onboarding process for third-party sites (owner: skipped, 17(j)); adding
+   or dropping a site is an edit of `operator.json` and a rebuild. Per D94's routing correction,
+   which stands: nothing is read from the `av://` link and nothing is published by the operator
+   for a verifier to fetch. Touches: **operator.json** (schema; rule 7 relaxed, new rules 10 and 11
+   appended), **scanner** (`OperatorPolicy`). Tag: ENHANCEMENT. Implements: D94 (amended), D96(1),
+   D20.
+3. ~~Membership-statement signing tool~~ **DROPPED (D109).** Number reserved, as §6.2 item 19 was.
+   There are no membership statements, so nothing needs a tool to sign them. Supersedes D107(b).
+4. ~~Membership statement verification, app-side~~ **DROPPED (D109).** Number reserved. Its
+   job (binding to origin and signing key, D99) is covered by what already exists: the JAR's
+   origin-consistency check and key resolution (`RequestTrust`), plus item 2's pin. Supersedes
+   D96(2), D99 and D100 as applied to statements.
+5. ~~Membership-statement lifetime bound~~ **DROPPED (D109).** Number reserved. Supersedes D98,
+   D103, D105, D106.
+6. ~~Reference default and guide wording for the lifetime knob~~ **DROPPED (D109).** Number
+   reserved. Supersedes D104. The customer guide's tier-C section instead states the pin-list
+   limitations in item 17(h)-(j).
+7. **One holder setting: "Allow additional verifications" (D109(h); REPLACES the per-predicate
+   consent list of D89/D107(a)).** The Settings tab carries ONE switch, labelled "Allow additional
+   verifications". **It is OFF by default** (D107(a)'s reasoning, kept: a pre-set "yes" means
+   agreeing before looking, which is not consent). **Off:** the app answers age verification
+   (tiers A and B) only and refuses every tier-C request, from any site, before any chip read or
+   mint. **On:** the app answers tier-C requests from pinned sites (item 2), and only those; the
+   switch never widens the pin list. The holder can flip it at any time. It is stored as one boolean
+   in a small app-side settings record (same persistence class as `ThresholdPolicy`'s per-origin
+   record); a reinstall returns it to OFF (17(a)). Owner reasoning, recorded (D109(h)3): per-question
+   and per-site holder controls are over-complicated; "basic age verification on, extra
+   verification via the app" keeps the choice binary and still lets a holder who does not want
+   extra verification say no. **Per-scan disclosure is unchanged and still the real consent
+   moment:** the existing S2 question line (§6.5 item 2; `SessionDisplay.questionTextFor`) shows,
+   above the Verify button and before the biometric confirmation, the exact question taken from the
+   signed request ("This website asks if you are over 18", with tier B appending the recognition
+   wording). **Tier C extends it:** when the verified request is tier C, the same line shows one
+   plain-words line per predicate asked (for example expiry beyond 6 months, date of birth
+   consistent with at least 21, nationality outside a named set), built from the signed request in
+   code and never from a fixed string, so what is shown is what will be sent. The line names the
+   question and MUST NOT echo a site-supplied name or document number (item 16(a)); exact wording
+   is settled in code and, like the age sentence, is not operator-brandable (D84 point 3). The
+   setting is DISTINCT from item 1 (the operator switch) and item 2 (the pin list): a tier-C request
+   is answered only if the operator switch is on, the origin is pinned, AND the holder setting is
+   on. **Considered and NOT built (D109(h)):** one checkbox per question (D107(a)), per-site
+   permissions and per-presentation caps; all are parked as "Per-site tier-C question permissions
+   and limits" in `backlog.md`. **Superseded by this item:** D107(a)'s per-question checkboxes and
+   its "unticking a locked predicate" consequence (there is no lock now, item 10). D89's holder-side
+   principle (consent is the holder's, not the verifier's or the operator's) STANDS in its
+   simplest form. Touches: **scanner** (one settings boolean plus a Settings-tab switch; extend the
+   question line for tier C). Tag: ENHANCEMENT. Implements: D89 (simplified), D109(h)3.
 8. **Tier-C verb vocabulary (D90, D101, D102).** The scanner's tier-C predicate set is exactly:
    (a) expiry-bucket booleans (item 9's fixed buckets); (b) name-match — boolean only, normalized
    per D101 (case-insensitive, hyphen-insensitive, accent-stripped, MRZ `<` treated as a
-   separator), no similarity score (Q22 unchanged); (c) DOB-range boolean (item 9's fixed ages);
+   separator), no similarity score (Q22 unchanged); (c) DOB-range boolean (item 9's fixed ages, and the site's shared age lock, item 9);
    (d) nationality, exclusion mode (site names a set, MUST NOT exceed 10 countries per D102, else
-   fail loudly/no mint) and confirmation mode (site names one nationality, boolean); (e)
+   fail loudly/no mint) and confirmation mode (site names one nationality, boolean); **codes
+   (D109(g)3): ISO 3166 alpha-3 exactly as written in the MRZ; ICAO special codes (for example
+   `D` for Germany, others in ICAO 9303 Part 3) are their own distinct values, never mapped;** (e)
    document-number match — boolean true/false ONLY, the number itself MUST NEVER be disclosed as a
    value (it is mode-B's zktag derivation field, D9 — disclosing it as a value would hand a site a
    stable cross-site identifier). No sixth predicate and no vocabulary extension ships without a
-   further owner ruling. Touches: **scanner** (predicate evaluators), **chiproof** (item 14,
+   further owner ruling. **All five are allowed to every pinned site (D109(h)2): no per-site
+   question permissions and no cap on how many a request may name.** Touches: **scanner** (predicate evaluators), **chiproof** (item 14,
    predicate-set schema on the wire). Tag: ENHANCEMENT. Implements: D90, D101, D102; Q22, Q34
    (closed).
 9. **Fixed boundary lists (D95, D97).** Expiry-bucket and DOB-range boundaries come from a FIXED,
    published list, never chosen by the requesting verifier, mirroring D74's discipline exactly: a
    request naming a boundary not on the list MUST fail loudly (no mint). Expiry buckets are exactly
-   `{3 months, 6 months, 1 year}`. DOB-range boundaries are exactly the six ages D74 already uses
+   `{3 months, 6 months, 1 year}`, computed as 3, 6 or 12 calendar months with end-of-month clamping
+   against the coarsened `current_date` (D109(g)4). DOB-range boundaries are exactly the six ages D74 already uses
    for tier A/B, `{15, 16, 18, 21, 60, 65}` — reused verbatim, not separately invented. Touches:
    **scanner** (new `TierCBoundaryPolicy`-shaped object, sibling to `ThresholdPolicy`). Tag:
    ENHANCEMENT. Implements: D95, D97.
-10. **Per-presentation cap and per-origin lifetime predicate set (D91, D107(d)).** A flat, app-side
+   **Shared age lock across tiers (D109(i)3; owner chose option A).** There is ONE age boundary
+   per site in total, across tiers A, B and C. The per-hostname map D74 built for tier A/B
+   thresholds (`ThresholdPolicy`, `originThresholdLocks`; hostname-keyed, uncapped, non-evicting) is
+   the SAME map the tier-C date-of-birth-range predicate reads and writes; there is no second map.
+   Rules: (1) whichever age a site asks first, through a tier A/B threshold or a tier-C
+   date-of-birth-range boundary, is its locked age; (2) a later tier-C date-of-birth-range boundary
+   MUST equal the locked age, else the WHOLE request is refused (item 13), and a later tier A/B
+   threshold MUST equal it too (D74, as built); (3) the same age asked again gets the same bit, which
+   is the existing lock and not a new reply cache (D109(i)1); (4) a tier-C request that names two
+   different date-of-birth-range boundaries is refused whole, except at a hostname named in
+   `multi_threshold_verifiers` (rule 6; orchestrator default, not owner-ruled, the consistent reading
+   of D109(j)2: allowed for named sites); (5) for tier C the lock is written only
+   after item 13's all-or-nothing check has passed, so a request refused for any reason (holder
+   setting off, off-lock boundary, any failed predicate) does not burn the site's one age; for
+   tier A/B it is written wherever `ThresholdPolicy` writes it today (orchestrator default, not
+   owner-ruled: a refused tier-C request does not set the lock); (6) **EXEMPTION (D109(j)2, owner:
+   "extra multi-age should be allowed"):** hostnames in `multi_threshold_verifiers` (D74 rule 2) are
+   exempt from the shared age lock exactly as D74 already exempts them for tier A/B, and now for the
+   tier-C date-of-birth-range predicate too: a named site may use several ages, both for age
+   verification and for tier C, and two different DOB-range boundaries in one request are allowed
+   for it. Every other hostname keeps rules 1-5. The reference build's list is empty. An
+   operator-named site can therefore narrow the holder's age down (17(k)). The
+   lock is per hostname, so many hostnames are not covered (17(b)). Expiry buckets are NOT part of
+   this lock (17(k)). **Pass criteria:** (a) a unit truth table over the shared map: first ask tier B
+   at 18, then tier-C DOB-range 18, answered; then tier-C DOB-range 21, refused whole; first ask
+   tier-C DOB-range 21, then tier A at 18, refused; two different DOB-range boundaries in one
+   request, refused whole; a refused tier-C request leaves no lock; **exemption rows (D109(j)2):** a
+   hostname in `multi_threshold_verifiers` is allowed a tier-C DOB-range at 18 and then at 21 (both
+   answered), allowed tier B at 18 then tier-C DOB-range 21, and allowed two different DOB-range
+   boundaries in one request; **non-vacuity pair:** the same sequence from a hostname NOT in the list
+   is refused at the second age (the named site is allowed two ages, the unnamed site is refused the
+   second), with the list holding at least one entry for the exempt rows and a count above 0 on the
+   unnamed-site refusals, so the exemption is shown to be keyed on the list; with a negative control that turns the table red
+   when the tier-C path stops consulting the shared map (and a count above 0 on the refusals, so the
+   guard is shown to exclude something); (b) one device run on a pinned origin (`127.0.0.1`, setting
+   ON): tier-C DOB-range at the first boundary answered, a second tier-C request at a different
+   boundary refused with only a generic "refused" at the verifier, the first boundary asked again
+   answered. Implements: D74 (extended), D109(i)3.
+10. **DEFERRED (D109(h)). Number reserved; the text below is kept as the design for later (`backlog.md`: "Per-site tier-C question permissions and limits"). Not built in this build.** **Per-presentation cap and per-origin lifetime predicate set (D91, D107(d)).** A flat, app-side
     hard cap of THREE tier-C predicates per presentation applies to every opted-in build, with NO
-    per-operator knob to raise it (D91(a) — the cap rides on item 2's pinning gate, not a separate
+    per-operator knob to raise it (D91(a) — the cap rides on item 1's opt-in and item 2's pin list, not a separate
     configurable ceiling, so a rogue/misconfigured `operator.json` cannot widen it). The app records
     the exact predicate set an origin's first tier-C request asks (≤3) as a per-origin LIFETIME
     record, the same persisted-record shape D74's threshold lock uses (the same shape §6.5 S1's
@@ -1076,7 +1220,7 @@ this POC should observe against real MRZ data and report, not rule on in advance
     scans of ANY kind — exactly the reset the owner explicitly ruled out in D107(c) below (no
     reset control, ever, for this record). Touches: **scanner** (new per-origin predicate-set
     store, uncapped). Tag: ENHANCEMENT. Implements: D91, D107(d).
-11. **Shared per-person ceiling across a holder's documents (D93, D107(e)).** The per-origin lock
+11. **DEFERRED (D109(h)). Number reserved; the text below is kept as the design for later. Not built in this build.** **Shared per-person ceiling across a holder's documents (D93, D107(e)).** The per-origin lock
     (item 10) is keyed by origin + DOCUMENT (a separate record per document), but the 3-predicate
     ceiling is SHARED across all of a holder's documents at that origin — a site MUST NOT be able
     to collect three predicates from one document and a further three from a second document at
@@ -1094,7 +1238,7 @@ this POC should observe against real MRZ data and report, not rule on in advance
     people sharing one phone share one limit of three predicates at each site; the app has no way
     to tell them apart. Touches: **scanner** (per-origin store, refusal UI copy). Tag: ENHANCEMENT.
     Implements: D93, D107(d), D107(e).
-12. **Per-site lock visibility, Log tab, view-only, NO reset control (D107(c), NEW).** Items 10 and
+12. **DEFERRED (D109(h)). Number reserved; the text below is kept as the design for later. Not built in this build (with no lock there is nothing to show).** **Per-site lock visibility, Log tab, view-only, NO reset control (D107(c), NEW).** Items 10 and
     11's per-origin/per-person locked predicate sets MUST be visible to the holder in the existing
     Log tab (view-only — the holder can see which sites have locked which predicates and how many
     of the cap-of-3 they have used) and MUST NOT carry any reset/clear control of any kind. Owner
@@ -1104,53 +1248,63 @@ this POC should observe against real MRZ data and report, not rule on in advance
     lifetime lock entirely. Reinstalling the app remains the ONLY way to reset any of this state,
     already disclosed at item 17(a). Touches: **scanner** (Log tab UI, read-only rendering of items
     10/11's store — no new write path). Tag: ENHANCEMENT, NEW. Implements: D107(c).
-13. **All-or-nothing consent matching (D92).** A tier-C request is matched against BOTH item 7's
-    holder consent list and items 10/11's per-origin/per-person locked set; if the request names
-    any predicate falling outside either, the ENTIRE presentation MUST be refused — never a partial
-    answer, never an optional/droppable predicate, never a per-predicate opt-out control. A
-    holder's declining pattern is itself potentially holder-stable, cross-site information (D92's
-    own reasoning) — the only signal a site may ever receive is "refused" or "answered everything
-    asked." Touches: **scanner** (consent-matching gate, upstream of mint). Tag: ENHANCEMENT.
-    Implements: D92.
-14. **`chiproof` changes — the SITE's own verifier library, not the holder's app.** Correction of
-    the prior draft's mistake, stated plainly: `chiproof` (`packages/chiproof`) is the VERIFIER SDK
-    that runs on a requesting SITE's own server (e.g. `apps/demo`'s `server.mjs`) — it is never
+13. **All-or-nothing answering (D92, simplified by D109(h)).** With the holder setting (item 7)
+    OFF, the app refuses the tier-C request outright. With it ON, the app answers EVERY listed
+    predicate, or refuses the WHOLE request if any listed predicate cannot be evaluated (a field
+    that is unreadable or missing, a boundary off item 9's lists, an out-of-vocabulary predicate,
+    an exclusion set over item 8's 10-country cap, a date-of-birth-range boundary that is not the site's shared locked age or two different such boundaries in one request, D109(i)3; **this off-lock refusal does NOT apply to a hostname named in `multi_threshold_verifiers`, D109(j)2, item 9 rule 6; all the other refusal causes still do**). Never a partial answer, never an optional or
+    droppable predicate, never a per-predicate opt-out control. A holder's declining pattern is
+    itself potentially holder-stable, cross-site information (D92's own reasoning), so the only
+    signal a site may ever receive is "refused" (generic, no reason, D109(g)5) or "answered
+    everything asked". "Cannot tell" stays distinct from a real `false` (§6.9.1 criterion 1).
+    The per-origin locked-set and consent-list match that D92 originally described are gone with
+    items 10-12 (deferred) and the old item 7. Touches: **scanner** (the gate, upstream of mint).
+    Tag: ENHANCEMENT. Implements: D92 (amended by D109(h)). **D109 re-check:** the item never
+    depended on membership statements. A request reaches it only after items 1 and 2 have admitted
+    the requesting origin; D92's own remark that "the operator is the one who decides who is on the
+    list" refers to D20's gate, which is now item 2's pin list.
+14. **`chiproof` changes — the SITE's own verifier library, not the holder's app. Adjusted by D109(d).**
+    Correction of the prior draft's mistake, kept: `chiproof` (`packages/chiproof`) is the VERIFIER
+    SDK that runs on a requesting SITE's own server (e.g. `apps/demo`'s `server.mjs`) — it is never
     part of the holder's Android scanner, which has no `chiproof` dependency at all. `chiproof`
     gains: (a) tier-C challenge issuance (`issueChallenge({ tier: 'C', predicates: [...] })`,
-    mirroring today's tier-A/B shape) and tier-C presentation verification — validating an incoming
-    presentation's predicate-name/boolean pairs against item 8's fixed vocabulary and item 9's
-    fixed boundary lists, capped at 3 per item 10, returning `ok:false` for an off-list boundary or
-    an out-of-vocabulary predicate, mirroring the existing never-throw verdict contract (D4); (b) a
-    helper for the SITE to embed its operator-issued membership statement (item 3's signing tool's
-    output) into its own signed challenge/request object, so a verifier can carry its statement
-    (D96(2): "the VERIFIER fetches its own statement... and includes it in its request") without
-    hand-rolling the composition itself; possibly, not necessarily, as a `chiproof`
-    evidence-plug-shaped contract (`verifyEvidence(item, ctx) → {ok, valid, reason}`, D24) if
-    item 3's statement format (once the POC settles it) is naturally expressed that way — left to
-    the POC, not pre-decided here. **`chiproof` does NOT issue membership statements (item 3's
-    standalone tool does that) and does NOT verify a membership statement's own signature/binding/
-    expiry** — that verification happens on the HOLDER's device, offline, inside the scanner app
-    (item 4), never on the site's own server. Touches: **chiproof** (`packages/chiproof/src`, new
-    tier-C validation module; possibly `packages/chiproof/src/plugs/`). Tag: ENHANCEMENT.
-    Implements: D19, D20, D90, D91, D95, D96(2), D97 (site-side enforcement of the same caps/
-    vocabulary the scanner already enforces holder-side — a dishonest scanner build must not be the
-    only place these caps are checked).
-15. **Demo page extension over M3 (§6 table's M3b row).** `apps/demo` gains a third action —
-    "prove specific attributes" (tier C) — alongside M3's existing tier-A/B actions, gated to a
-    demo-side `operator.json`-equivalent (or the existing env-var config, per D84 point 4's
-    deferral of the demo's own config layer — this item does NOT reopen that deferral, it only
+    mirroring today's tier-A/B shape; tier-C challenges are signed, D20, which the M1 core already
+    enforces) and tier-C presentation verification — validating an incoming presentation's
+    predicate-name/boolean pairs against item 8's fixed vocabulary and item 9's fixed boundary
+    lists (no per-presentation cap in this build, D109(h)2), returning `ok:false` for an off-list boundary or an
+    out-of-vocabulary predicate, mirroring the existing never-throw verdict contract (D4). (b)
+    ~~A helper to embed an operator-issued membership statement into the site's request~~
+    **DROPPED (D109)** with items 3-6: there are no statements. The letter is reserved. **`chiproof`
+    has no knowledge of the pin list:** the pin list lives only in the holder's app build (item 2);
+    a site that is not on a given build's list is simply refused by that build, and the site
+    learns nothing. Site-side enforcement of the same vocabulary and boundary lists the scanner enforces
+    holder-side is the point of (a): a dishonest scanner build must not be the only place these
+    caps are checked. Touches: **chiproof** (`packages/chiproof/src`, new tier-C validation module).
+    Tag: ENHANCEMENT. Implements: D19, D20, D90, D95, D97.
+15. **Demo page extension over M3 (§6 table's M3b row). Adjusted by D109(d).** `apps/demo` gains a
+    third action — "prove specific attributes" (tier C) — alongside M3's existing tier-A/B actions,
+    gated to a demo-side `operator.json`-equivalent (or the existing env-var config, per D84 point
+    4's deferral of the demo's own config layer — this item does NOT reopen that deferral, it only
     extends the demo's tier-A/B page pattern to tier C using whatever config mechanism is live when
-    this item is built). The demo, acting as its own operator persona, uses item 3's signing tool
-    to issue its own membership statement for itself, exercising the whole chain end to end. The
-    page MUST display, per predicate asked: the predicate name, the boolean answer, and (mirroring
-    M3 item 3's payload/store display requirement) the store's relevant per-origin state (e.g.
-    "predicates locked for this origin: {expiry>6mo, name-match}"). MUST NOT display any PII or raw
-    field value at any point (standing rule, item 16 below). MUST show an explicit "refused — over
-    the 3-predicate cap" or "refused — outside your consented list" outcome distinctly from a
-    successful disclosure, mirroring M3 item 4's "already registered" distinct-outcome pattern for
-    tier B. Touches: **demo** (`apps/demo/server.mjs` and its page), **chiproof** (item 14's tier-C
-    shape). Tag: ENHANCEMENT. Implements: the §6 table's M3b deliverable line ("demo page extension
-    over M3"), D107(b) (signing-tool consumer).
+    this item is built). **D109:** the demo no longer issues itself a membership statement (item 3
+    is DROPPED). Instead the demo is simply a hostname (`127.0.0.1`, the D76 dev origin) on the
+    `tier_c_verifiers` pin list of the scanner build used for the demo, and signs its requests
+    with the existing dev request-signing key (loopback-only, D109(g)8: the tier-C demo stays
+    `http://127.0.0.1:8787` with the dev key; the real-TLS well-known key fetch stays untested and
+    disclosed, and no https tier-C path is claimed). The page
+    MUST display, per predicate asked: the predicate name and the boolean answer. It MUST NOT
+    display any PII or raw field value at any point (standing rule, item 16 below). **Resolved
+    (D109(g)5):** the pre-D109 draft also asked the page to show the app's per-origin lock state and
+    to show "refused — over the 3-predicate cap" or "refused — outside your consented list" as
+    distinct outcomes (both mechanisms are now deferred or replaced, D109(h); the rule stands for
+    any refusal reason, for example the holder setting being off). D92 says a site only ever learns "refused" or "answered everything", so the
+    demo's verifier cannot know either. The page therefore shows ONE generic refusal outcome
+    (distinct from a successful disclosure, mirroring M3 item 4's "already registered" pattern);
+    the reasons and the lock state are shown in the app only. D92 is UNCHANGED. The page keeps the
+    demo's own server-side per-origin state only. The demo's verifier and its logs MUST record predicate names and verdicts only,
+    never the site-supplied name or number being tested. Touches: **demo** (`apps/demo/server.mjs`
+    and its page), **chiproof** (item 14's tier-C shape). Tag: ENHANCEMENT. Implements: the §6
+    table's M3b deliverable line ("demo page extension over M3").
 16. **Standing rules carried forward, unchanged, restated because they govern new UI/paths.** (a)
     No screen renders a raw document field, DG1/MRZ value, or the document number's actual value at
     any tier, on any screen (§6.2 item 5, unchanged; tier-C's document-number predicate (item 8e)
@@ -1163,92 +1317,329 @@ this POC should observe against real MRZ data and report, not rule on in advance
     Snackbar; the two are never blended for a tier-C outcome. Touches: **scanner**, **demo**. Tag:
     carried standing rule, not new scope. Implements: §6.2 items 5/15/16; D43, D79(b); finding #22.
 17. **Disclosed limitations (MUST be stated in customer-guide.md and/or in-app, not silently
-    carried).** (a) **Per-install reset** — every per-origin/per-holder record above (items 7, 10,
-    11) is per-install state; an uninstall/reinstall resets it, the same disclosed-not-mitigated
-    shape as D74/D91/D93 — and, per D107(c), now the ONLY way to reset it, since no in-app reset
-    control exists. (b) **Multi-origin not covered** — a single owner operating many origins to
-    route around any per-origin lock is not covered by any item above, same disclosed shape. (c)
-    **Revocation window** — a dropped verifier's already-issued membership statement keeps working
-    until it expires, up to 6 months worst case if the operator chose the top of D103's range (item
-    5/6 mitigate this with a 1-week default, but do not eliminate the worst case an operator may
-    still choose). (d) **MRZ name-match truncation** — a sufficiently long, correctly-typed name
-    can fail item 8(b)'s match against a document whose MRZ field truncated it; this is flagged as
-    the orchestrator's own recommendation from D101, NOT an owner ruling, and stays a stated,
-    disclosed limitation rather than a "MUST fix." (e) **Q11 residual** — even against item 9's
-    fixed boundary lists, three DOB-range predicates still yield three bits of information about a
-    holder's date of birth; items 10/11's caps bound how OFTEN those bits can be asked, not whether
-    asking them is itself informative — this residual is unchanged by anything in this draft and is
-    not resolved by any item above. (f) **Document-number linkage residual (D90 item 5)** — a
-    `true` document-number-match answer confirms to the asking site that this holder is the person
-    behind a number the site already held; bounded to a number the site already knew going in, not
-    a new value extracted from the device, but a real linkage nonetheless. (g) **One phone per
-    person (D107(e))** — item 11's shared ceiling treats every document scanned on one install as
-    one person; two people sharing a phone share one limit of three tier-C predicates at each site,
-    with no way for the app to distinguish them. Touches: **docs** (customer-guide.md tier-C
-    section, once written), **scanner** (in-app disclosure text, Settings tab, Log tab). Tag:
-    documentation MUST, not code. Implements: D74/D91/D93 (disclosed-limit convention), D101
-    (truncation), Q11 (residual), D90 item 5 (document-number residual), D107(c) (a), D107(e) (g).
+    carried). Adjusted by D109(d).** (a) **Per-install reset** — the holder setting (item 7) is
+    per-install state and returns to OFF on an uninstall/reinstall, the same disclosed-not-mitigated
+    shape as D74. (The per-origin records of items 10-11, whose only reset was a reinstall per
+    D107(c), are deferred with them.) (b) **Multi-origin not covered** — a single owner
+    operating many origins to route around any per-origin lock is not covered by any item above,
+    same disclosed shape. **With open age verification (item 23, D109(i)1) this is more exposed: no list limits which hostnames may ask, so an operator running many hostnames can ask a different age on each and combine the answers; the lock is per hostname. Disclosed, not mitigated.** (c) ~~**Revocation window**~~ **DROPPED (D109).** The window was the
+    lifetime of a membership statement; statements no longer exist (items 3-6 DROPPED). Its
+    successor is (h) below. Letter (c) is reserved. (d) **MRZ name-match truncation** — a
+    sufficiently long, correctly-typed name can fail item 8(b)'s match against a document whose MRZ
+    field truncated it; flagged as the orchestrator's own recommendation from D101, NOT an owner
+    ruling, and stays a stated, disclosed limitation rather than a "MUST fix." (e) **Q11
+    residual** — even against item 9's fixed boundary lists, DOB-range predicates still yield
+    bits of information about a holder's date of birth; since the shared age lock (item 9, D109(i)3) each site gets one boundary, so one bit at its single locked age (across many hostnames see (b)); nothing resolves Q11 itself. (f) **Document-number linkage residual (D90 item 5)** — a `true`
+    document-number-match answer confirms to the asking site that this holder is the person behind
+    a number the site already held; bounded to a number the site already knew going in, not a new
+    value extracted from the device, but a real linkage nonetheless. (g) **One phone per person
+    (D107(e)) — DEFERRED with item 11 (D109(h)); no shared ceiling exists in this build, so the
+    assumption has no effect today.** It returns if item 11 is ever built. **(h) NEW (D109): the pin list changes only by
+    rebuilding the app.** A site added to or dropped from item 2's list reaches a holder only when
+    that holder installs the new build. Distribution is a signed APK on GitHub Releases plus
+    sideload (D83), with no auto-update, so an older install keeps its old list for as long as the
+    holder keeps it. This replaces the old bounded revocation window (at most 6 months) with an
+    unbounded one for any holder who never updates; there is no per-site expiry and no remote
+    revocation. Disclosed, not mitigated. **(i) NEW (D109): a pin is only as strong as what it
+    pins.** Item 2 pins exact hostnames only (D109(g)1-2), so the gate trusts whoever controls that
+    hostname's DNS and TLS, because the request-signing key is fetched from the origin at request
+    time (`RequestTrust`); a hijacked or lapsed hostname passes the gate. A key pin would have closed
+    that but was considered and rejected (D109(g)1); the DNS/TLS trust limitation is kept as
+    ruled (D109(g)2). The guide MUST say the pin is by hostname only. **(j) NEW (D109): there is no authority behind the list.** Nothing vouches that a
+    pinned site is legitimate beyond the operator having put it there; the operator-side process
+    for vetting and adding third-party sites is out of scope (owner: skipped), so the list is a
+    hand-edited `operator.json` field. **(k) NEW (D109(h)8), REWRITTEN (D109(i)3): no caps, so a pinned site can still
+    narrow some facts down over time, but NOT age.** The shared age lock (item 9) allows one age
+    boundary per site in total across tiers, so a site can no longer ask 18, then 21, then 60 to place
+    the holder in an age bracket: age bracketing is PREVENTED (per hostname only, see (b)), **with
+    one exception (D109(j)2): a site the operator names in `multi_threshold_verifiers` is exempt from
+    the lock and CAN ask several ages, for age verification and for the tier-C date-of-birth-range
+    predicate, so an operator-named multi-age site can narrow the holder's age down. That is the
+    operator's explicit grant; the reference build's list is empty.** What
+    remains, with no per-presentation cap, no per-origin predicate-set lock and no shared ceiling: a
+    pinned site can repeat tier-C requests across scans and confirm guesses of a name, a document
+    number or a nationality again and again; and it can combine the expiry buckets (3, 6 and 12
+    calendar months are three different boundaries and are not locked) to bracket the holder's
+    document expiry date, so that is not prevented. Limited to pinned sites (an unlisted site is
+    refused before any read) and bounded by the holder switch (item 7), which the holder can turn
+    off; caps and per-site question permissions are deferred (`backlog.md`). Disclosed, not
+    mitigated. The guide MUST say so plainly, including the multi-age exception. **(l) NEW (D109(i)): real-TLS key discovery for an
+    arbitrary site is untested.** With open age verification the scanner resolves a site's
+    request-signing key from its origin at request time, for any site. That path has only ever been
+    exercised against the loopback dev key (`http://127.0.0.1:8787`, D76, D109(g)8); fetching a
+    well-known key over real TLS from an arbitrary site has never been run. Until item 23's test
+    point has run, the guide says the open form is untested against real HTTPS sites. Disclosed.
+    **(m) NEW (D109(i)): with open age verification any site can ask an age check.** The
+    protections are the per-site threshold lock (item 9), origin binding (the request is a signed JAR
+    bound to its origin, D34/D37) and the holder's per-scan biometric confirmation, which shows the
+    requesting site and the question (item 7). No operator list limits which sites may ask; an
+    operator who wants one uses the exact-list form of `verifiers`. Tier C is NOT open: it keeps its
+    pin list, the operator switch and the holder setting. The guide MUST say so. Touches: **docs** (customer-guide.md tier-C section, once
+    written), **scanner** (in-app disclosure text, Settings tab, Log tab). Tag: documentation
+    MUST, not code. Implements: D74 (disclosed-limit convention), D101 (truncation), Q11 (residual), D90 item 5 (document-number residual), D109(d) (h)-(j), D109(h)8 (k), D109(i) (b), (e), (k), (l), (m).
+18. **Link-once: handle each incoming link only once (D109(e), FIX).** Today
+    `MainActivity.onCreate` calls `handleIncomingIntent(intent)` unconditionally (about line 541),
+    with no consume-once guard, and `onNewIntent` does the same after `setIntent`. So an Activity
+    recreation (a locale or display-size change, or a process-death restore) replays the intent:
+    a malformed link re-fires the D87 "That link looks broken" Snackbar, and a valid `av://` link
+    re-runs `beginHandoffVerification`. The scanner MUST handle each distinct incoming link at most
+    once per task. **A bare `savedInstanceState == null` guard is WRONG:** process-death restore
+    must still re-read the intent to resume, and `onSaveInstanceState` does not save the handoff
+    (it saves the report, log, generation counters and tab only), so a null-bundle guard would
+    drop a legitimate resume. Proposed shape (the implementer may choose, the contract is the
+    pass criteria below): decide in a pure class (name TBD, sibling to `AvLinkRules`) whether an
+    intent has already been consumed, by clearing its data after handling or by saving a handled
+    flag keyed to the `request_uri`; `MainActivity` stays thin because `android.net.Uri` and
+    `Intent` are non-functional under this module's JVM unit-test stubs (D87's own note). Pass
+    criteria: (1) a unit truth table for the pure decision (first sight handled; same key again
+    ignored; a different link handled; absent key handled once); with a negative control that
+    turns the table red when the guard is removed; (2) device: a truncated link plus a forced
+    recreation (`adb shell wm density <n>`, then reset) shows the Snackbar once, not twice; (3)
+    device: a valid link mid-flow, then a forced recreation, does not start a second
+    verification; (4) device: a process-death restore (kill the process while a handoff is in
+    flight, per the existing recreation-test method) still resumes the flow. Recorded as a `change`
+    in the fix ledger. Touches: **scanner** (`MainActivity` intent handling, one new pure class and
+    test). Tag: FIX. Implements: D87 (guard completeness).
+19. **Operator-config negative cases for comma/quote/backslash in `multi_threshold_verifiers`
+    (D109(e), ENHANCEMENT, test only).** Add 1-3 cases to `apps/scanner/scripts/operator-json-negative.sh`
+    that put a comma, a double quote and a backslash in a `multi_threshold_verifiers` entry (the
+    `isBareHostname` call at `build.gradle.kts` about line 217), each expecting the build to fail
+    naming the rule. D86's cases 13-15 cover the same three characters on `verifiers` only. **The
+    expected rule is `rule 5`, not rule 4:** that is what the code emits for this list (lines
+    217-219) and what the existing case 9 expects (CONFIRMED, D109(g)9). Pass criteria: each case exits non-zero
+    AND the build output contains `rule 5`; the good reference file is restored afterwards (the
+    script's existing `trap`); a negative control confirms a case would FAIL if `isBareHostname`
+    stopped rejecting that character. Recorded in the ledger as an `idea`. Touches: **scanner**
+    (script only). Tag: ENHANCEMENT.
+20. **README full rewrite (D109(e), ENHANCEMENT, documentation).** The owner approved a draft; it
+    is provided at build time, so this item only names it. Constraints that apply to whatever
+    arrives: it MUST describe tier C as built only once tier C is built (until then the README
+    keeps "designed and parked" wording and the D109 revival is stated as in-build, not as done);
+    MUST NOT describe v1 or tier C as zero-knowledge; MUST keep the statement that
+    `draft-hamr-oauth-agent-delegation` is an individual submission with no IETF endorsement; MUST
+    NOT bring the rung-2 agent layer into scope. README line 25 (the stale version line) is
+    superseded by this rewrite, but item 21 fixes it first if the rewrite lands later. Touches:
+    **docs** (`README.md`). Tag: ENHANCEMENT.
+21. **Version-line fixes (D109(e), FIX, documentation).** v0.8.0 shipped 2026-10-24 (chiproof@0.8.0
+    on npm, signed APK on GitHub Releases). Correct, in place: `docs/product/reuse-map.md` — both
+    rows that say `chiproof@0.7.1` (the verdict-core row and the npm-publish-workflow row, lines 19
+    and 30), and the "`package.json` description still says no hardware evidence backs it (stale)"
+    caveat in the verdict-core row (that description was fixed by `f9dadce`; verify the live
+    description before removing the caveat); `docs/product/zkagent-prd.md` — the status block
+    (lines 9-17: "current release v0.7.1 ... the next release is 0.8.0"), and the same stale
+    version in lines 68, 174, 175 and 179; `README.md` line 25; plus the sibling lines found by
+    search: `docs/wiki/milestones.md` line 29 ("rung 1 has shipped (v0.7.1)") and
+    `apps/scanner/README.md` line 4. **Scope CONFIRMED by the owner (D109(g)10)**, including all of
+    these extra lines. Historical
+    records (`history.md`, stashes, findings, CHANGELOG) are NOT edited. Pass criterion: a search
+    of the live docs for `0.7.1` returns only historical rows. Touches: **docs**. Tag: FIX.
+22. **Status flip on owner approval (D109, a STEP). DONE 2026-10-25 (D109(h)).** On the owner's
+    approval of this section as amended (D109(h)), one docs pass flipped these from PARKED to
+    IN BUILD, each with the approval date and D109(h): (1) the §6 milestone table M3b row; (2) the
+    §6.9 banner; (3) `backlog.md` item 1 (marked revived, no longer parked); (4) the PRD status
+    block and the §6.4 status paragraph; (5) the customer guide's tier-C wording ("approved, in
+    build, not yet built"). **Left for build time:** the README (item 20) and the version lines
+    (item 21). Tier C is never described as built before it is. Touches: **docs**. Tag:
+    ENHANCEMENT (procedure).
+23. **Open age verification (D109(i)1, ENHANCEMENT).** Today `operator.json` `verifiers` is a
+    REQUIRED non-empty array of exact bare hostnames that gates tiers A and B (D84; §6.7.3; rule 4).
+    This item gives it a second, mutually exclusive form. **Shape chosen: `"verifiers": "any"`, the
+    lower-case string `any`, as an alternative to the array.** `verifiers` is therefore EITHER (a) the
+    existing non-empty array of exact bare hostnames, unchanged and still valid for an operator who
+    wants a closed build, OR (b) the string `"any"`: the scanner answers age verification (tiers A and
+    B, over the operator's own `thresholds` subset) for a request from any hostname. A string was
+    chosen over a wildcard entry because the shape rule bans wildcards (rule 4; D84, D86), and over an
+    array entry because `any` is a legal hostname label: **an array that contains the entry `"any"`
+    fails the build (new rule 12)** so nobody reads `["any"]` as the open form. Its encoding in
+    `BuildConfig` is settled in code; it MUST NOT be representable as a hostname-list entry (D86's
+    comma-split hazard, `OperatorPolicy.parseHostnameList`). **New validation rule, §6.7.4 rule 12
+    (the next free number; rules 1-11 are not renumbered):** `verifiers` is neither a non-empty array
+    of bare hostnames nor exactly the string `"any"` (for example `"*"`, `"ANY"`, `"any "`, the empty
+    string, a number, an object, `null`), or the array form contains the entry `"any"`. Array shape
+    violations (empty array, wildcard, scheme, port) stay rule 4.
+    **What does NOT change.** (1) D74's per-hostname threshold lock: the first-seen threshold is
+    locked per hostname, a different threshold is refused, the same threshold asked again gets the
+    same bit. This is the anti-bracketing guarantee and "reuse existing replies to the same website"
+    in the owner's words; no reply cache is invented. (2) Tier C stays gated by `tier_c_verifiers`
+    (item 2), the operator switch (item 1) and the holder setting (item 7); `verifiers` never gates
+    tier C and `"any"` never widens the pin list. (3) The request checks (ES256 JAR bound to its
+    origin, D34/D37) and the per-scan confirmation. "Open" means not allowlisted, not
+    unauthenticated. (4) `multi_threshold_verifiers` stays an independent exact-hostname list.
+    **Reference build.** `apps/scanner/operator.json` changes from `"verifiers": ["127.0.0.1"]` to
+    `"verifiers": "any"` (its `thresholds` are already all six); `tier_c_verifiers` stays `[]` and
+    the tier-C switch stays off (item 1), so the showcase answers an age check for any site and
+    refuses all of tier C. A device-test build turns tier C on separately.
+    **Docs.** `customer-guide.md` (the operator.json knobs table, "Verifier hostnames", "What a
+    refused site's users see", §5, and the tier-C limits paragraph) is updated now, marked designed
+    and not built, and flips to built when this item lands. The root `README.md` wording rides on
+    item 20 at build time and is not edited now; `apps/scanner/README.md`'s operator.json lines are
+    updated when this is built.
+    **Tests (pass criteria).** (a) Unit: a truth table on the existing pure allowlist decision
+    (`"any"`: unlisted, listed and never-seen hostnames all admitted; array form: listed admitted,
+    unlisted refused loudly with no mint; `multi_threshold_verifiers` orthogonal), with a negative
+    control that turns it red when the `"any"` branch is removed or the array branch stops
+    checking the list (and a count above 0 on the refusals). (b) Negative script: add cases to
+    `apps/scanner/scripts/operator-json-negative.sh`, each exiting non-zero AND naming `rule 12`:
+    `"*"`, `"ANY"`, `""`, `5`, and the array `["any"]`; plus a positive case that `"any"` builds
+    clean, and the script's existing `trap` restores the reference file. A negative control confirms
+    the cases fail if rule 12 is removed. Invalid array forms still fail with their old rules (a
+    wildcard array entry stays `rule 4`). (c) Device, with a build that has `"verifiers": "any"`,
+    tier C on, `tier_c_verifiers: ["127.0.0.1"]` and the holder setting ON: a tier-A request from
+    `localhost` (NOT listed anywhere) is ANSWERED end to end; a tier-C request from `localhost` is
+    REFUSED in-app before any read or mint and the verifier sees nothing; a tier-C request from
+    `127.0.0.1` is answered. Paired non-vacuity pass: with the array form (`["127.0.0.1"]`) the same
+    `localhost` tier-A request is refused, so the open answer is shown to be keyed on `"any"`. See
+    §6.9.1 criterion 3 for how this interacts with the pin-gate criterion. (d) **Test point
+    (pre-registered; the riskiest NEW assumption of this item): real-TLS key discovery for an
+    arbitrary site.** Open age verification only helps real sites if the scanner can resolve a
+    request-signing key from an arbitrary HTTPS origin; that has only ever run against the loopback
+    dev key (17(l)). Judged riskier than anything else this item adds (the form, the rule and the
+    reference switch are small and unit-proven), so it is run FIRST in this item's build. It is a
+    test point of this item, NOT the §6.9.1 opening POC, which stays aimed at the predicates read off
+    a real chip (the riskiest assumption of M3b as a whole). **Host (D109(j)1, owner: "i got two vps
+    that we can reuse"): one of the owner's own VPSs, not a tunnel; owner-run, test-only, torn down
+    or left unused afterwards; NOT a project-hosted verifier and never referenced by the app or the
+    docs as a default, so NO-GO #3 holds. The owner supplies the hostname at test time; no hostname
+    or IP is written in the docs, and the evidence doc names it generically ("owner VPS, CA-valid
+    cert").** Pass: from that test-only HTTPS host with a CA-valid certificate (not a project-run
+    hosted verifier, which would reintroduce NO-GO #3 and stays rejected, D76), a signed tier-A or B request is accepted and answered end to end on the
+    release network configuration (system CAs, zero cleartext exceptions); paired negatives on the
+    same run: an invalid-certificate host is refused, and a host whose served key does not match the
+    request's signature is refused. Record verdicts and timings only. If it fails, STOP and report a
+    finding to the owner; do not paper over it. If the owner's VPS turns out to be unavailable at
+    test time, the item ships with 17(l) as written and the gap is reported. Touches: **operator.json** (schema; reference file),
+    **scanner** (`OperatorPolicy`, `build.gradle.kts` validation, `BuildConfig` generation), the
+    negative script, **docs**. Tag: ENHANCEMENT. Implements: D109(i)1; amends D84 point 1; leaves
+    D74 unchanged.
 
 ### 6.9.3 Traceability — decision → item
 
 | Decision | Item(s) |
 |---|---|
-| D89 | 7 |
+| D89 | 7 (SIMPLIFIED by D109(h)3: one holder setting replaces the consent list) |
 | D90 | 8, 14 |
-| D91 | 10, 14 |
-| D92 | 13 |
-| D93 | 11 |
-| D94 | 2 |
+| D91 | 10 (DEFERRED by D109(h)); 14 no longer enforces a cap |
+| D92 | 13 (simplified by D109(h)3; and item 15, via D109(g)5) |
+| D93 | 11 (DEFERRED by D109(h)) |
+| D94 | 2 (AMENDED by D109(b), (g)1-2: pin list by exact hostname only) |
 | D95 | 9, 14 |
-| D96 | 1, 4, 5, 14 |
+| D96 | (1) switch: 1. (2) statements: SUPERSEDED by D109(b), no item. 14 (a) only |
 | D97 | 9, 14 |
-| D98 | 5 |
-| D99 | 4 |
-| D100 | 4, 5 |
-| D101 | 8, 17(d) |
+| D98 | SUPERSEDED (D109(b)); former items 5/17(c) DROPPED |
+| D99 | SUPERSEDED (D109(b)); former item 4 DROPPED |
+| D100 | SUPERSEDED (D109(b)); former items 4/5 DROPPED |
+| D101 | 8, 17(d), §6.9.1 |
 | D102 | 8 |
-| D103 | 5, 6 |
-| D104 | 6 |
-| D105 | 5 |
-| D106 | 5 |
-| D107(a) | 7 |
-| D107(b) | 3, 15, §6.9.1 |
-| D107(c) | 12, 17(a) |
-| D107(d) | 10, 11 |
-| D107(e) | 11, 17(g) |
+| D103 | SUPERSEDED (D109(b)); former items 5/6 DROPPED |
+| D104 | SUPERSEDED (D109(b)); former item 6 DROPPED |
+| D105 | SUPERSEDED (D109(b)); former item 5 DROPPED |
+| D106 | SUPERSEDED (D109(b)); former item 5 DROPPED |
+| D107(a) | 7 (REPLACED by D109(h)3: the per-question checkboxes are not built; the default-off principle carries to the single switch) |
+| D107(b) | SUPERSEDED (D109(b)); former item 3 DROPPED; item 15 no longer a consumer |
+| D107(c) | 12 (DEFERRED by D109(h)) |
+| D107(d) | 10, 11 (DEFERRED by D109(h)) |
+| D107(e) | 11, 17(g) (DEFERRED by D109(h)) |
+| D109(a) | the whole section (revives M3b; banner flip is item 22, done by D109(h)) |
+| D109(b) | 1, 2, and the DROPPED items 3-6 |
+| D109(c) | 8, 9 |
+| D109(d) | 7, 9-17 as adjusted (7, 10-13 further changed by D109(h)); 17(c) DROPPED, 17(h), 17(i) new |
+| D109(e) | 18, 19, 20, 21, 22 |
+| D109(f) | §6.9.1 |
+| D109(h) | 1, 2 (gate unchanged; all five predicates to every pinned site); 7 (single switch); 8; 10-12 (DEFERRED, numbers reserved); 13 (simplified); 14; 15; 17(a), (e), (g), (k) NEW; §6.9.1 criterion 4; 22 (status flip, done); `backlog.md` items 8 and 9 |
+| D109(i)1 | 23 (open age verification, `"verifiers": "any"`); §6.7.3, §6.7.4 rule 12; §6.9.1 criterion 3 (reworded, tier C only); 17(b), 17(l), 17(m) |
+| D109(i)2 | 1, 2, 7 (restates D109(h)1 and (h)3; consistent, nothing new); `backlog.md` item 10 (registration and signing for allowlisted sites, later) |
+| D109(i)3 | 8(c), 9 (shared age lock), 13 (off-lock refusal); 17(b), (e), (k) REWRITTEN; customer-guide §4 and §5 |
+| D109(j)1 | 23(d) (real-TLS test point on an owner VPS; no hostname recorded); 17(l) |
+| D109(j)2 | 9 (rule 6 exemption, exemption row and non-vacuity pair), 13 (off-lock refusal does not apply to named sites), 17(k); customer-guide §4 and §5 |
+| D74 (per-hostname threshold lock) | 9 (now shared with tier C, D109(i)3); 23 (UNCHANGED; the anti-bracketing guarantee for open age verification) |
+| D84 (`verifiers` required allowlist) | 23 (AMENDED by D109(i)1: second form `"any"`; hostname-only array form unchanged) |
+| D109(g)1 | 2 (hostname-only pin; key pin rejected), §6.9.1 criterion 3, §6.7.3 |
+| D109(g)2 | 2, 17(i), D20/D94 identity wording (accepted departure) |
+| D109(g)3 | 8(d), §6.9.1 |
+| D109(g)4 | 9, §6.9.1 |
+| D109(g)5 | 15 (D92 unchanged) |
+| D109(g)6 | §6.9.1 criterion 2, 17(d) |
+| D109(g)7 | 1, 2, §6.7.4 rules 10-11 |
+| D109(g)8 | 15 |
+| D109(g)9 | 19 |
+| D109(g)10 | 21 |
 | §6 table M3b deliverable line | 15 |
 | §6.2 item 5/15/16, D43, D79(b), finding #22 | 16 |
-| D74/D91/D93 disclosed-limit convention | 17(a), 17(b) |
-| Q11 (residual, still open) | 17(e) |
+| D74/D91/D93 disclosed-limit convention | 17(a), 17(b) (D91/D93 deferred, D109(h)) |
+| Q11 (residual, still open) | 17(e), 17(k) |
 | D9 (document-number as zktag derivation field) | 8(e), 17(f) |
+| D87 (malformed `av://` guard) | 18 (link-once is its sibling guard) |
+| D84/D86 (`operator.json` validation, comma/quote/backslash) | 2, 19 |
+| D72 (lockstep versioning) | 21 |
 
-Every ruled decision D89–D107 lands in at least one item above; none needed to be listed as
-"no build work" — every one of them has a concrete scope consequence.
+Every ruled decision D89-D107 still lands in at least one row above, either as an item or as an
+explicit SUPERSEDED entry; none is orphaned.
 
 ### 6.9.4 OPEN — not ruled, not invented here
 
-- **Membership statement wire format** (D96 open point (ii)) — settled by §6.9.1's POC, not
-  picked in this document; item 3's signing tool and item 4's app-side verifier both depend on it.
-- **ß/Ø normalisation and further transliteration beyond D101's accent-stripping rule** — flagged
-  by D101 itself as an open edge case for M3b's own POC; §6.9.1 directs the POC to surface real
-  cases, not resolve them in advance.
-- **Q11's residual** (three DOB-range predicates are still three bits about a date of birth, even
-  from a fixed list) — unchanged by this draft; no item above closes it, and none invents a
-  closure. Item 17(e) states it as a disclosed limitation.
-- **MRZ name-match truncation behavior** — D101 explicitly left this unruled (orchestrator
-  recommendation only); item 17(d) states it as disclosed, not fixed.
+**All ten owner questions raised by D109 were answered "all recommended" on 2026-10-25 and are
+recorded as D109(g)1-10 (decisions.md).** The numbering below is the old local numbering, kept so
+earlier references still resolve. Nothing in this list is a pending owner question.
+
+Resolved by D109(b) (kept so a reader of the old list is not confused): the **membership
+statement wire format** and **the location of item 3's signing tool** are no longer OPEN, because
+items 3-6 are DROPPED. The **`chiproof` evidence-plug-versus-module question for the statement
+helper** (item 14(b)) is likewise gone with it.
+
+**D109(h) (2026-10-25, owner approval with amendments) answered the plain-language summary's
+seven points and approved the scope; they are recorded in decisions.md D109(h) and applied in
+items 2, 7, 10-13, 17 and §6.9.1. Nothing from them is a pending owner question.** Two items
+the owner sent to "later" or to the backlog are NOT ruled and NOT built: per-site question
+permissions and limits (`backlog.md` item 8) and the request-signing key-thumbprint pin
+(`backlog.md` item 9, a PROPOSAL / open question).
+
+**D109(i) (2026-10-25, owner: open age verification, the gate for everything else, the shared age
+lock) is recorded in decisions.md D109(i) and applied in items 8, 9, 13, 17 and the new item 23.
+The two points it left were answered the same day and are recorded as D109(j) (decisions.md):
+(1) the real-TLS test host is one of the owner's own VPSs (item 23(d); no hostname recorded in the
+docs); (2) `multi_threshold_verifiers` sites are exempt from the shared age lock for tier-C
+date-of-birth questions too (items 9, 13, 17(k)). Neither is OPEN any more. Two small defaults
+that D109(j) did not rule are marked in decisions.md as "orchestrator default, not owner-ruled"
+(a refused tier-C request does not set the age lock; two different DOB boundaries in one request
+are refused whole except for named multi-age sites); they are not pending questions.**
+
+Resolved by D109(g), 2026-10-25 ("all recommended"):
+
+1. **Pin type** — RESOLVED, D109(g)1: exact hostnames only, in `tier_c_verifiers`; no key pin
+   (option K rejected, kept as a noted rejected alternative in item 2).
+2. **Departure from D20/D94's "the key is the identity" wording** — RESOLVED, D109(g)2: accepted;
+   identity is the exact hostname, as D37 does for tiers A/B; limitation 17(i) kept.
+3. **Nationality code namespace** — RESOLVED, D109(g)3: ISO 3166 alpha-3 as written in the MRZ;
+   ICAO special codes are distinct values, never mapped.
+4. **Expiry-bucket arithmetic** — RESOLVED, D109(g)4: calendar months, end-of-month clamping.
+5. **Item 15 versus D92** — RESOLVED, D109(g)5: one generic refusal on the demo page; reasons in
+   the app only; D92 unchanged.
+6. **A third document for ß/Ø and truncation** — RESOLVED, D109(g)6: "not observable on these two
+   documents" accepted; synthetic table, labelled synthetic; no third document.
+7. **Consistency rules between items 1 and 2** — RESOLVED, D109(g)7: confirmed as build failures,
+   new §6.7.4 rules 10 and 11.
+8. **Loopback-only tier-C demo** — RESOLVED, D109(g)8: stays `http://127.0.0.1:8787` with the dev
+   key; the real-TLS key fetch stays untested and disclosed.
+9. **Item 19's expected rule number** — RESOLVED, D109(g)9: `rule 5`.
+10. **Item 21's version-line scope** — RESOLVED, D109(g)10: includes the extra 0.7.1 lines. The
+    item 20 README draft arriving at build time is as already stated in item 20.
+
+Standing open points, NOT owner questions and unchanged by D109 (no ruling is pending; each is
+handled by a disclosed limitation or by the POC reporting what it observes):
+
+- **Normalisation beyond D101's accent-stripping rule (ß/Ø, further transliteration)** — D101
+  itself left it open. D109(g)6 only settles how the POC reports it ("not observable on these
+  documents" is acceptable); the normalisation rule itself is still unruled.
+- **MRZ name-match truncation behaviour** — D101 left it unruled (orchestrator recommendation
+  only); item 17(d) states it as disclosed, not fixed. D109(g)6 settles only the evidence
+  handling, not the behaviour.
+- **Q11's residual** (DOB-range predicates are still bits about a date of birth, even from a
+  fixed list, and with no caps in this build a pinned site can accumulate them across requests) —
+  no item closes it; items 17(e) and 17(k) state it as a disclosed limitation.
 - **`apps/demo`'s own operator-config mechanism for tier C** — D84 point 4 deferred the demo's
-  verifier-side config to a later round "if this round is already big"; item 15 does not reopen
-  that deferral and does not invent a demo-side config schema — it uses whatever mechanism (env
-  vars or a future demo `operator.json`) is live when item 15 is actually built.
-- **Exact `operator.json` field names/shapes for items 1, 2, 5, 6** — the schema additions are
-  described functionally above; their exact JSON key names, nesting, and validation-rule numbering
-  (extending §6.7.4's list) are left to whoever writes the implementation PRD delta alongside the
-  code, not fixed by this draft.
-- **Whether tier-C predicate evaluation belongs in a new chiproof module or an evidence plug**
-  (item 14(b)) — left to the POC.
-- **Exact location of item 3's signing tool** (`packages/chiproof/scripts/`, a sibling package, or
-  elsewhere) — not fixed by this draft, left to whoever implements it.
+  verifier-side config; item 15 does not reopen that deferral. The demo is a hostname on the
+  build's pin list (item 2), so the only config that matters for it is the scanner build's
+  `operator.json`.
 
 ### 6.9.5 Branch loose end (NOT an M3b item — pre-merge item for `feat/s68-rulings`) — CLOSED 2026-10-24
 
@@ -1278,33 +1669,36 @@ This sat on the current branch's own history and was never an M3b task.
 
 ### 6.9.6 Size estimate
 
-**18 numbered units** (17 scope items in §6.9.2, plus the §6.9.1 POC counted as its own unit; item
-16's standing-rules restatement and item 17's disclosed-limitations restatement are cross-cutting
-documentation requirements rather than new build surface, same as before). Of the 17 scope items,
-the largest by build surface are:
+**Re-estimated 2026-10-25 for the D109 scope, then for D109(h), then for D109(i).** **16 numbered units**: the
+§6.9.1 POC plus 15 live scope items (items 1, 2, 7, 8, 9, 13-17, the new items 18-21, and the new item 23, open age verification, D109(i)). Items
+3, 4, 5 and 6 are DROPPED and items 10, 11 and 12 are DEFERRED (D109(h)), all with their numbers
+reserved; item 22 is a procedure (the status flip, done), not build work, so none of those is
+counted. The section counted 18 units before D109, 18 after D109, 15 after D109(h), and 16 after D109(i) (+1 unit: item 23).
 
-- **Item 4 (membership statement verification, app-side)** — a new offline verifier module with
-  three independent checks (signature, binding, expiry) plus the two lifetime-bound rules in
-  item 5; this is the item whose concrete shape depends entirely on the still-OPEN wire format
-  (§6.9.4), so its actual size cannot be bounded further until the POC settles that format.
-- **Items 10/11 (per-presentation cap, per-origin lifetime set, shared cross-document ceiling)** —
-  together they are a new persisted-record subsystem (predicate-set storage, subset-matching logic,
-  cross-document tallying, its own uncapped store per D107(d)) comparable in shape to
-  `ThresholdPolicy`, but with a cross-document join `ThresholdPolicy` never needed, plus item 12's
-  new read-only Log tab surface on top of it.
-- **Item 14 (`chiproof` changes)** — touches the one package with an external npm audience and a
-  lockstep-versioned release obligation (D72); any schema chosen here is a public contract the
-  moment `chiproof` republishes.
-- **Item 8 (vocabulary)** — five distinct predicate evaluators, each with its own edge cases
-  (D101's normalization, D102's cap, D90(e)'s value-never-disclosed constraint), is more surface
-  than its single-item listing suggests.
-- **Item 3 (signing tool, NEW)** — a whole new standalone artifact (not a modification to existing
-  code), whose size is bounded only once the POC settles the statement format it must produce.
-- **Item 7 (consent list, NEW UI per D107(a))** — a new Settings tab, not merely a data-store
-  change as the prior draft assumed.
+- **Gone (D109):** item 4 (app-side membership-statement verifier), item 3 (the signing tool) and
+  items 5/6 (lifetime bound and wording): the one unit whose size could not be bounded and a whole
+  new standalone artifact. Item 2 shrinks to "activate the already-reserved `tier_c_verifiers`
+  hostname list" (a rule-7 relaxation plus consistency rules), reusing the `verifiers` validation
+  and `OperatorPolicy` parsing as they are.
+- **Gone (D109(h)):** items 10/11 (per-origin lifetime predicate set, shared cross-document
+  ceiling, own uncapped store) and item 12 (the read-only Log tab lock view), which were the
+  largest remaining units. Item 7 shrinks from a new Settings tab of per-question checkboxes to one
+  boolean and one switch, plus extending the question line for tier C. Item 13 shrinks to a
+  switch check plus an all-or-refuse evaluation.
+- **Still the largest:** item 8 (five predicate evaluators, all built, plus two fields the scanner
+  does not read today, nationality and date of expiry, see §6.9.1); item 14 (`chiproof` tier-C
+  challenge issuance and verification, a public contract the moment `chiproof` republishes, D72).
+- **New, small (D109(i)):** item 23 (one schema alternative, one validation rule, five negative-script cases, one unit table, one device pair, and the real-TLS test point, which is the only part whose size cannot be bounded in advance, because it needs a test host and has never been run). The shared age lock adds a few lines to items 8, 9 and 13 and one unit table; it reuses the existing map and adds no store.
+- **New, small:** item 18 (link-once guard: one pure class plus a unit test plus three device
+  checks), item 19 (1-3 shell cases), item 21 (text edits). Item 20 (README rewrite) is
+  documentation whose draft the owner supplies.
+- **Small (unchanged or shrunk):** items 1, 7, 9, 13, 16, 17 (a knob, a switch, a fixed list, a
+  gate, restatements).
 
-Items 1, 2, 6, 9, 12, 13, 16, and 17 are comparatively small (a knob, a gate, a documentation
-requirement, a read-only display, or a restatement of an existing rule in a new context).
+Net: the unit count drops from 18 to 15 and the build surface is materially smaller than the
+pre-D109 draft. No percentage is given: this is a judgement from comparing item sizes, and the
+repo holds no effort data to ground a number. The POC retarget (§6.9.1) does not shrink it: it adds
+the first reading of expiry and nationality from real chips.
 
 
 ## 7. Riskiest-assumption register (what M0 must answer)
