@@ -538,3 +538,10 @@ Nothing here calls any of this zero-knowledge. See `docs/wiki/milestones.md` §6
 4. Before comparing, the site-supplied names are transliterated with the ICAO 9303 Part 3 transliteration rules: ß to SS, Ø to OE, Æ to AE, apostrophe dropped, other diacritics stripped per D101. The exact mapping of every other character (including whether Ø is written O or OE, and the German umlauts) is "per ICAO 9303 Part 3 table, verify at build"; this entry does not reproduce the table. Coverage is by a synthetic test table clearly labelled synthetic, because the owner's documents are all-ASCII (D109(g)6).
 5. MRZ truncation (a long name cut at the field limit) stays UNRULED under D101 and disclosed (milestones.md §6.9.2 item 17(d)). Open note, not a ruling: with (k)1-(k)2, a given-names field that the MRZ truncated can never match the full given names a site types, so the answer is `false`; whether that is acceptable or a truncated field should be matched as a prefix is not decided.
 Closes finding #26 item 1 (name order). Nothing here calls any of this zero-knowledge. Applied in milestones.md §6.9.2 items 8(b), 14, 15, 17(d), §6.9.1, §6.9.3, §6.9.4 and customer-guide.md's tier-C paragraph. See D101, D109(g)6.
+
+**(l) Build order for M3b, 2026-10-25 (owner: "agreed, update prd with the order").** Four chunks, each committed and device-checked before the next starts. Live items map to exactly one chunk; items 3-6 are dropped, 10-12 deferred, item 22 done. Full text: milestones.md §6.9.7.
+1. **Chunk 1, tier C in the app:** items 1, 2, 7, 8, 9, 13, 16 and finding #27's UX gaps.
+2. **Chunk 2, the site side:** items 14, 15.
+3. **Chunk 3, open age verification:** item 23, including 23(d) (real TLS on the owner's VPS).
+4. **Chunk 4, leftovers and release:** items 18, 19, 17, 20, 21, then /self-review, /branch-review and /release as 0.9.0 (lockstep, D72).
+Owner supplies the phone and both documents at the chunk 1-3 checks, the VPS (hostname given at test time, never written in docs) for chunk 3, and the `pass` unlock plus a go for merge, tag and publish at release. Nothing here calls any of this zero-knowledge.

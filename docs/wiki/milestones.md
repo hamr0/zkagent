@@ -1728,6 +1728,19 @@ repo holds no effort data to ground a number. The POC retarget (§6.9.1) does no
 the first reading of expiry and nationality from real chips.
 
 
+### 6.9.7 Build order (D109(l))
+
+Owner-approved 2026-10-25 ("agreed, update prd with the order"). Items 3-6 are dropped, 10-12 deferred, item 22 is done; every other live item is in exactly one chunk. **Rule:** each chunk is committed and device-checked before the next starts.
+
+1. **Chunk 1, tier C in the app.** Items 1 (operator switch) and 2 (hostname pin), both partly built in the POC at `2720daa`; 7 (the real "Allow additional verifications" switch in a Settings location, replacing the POC's Diagnostics-tab placement); 8 (all five predicates, two-field name match, ICAO transliteration including the German umlaut forms per ICAO 9303 Part 3); 9 (fixed boundaries plus the shared one-age-per-site lock, with the multi-threshold exemption); 13 (all-or-nothing); 16 (standing rules); and finding #27's UX gaps (plain wording, no separate test controls in the real flow, a completion message). *Device check:* one tier-C request carrying several predicates, answered from one scan.
+2. **Chunk 2, the site side.** Item 14 (chiproof verifies tier-C answers; replaces the POC-local `zkagent-poc-tierc/0` wire and `apps/demo/tierc-poc.mjs`) and item 15 (the demo page's tier-C section: two name fields, one generic refusal, loopback only). *Device check:* end to end through the demo page.
+3. **Chunk 3, open age verification.** Item 23 (`verifiers: "any"`, rule 12, reference build switched), including 23(d), the real-TLS test on the owner's VPS. *Device check:* an unlisted site gets an age answer but no tier-C answer.
+4. **Chunk 4, leftovers and release.** Items 18 (link-once, device check), 19 (negative cases, rule 5), 17 (disclosed limitations in the guide and in-app), 20 (README rewrite; an approved draft exists), 21 (version lines). Then /self-review, /branch-review, /release as **0.9.0** (lockstep, D72: chiproof, demo, scanner versionName 0.9.0 / versionCode 8).
+
+**Owner supplies:** the phone and both documents at the chunk 1-3 checks; the VPS for chunk 3 (hostname given at test time, never written in docs); the `pass` unlock plus a go for merge, tag and publish at release.
+
+**Placement notes:** item 16 (standing rules) sits in chunk 1 because it governs the new app UI and paths; item 17 sits in chunk 4 with the guide, but its in-app disclosures are drafted as the chunk 1-3 UI lands; item 19 sits in chunk 4 though it touches `operator.json` validation (rule 5) that chunk 3 also changes, so run its cases again after chunk 3.
+
 ## 7. Riskiest-assumption register (what M0 must answer)
 
 1. **Issuer-free derivation works** — chip's stable data is readable, verifiable against a public masterlist, yields the same secret every scan. Checked 2026-08-30: issuer-free ZK proofs over passport SODs are published and shipping elsewhere; what's novel is only the combination with zkagent's disclosure/tier model. (zkagent-prd.md:1684)
