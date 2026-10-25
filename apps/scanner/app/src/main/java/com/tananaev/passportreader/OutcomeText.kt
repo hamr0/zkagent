@@ -50,6 +50,7 @@ object OutcomeText {
         val label = when (mode) {
             SessionDisplay.LockedMode.A -> "A"
             SessionDisplay.LockedMode.B -> "B"
+            SessionDisplay.LockedMode.C -> "C"
         }
         return "$message This scan was Mode $label, ${SessionDisplay.modeLabel(mode)}."
     }

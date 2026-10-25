@@ -35,6 +35,7 @@ import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.widget.Toolbar
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -190,9 +191,27 @@ import kotlin.math.roundToInt
 abstract class MainActivity : AppCompatActivity() {
 
     // ---- presentation mode: see class doc item 4 ----
-    private enum class PresentationMode { A, B }
+    // M3b POC: C is tier C (a pinned site's named questions about the document). It is reachable ONLY
+    // through TierCGate.Allow in lockModeAndArm; every other path still produces A or B exactly as before.
+    private enum class PresentationMode { A, B, C }
     /** Set ONLY by [lockModeAndArm]. Read everywhere else that needs mode. */
     private var lockedMode: PresentationMode? = null
+
+    // ---- M3b opening POC (milestones.md §6.9, D109) ----
+    // Item 7: the one holder setting, "Allow additional verifications", OFF by default. One writer: the
+    // Diagnostics-tab switch's listener (onCreate). Read by TierCGate callers only.
+    private val holderSettings: HolderSettings by lazy {
+        HolderSettings(object : HolderSettings.BooleanStore {
+            private val prefs = applicationContext.getSharedPreferences("zkagent_holder_settings", Context.MODE_PRIVATE)
+            override fun read(key: String): Boolean? = if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+            override fun write(key: String, value: Boolean) { prefs.edit().putBoolean(key, value).apply() }
+        })
+    }
+
+    // Criteria 1-2 probe: what the OWNER typed for the next read. In memory only, never saved, never logged.
+    // Only [armTierCProbe] ever assigns a value; it is consumed (and nulled) at the tag intent and nulled in
+    // [wipeSession]/[armTierCProbe]'s own failed-lock branch, so it cannot outlive the lock it was armed under.
+    private var pendingTierCProbe: TierCProbe.Typed? = null
 
     // ---- handoff: see class doc item 8 / HandoffClient ----
     private var pendingHandoff: HandoffClient.PendingHandoff? = null
@@ -471,6 +490,18 @@ abstract class MainActivity : AppCompatActivity() {
 
         lockButton.setOnClickListener { onLockButtonTapped() }
 
+        // M3b opening POC: the one holder setting (item 7) and the criteria 1-2 probe trigger. The switch is the
+        // setting's ONE writer; its state is read from the store, never trusted from restored view state
+        // (saveEnabled=false in the layout).
+        findViewById<SwitchCompat>(R.id.switch_allow_additional).apply {
+            isChecked = holderSettings.allowAdditionalVerifications()
+            setOnCheckedChangeListener { _, checked ->
+                holderSettings.setAllowAdditionalVerifications(checked)
+                Log.i(TAG, "M3b: holder setting allow_additional_verifications=$checked")
+            }
+        }
+        findViewById<View>(R.id.button_tierc_probe).setOnClickListener { armTierCProbe() }
+
         findViewById<View>(R.id.button_m2_masterlist_probe).setOnClickListener {
             Thread { runMasterlistProbe() }.start()
         }
@@ -690,6 +721,7 @@ abstract class MainActivity : AppCompatActivity() {
     private fun lockedModeForDisplay(): SessionDisplay.LockedMode? = when (lockedMode) {
         PresentationMode.A -> SessionDisplay.LockedMode.A
         PresentationMode.B -> SessionDisplay.LockedMode.B
+        PresentationMode.C -> SessionDisplay.LockedMode.C
         null -> null
     }
 
@@ -702,7 +734,7 @@ abstract class MainActivity : AppCompatActivity() {
     private fun currentHandoffState(): SessionDisplay.HandoffState {
         val verified = verifiedRequest
         return when {
-            verified != null -> SessionDisplay.HandoffState.Verified(verified.origin, RequestTrust.tierOf(verified.json), RequestTrust.thresholdOf(verified.json))
+            verified != null -> SessionDisplay.HandoffState.Verified(verified.origin, RequestTrust.tierOf(verified.json), RequestTrust.thresholdOf(verified.json), tierCLineOf(verified.json))
             pendingHandoff != null -> SessionDisplay.HandoffState.Verifying
             else -> SessionDisplay.HandoffState.None
         }
@@ -719,8 +751,12 @@ abstract class MainActivity : AppCompatActivity() {
      * to [SessionDisplay.HandoffState.None], D46's "Local scan (no site)". */
     private fun lockedQuestionHandoffState(): SessionDisplay.HandoffState {
         val snapshot = authorizedHandoff ?: return SessionDisplay.HandoffState.None
-        return SessionDisplay.HandoffState.Verified(snapshot.origin, RequestTrust.tierOf(snapshot.request.json), RequestTrust.thresholdOf(snapshot.request.json))
+        return SessionDisplay.HandoffState.Verified(snapshot.origin, RequestTrust.tierOf(snapshot.request.json), RequestTrust.thresholdOf(snapshot.request.json), tierCLineOf(snapshot.request.json))
     }
+
+    /** M3b POC (item 7): the plain-words tier-C question line, built from the signed request; null for A/B. */
+    private fun tierCLineOf(requestJson: JSONObject): String? =
+        if (TierCRequest.isTierC(requestJson)) TierCRequest.describeRequest(requestJson) else null
 
     /** §6.5 S3 (D75) owner correction, 2026-09-05 — [SessionDisplay.render]'s
      * `pasteTextPending` input, computed ONCE here (the one place this
@@ -762,12 +798,12 @@ abstract class MainActivity : AppCompatActivity() {
 
     /** §6.2 item 13 (D33): the mode a pending, VERIFIED handoff request
      * demands — `zkagent.tier`, parsed no more than this one place. Returns
-     * null (absent/invalid) or throws-shaped via [TierOutcome.Unsupported]/
+     * null (absent/invalid) or throws-shaped via [TierOutcome.TierC]/
      * [TierOutcome.Invalid] for the two failure cases item 13 distinguishes:
      * an unsupported-but-well-formed tier (C) vs. anything else absent/bad. */
     private sealed class TierOutcome {
         data class Ok(val mode: PresentationMode) : TierOutcome()
-        object Unsupported : TierOutcome() // tier C — well-formed, not built yet
+        object TierC : TierOutcome() // tier C — well-formed; answered only if TierCGate allows it (M3b POC)
         data class Invalid(val got: String) : TierOutcome() // absent or not A/B/C
     }
 
@@ -776,7 +812,7 @@ abstract class MainActivity : AppCompatActivity() {
         return when (tier) {
             "A" -> TierOutcome.Ok(PresentationMode.A)
             "B" -> TierOutcome.Ok(PresentationMode.B)
-            "C" -> TierOutcome.Unsupported
+            "C" -> TierOutcome.TierC
             else -> TierOutcome.Invalid(tier ?: "<absent>")
         }
     }
@@ -908,22 +944,32 @@ abstract class MainActivity : AppCompatActivity() {
                     // is what lets it travel as part of the snapshot.
                     snapshot = AuthorizedHandoff(verified, verified.origin, siteTitleFor(verified.origin))
                 }
-                is TierOutcome.Unsupported -> {
-                    Log.e(TAG, "M2 stage: pending handoff requests tier C — not supported in this build (item 13)")
-                    val reason = "handoff: REFUSED — tier C requested, not supported in this build (no tier-C flow)"
-                    emitReport(
-                        reason,
-                        ReportLog.DisclosureSummary(
-                            site = siteTitleFor(verified.origin),
-                            result = "Refused — the site asked for a verification tier this app does not support",
-                            sent = "nothing left this device",
-                            shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
-                        ),
-                        // item 22: a refusal — see ReportLog.Outcome's doc.
-                        outcome = ReportLog.Outcome.FAIL,
+                is TierOutcome.TierC -> {
+                    // M3b opening POC (§6.9.1 criteria 3 and 4): three independent gates, decided by the pure
+                    // TierCGate, ALL before any chip read or mint. Operator switch off keeps the pre-M3b refusal
+                    // text byte-for-byte; a refusal here is generic at the wire (nothing is sent, D92) and
+                    // specific only in this app's own report and dialog.
+                    val gate = TierCGate.decide(
+                        operatorEnabled = OperatorPolicy.TIER_C_ENABLED,
+                        hostname = ThresholdPolicy.hostnameOf(verified.origin),
+                        pinned = OperatorPolicy.TIER_C_VERIFIERS,
+                        holderAllowsAdditional = holderSettings.allowAdditionalVerifications(),
                     )
-                    showBlockingOutcomeDialog(reason, isAccessEstablishmentFailure = false)
-                    return
+                    if (gate is TierCGate.Decision.Refuse) {
+                        refuseTierC(verified, gate.cause)
+                        return
+                    }
+                    when (val parsed = TierCRequest.parse(verified.json)) {
+                        is TierCRequest.Parse.Refuse -> {
+                            refuseTierCRequest(verified, parsed.reason)
+                            return
+                        }
+                        is TierCRequest.Parse.Ok -> {
+                            Log.i(TAG, "M3b tier-C: gate=allow predicates=${parsed.predicates.size}")
+                            mode = PresentationMode.C
+                            snapshot = AuthorizedHandoff(verified, verified.origin, siteTitleFor(verified.origin))
+                        }
+                    }
                 }
                 is TierOutcome.Invalid -> {
                     Log.e(TAG, "M2 stage: pending handoff request has absent/invalid tier (got: ${outcome.got}) — refusing, no default mode (item 13)")
@@ -964,6 +1010,229 @@ abstract class MainActivity : AppCompatActivity() {
         // scan" label — see [SessionDisplay.render]'s `locked` branch.
         refreshSessionDisplay()
         armNfcDispatch()
+    }
+
+    // ======================================================================
+    // M3b opening POC (milestones.md §6.9.1, D109(f)). Everything below is the thin Activity side of
+    // pure, unit-tested classes: TierCGate (criteria 3-4), TierCRequest/TierCAnswers (the minimal
+    // answered-end-to-end path), TierCProbe (criteria 1-2). Value-free logging only: names,
+    // booleans, lengths, timings.
+    // ======================================================================
+
+    /** One tier-C refusal for the gate's three causes, BEFORE any chip read or mint. The operator-switch-off
+     * wording is the pre-M3b tier-C refusal, unchanged. */
+    private fun refuseTierC(verified: RequestTrust.VerifiedRequest, cause: TierCGate.Cause) {
+        val (report, result, dialog) = when (cause) {
+            TierCGate.Cause.OPERATOR_SWITCH_OFF -> Triple(
+                "handoff: REFUSED — tier C requested, not supported in this build (no tier-C flow)",
+                "Refused — the site asked for a verification tier this app does not support",
+                "handoff: REFUSED — tier C requested, not supported in this build (no tier-C flow)",
+            )
+            TierCGate.Cause.NOT_PINNED -> Triple(
+                "handoff: REFUSED — tier C requested by a site that is not on this build's tier-C list",
+                "Refused — this site is not approved to ask additional verifications",
+                "This site is not approved to ask additional verifications. Nothing was read and nothing was sent.",
+            )
+            TierCGate.Cause.HOLDER_SETTING_OFF -> Triple(
+                "handoff: REFUSED — tier C requested, but \"Allow additional verifications\" is off",
+                "Refused — additional verifications are turned off in this app",
+                "Additional verifications are turned off. Nothing was read and nothing was sent.",
+            )
+        }
+        Log.e(TAG, "M3b tier-C: REFUSED before any read or mint — cause=${cause.name.lowercase(Locale.ROOT)} chip_read=false mint=false")
+        emitReport(
+            report,
+            ReportLog.DisclosureSummary(
+                site = siteTitleFor(verified.origin),
+                result = result,
+                sent = "nothing left this device",
+                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+            ),
+            outcome = ReportLog.Outcome.FAIL,
+        )
+        showBlockingOutcomeDialog(dialog, isAccessEstablishmentFailure = false)
+    }
+
+    /** A tier-C request that passed the gate but names something this POC build cannot answer: refused whole (item 13). */
+    private fun refuseTierCRequest(verified: RequestTrust.VerifiedRequest, reason: String) {
+        Log.e(TAG, "M3b tier-C: REFUSED before any read or mint — request not answerable by this build reason=$reason chip_read=false mint=false")
+        val text = "handoff: REFUSED — the tier-C request names a question this build cannot answer ($reason)"
+        emitReport(
+            text,
+            ReportLog.DisclosureSummary(
+                site = siteTitleFor(verified.origin),
+                result = "Refused — the site asked a question this app cannot answer",
+                sent = "nothing left this device",
+                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+            ),
+            outcome = ReportLog.Outcome.FAIL,
+        )
+        showBlockingOutcomeDialog("The site asked a question this app cannot answer. Nothing was read and nothing was sent.", isAccessEstablishmentFailure = false)
+    }
+
+    /** Criteria 1-2: arms the probe for the NEXT document tap. Takes what the owner typed on the Scan tab (document number,
+     * dates) and on this tab (name, nationality); refuses to arm on anything missing. A refusal here is a non-state-mutating
+     * notice, never [showBlockingOutcomeDialog] (finding #12). */
+    private fun armTierCProbe() {
+        if (lockedMode != null || paneState.readInProgress || pendingHandoff != null) {
+            Log.w(TAG, "M3b probe: not armed — a session is locked, a read is in progress, or a site request is pending")
+            showBlockingNotice("Finish or clear the current scan or site request first, then arm the probe.")
+            return
+        }
+        val typed = TierCProbeInputs.parse(
+            documentNumber = passportNumberView.text?.toString(),
+            expiryText = expirationDateView.text?.toString(),
+            dobText = birthDateView.text?.toString(),
+            name = findViewById<EditText>(R.id.input_probe_name).text?.toString(),
+            nationality = findViewById<EditText>(R.id.input_probe_nationality).text?.toString(),
+        )
+        if (typed == null) {
+            Log.w(TAG, "M3b probe: not armed — an input is missing or not a real date")
+            showBlockingNotice("Fill in the Scan-tab document number, expiry date and date of birth, and the name and nationality here, then arm the probe.")
+            return
+        }
+        pendingTierCProbe = typed
+        lockModeAndArm()
+        if (lockedMode == null) pendingTierCProbe = null // the lock itself refused (it reports why)
+        else Log.i(TAG, "M3b probe: armed — tap the document now")
+    }
+
+    /** Criteria 1-2: runs the pure battery on the real chip's fields and writes ONLY verdict lines. */
+    private fun runTierCProbe(typed: TierCProbe.Typed, dg1File: DG1File, verdict: M0Probe.Verdict, tampered: M0Probe.Verdict?) {
+        val fields = MrzFields.from(dg1File.mrzInfo)
+        val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+        val result = TierCProbe.run(
+            fields = fields,
+            typed = typed,
+            todayUtc = today,
+            integrityReal = TierCGate.documentAnswerable(verdict.ok, verdict.allowed),
+            integrityTampered = tampered?.let { TierCGate.documentAnswerable(it.ok, it.allowed) },
+        )
+        val lines = result.lines()
+        for (line in lines) Log.i(TAG, "M3b probe: $line")
+        val failed = result.failed.isNotEmpty()
+        emitReport(
+            "\n===== TIER-C PROBE (verdicts only) =====\n" + lines.joinToString("\n") + "\n===== END =====",
+            diagnosticSummary(failed = failed, label = "tier-C probe"),
+            outcome = if (failed) ReportLog.Outcome.FAIL else ReportLog.Outcome.PASS,
+            channel = ReportLog.Channel.DIAGNOSTICS,
+        )
+    }
+
+    /** Criteria 3-4 positive path: gate re-checked at answer time, every predicate answered or the whole request refused,
+     * then one `direct_post`. Runs on the main thread up to the network call. */
+    private fun presentTierC(verdict: M0Probe.Verdict, chipAuthStatus: M0Probe.ChipAuthStatus, baseReport: String, dg1File: DG1File, snapshot: AuthorizedHandoff) {
+        val requestObject = snapshot.request.json
+        // Re-check the holder setting NOW: it may have been turned off between lock and the end of the read.
+        val gate = TierCGate.decide(
+            OperatorPolicy.TIER_C_ENABLED, ThresholdPolicy.hostnameOf(snapshot.origin), OperatorPolicy.TIER_C_VERIFIERS,
+            holderSettings.allowAdditionalVerifications(),
+        )
+        if (gate is TierCGate.Decision.Refuse) {
+            refuseTierC(snapshot.request, gate.cause)
+            return
+        }
+        val predicates = (TierCRequest.parse(requestObject) as? TierCRequest.Parse.Ok)?.predicates
+        if (predicates == null) {
+            refuseTierCRequest(snapshot.request, "request_unparseable_after_lock")
+            return
+        }
+        val fields = MrzFields.from(dg1File.mrzInfo)
+        val t0 = System.nanoTime()
+        val answered = TierCAnswers.answerAll(
+            predicates, fields, java.time.LocalDate.now(java.time.ZoneOffset.UTC),
+            documentAnswerable = TierCGate.documentAnswerable(verdict.ok, verdict.allowed),
+        )
+        val micros = (System.nanoTime() - t0) / 1_000
+        if (answered is TierCAnswers.Result.Refused) {
+            Log.e(TAG, "M3b tier-C: answer_all result=refused reason=${answered.reason} read_to_boolean_us=$micros nothing_sent=true")
+            emitReport(
+                baseReport + "\ntier_c: REFUSED whole — ${answered.reason}; nothing sent",
+                ReportLog.DisclosureSummary(
+                    site = snapshot.site,
+                    result = "Refused — this document could not answer the site's question",
+                    chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                    sent = "nothing left this device",
+                    shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                ),
+                outcome = ReportLog.Outcome.FAIL,
+            )
+            showBlockingOutcomeDialog("This document could not answer the site's question. Nothing was sent.", isAccessEstablishmentFailure = false)
+            return
+        }
+        val answers = (answered as TierCAnswers.Result.Answered).answers
+        for (a in answers) Log.i(TAG, "M3b tier-C: answered predicate=${a.name} months=${a.months} result=${a.result} read_to_boolean_us=$micros")
+        Thread { presentTierCOnBackground(answers, chipAuthStatus, baseReport, snapshot) }.start()
+    }
+
+    private fun presentTierCOnBackground(answers: List<TierCAnswers.Answered>, chipAuthStatus: M0Probe.ChipAuthStatus, baseReport: String, snapshot: AuthorizedHandoff) {
+        val requestObject = snapshot.request.json
+        val zkagent = requestObject.optJSONObject("zkagent") ?: requestObject
+        val challenge = zkagent.optJSONObject("challenge") ?: JSONObject()
+        var report = baseReport + "\npresent: tier-C POC answer — ${answers.size} question(s), booleans only\n"
+        val deliveryResult: DeliveryResult = try {
+            val responseUri = requestObject.optString("response_uri", "").ifEmpty { null }
+            if (responseUri == null) {
+                report += "handoff: FAILED — request object carries no response_uri\n"
+                DeliveryResult.NoResponseUri
+            } else {
+                val state = if (requestObject.has("state")) requestObject.getString("state") else null
+                val result = HandoffClient.postDirectPost(responseUri, state, TierCAnswers.presentation(challenge, answers))
+                Log.i(TAG, "M3b tier-C: direct_post http_status=${result.httpStatus}")
+                report += "handoff: direct_post http_status=${result.httpStatus}\n"
+                // A non-2xx response is an explicit refusal, never a success (§6.9.2 item 16(c), finding #22).
+                if (result.httpStatus in 200..299) DeliveryResult.Accepted else DeliveryResult.Rejected(result.httpStatus, result.body)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "M3b tier-C: direct_post FAILED ${e.javaClass.simpleName}")
+            val label = "${e.javaClass.simpleName}: ${e.message}"
+            report += "handoff: FAILED $label\n"
+            DeliveryResult.TransportFailed(label)
+        }
+        report += "\n" + when (deliveryResult) {
+            DeliveryResult.Accepted -> DeliveryVerdictLine.accepted("tier-C answer sent")
+            is DeliveryResult.Rejected -> DeliveryVerdictLine.rejected(deliveryResult.httpStatus, deliveryResult.body)
+            DeliveryResult.NoResponseUri -> DeliveryVerdictLine.noResponseUri()
+            is DeliveryResult.TransportFailed -> DeliveryVerdictLine.transportFailed(deliveryResult.label)
+            else -> "verdict: NOT SENT"
+        }
+        val claims = answers.map { ReportLog.DisclosureSummary.Claim(predicate = "document expires > ${it.months} months from today", answer = "${it.result}") }
+        val summary = ReportLog.DisclosureSummary(
+            site = snapshot.site,
+            result = when (deliveryResult) {
+                DeliveryResult.Accepted -> "Sent — answered ${answers.size} question(s) for the site"
+                is DeliveryResult.Rejected -> "Sent, but the site rejected the response (HTTP ${deliveryResult.httpStatus})"
+                DeliveryResult.NoResponseUri -> "Read OK, but there was no site address to send it to"
+                else -> "Read OK, but sending the result to the site failed"
+            },
+            chipAuthenticity = chipAuthLabel(chipAuthStatus),
+            sent = if (deliveryResult == DeliveryResult.Accepted) "true/false answers to the question(s) asked, nothing else" else "nothing the site kept",
+            shared = if (deliveryResult == DeliveryResult.Accepted) ReportLog.DisclosureSummary.Shared.Disclosed(claims) else ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+            technicalNote = "tier-C POC wire (zkagent-poc-tierc/0), no zktag, no device key",
+        )
+        runOnUiThread {
+            if (!fence.passes()) {
+                Log.w(TAG, "M3b lifecycle: fence closed — dropped tier-C report/confirmation (the answer already left the device)")
+                return@runOnUiThread
+            }
+            pendingHandoff = null
+            verifiedRequest = null
+            authorizedHandoff = null
+            refreshSessionDisplay()
+            val accepted = deliveryResult is DeliveryResult.Accepted
+            emitReport(
+                report, summary, outcome = if (accepted) ReportLog.Outcome.PASS else ReportLog.Outcome.FAIL,
+                lastScan = LastScanLine.Entry(origin = snapshot.site, reason = deliveryResult.toLastScanReason()),
+            )
+            if (MintConfirmation.confirmsSuccess(deliveryAccepted = accepted)) {
+                showBlockingOutcomeDialog(MINT_CONFIRMED_MESSAGE, isAccessEstablishmentFailure = false)
+            } else if (deliveryResult is DeliveryResult.Rejected) {
+                val outcome = VerifierRefusal.classify(deliveryResult.httpStatus, deliveryResult.body)
+                showBlockingOutcomeDialog(VerifierRefusal.dialogMessage(outcome) ?: "Verifier refused: HTTP ${deliveryResult.httpStatus}", isAccessEstablishmentFailure = false)
+            } else {
+                showBlockingOutcomeDialog("The answer could not be delivered to the site.", isAccessEstablishmentFailure = false)
+            }
+        }
     }
 
     private fun armNfcDispatch() {
@@ -1177,7 +1446,10 @@ abstract class MainActivity : AppCompatActivity() {
                 ))
                 lastMrzHash = currentMrzHash
                 val bacKey: BACKeySpec = BACKey(passportRaw, birthRaw, expirationRaw)
-                startSession(IsoDep.get(tag), bacKey, mode, snapshot)
+                // M3b probe: consumed exactly once, here (see [pendingTierCProbe]).
+                val probe = pendingTierCProbe
+                pendingTierCProbe = null
+                startSession(IsoDep.get(tag), bacKey, mode, snapshot, probe)
             }
         }
     }
@@ -1585,6 +1857,7 @@ abstract class MainActivity : AppCompatActivity() {
         val lockedModeChanged = !keepLockedMode && lockedMode != null
         if (!keepLockedMode) {
             lockedMode = null
+            pendingTierCProbe = null // M3b probe: never survives the lock it was armed under
         }
         if (!keepMrz || lockedModeChanged) {
             refreshSessionDisplay()
@@ -2067,10 +2340,10 @@ abstract class MainActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------- session
-    private fun startSession(isoDep: IsoDep, bacKey: BACKeySpec, mode: PresentationMode, snapshot: AuthorizedHandoff?) {
+    private fun startSession(isoDep: IsoDep, bacKey: BACKeySpec, mode: PresentationMode, snapshot: AuthorizedHandoff?, probe: TierCProbe.Typed? = null) {
         paneState.readStarted()
         showPane()
-        ReadTask(isoDep, bacKey, mode, snapshot).execute()
+        ReadTask(isoDep, bacKey, mode, snapshot, probe).execute()
     }
 
     private inner class ReadTask(
@@ -2082,6 +2355,8 @@ abstract class MainActivity : AppCompatActivity() {
         // Read by [onPostExecute]'s failure branch (never a re-read of
         // [verifiedRequest]) and passed on to [continueAfterRead].
         private val snapshot: AuthorizedHandoff?,
+        // M3b probe (criteria 1-2): non-null only for a probe-armed read; the typed values live in memory for this one read.
+        private val probe: TierCProbe.Typed? = null,
     ) : AsyncTask<Void?, Void?, Exception?>() {
 
         private lateinit var dg1File: DG1File
@@ -2090,6 +2365,8 @@ abstract class MainActivity : AppCompatActivity() {
         private var accessProtocol = "unknown"
         private var chipAuthStatus = M0Probe.ChipAuthStatus.NOT_SUPPORTED
         private var passiveAuthVerdict: M0Probe.Verdict? = null
+        // M3b probe: the M0 planted negative (one DG1 bit flipped) run through the SAME passive-auth code; ok=true allowed=false expected.
+        private var tamperedVerdict: M0Probe.Verdict? = null
         private var masterlistReport = ""
         private var trustedKeystoreCerts: java.security.KeyStore? = null
 
@@ -2205,6 +2482,13 @@ abstract class MainActivity : AppCompatActivity() {
                         masterlistReport = "master_list: CMS-verified OK, declared=${result.masterList.certsDeclared} parsed=${result.masterList.certsParsed}"
                         trustedKeystoreCerts = result.masterList.keystore
                         passiveAuthVerdict = passiveAuthAgainst(result.masterList.keystore)
+                        if (probe != null) {
+                            tamperedVerdict = M0Probe.passiveAuth(
+                                dg1File, sodFile,
+                                M0Probe.MasterList(certsDeclared = 1, certsParsed = 1, keystore = result.masterList.keystore),
+                                dg1OverrideBytes = M0Probe.tamperedDg1(dg1File),
+                            )
+                        }
                     }
                 }
                 timeline.mark("passive_auth_verified")
@@ -2314,6 +2598,10 @@ abstract class MainActivity : AppCompatActivity() {
             // session — only an access-establishment failure (or, as of
             // 2026-09, a transient chip-communication failure) keeps it (F3).
             wipeSession(keepMrz = false)
+            if (probe != null) {
+                runTierCProbe(probe, dg1File, passiveAuthVerdict!!, tamperedVerdict)
+                return
+            }
             continueAfterRead(mode, passiveAuthVerdict!!, chipAuthStatus, accessProtocol, masterlistReport, dg1File, snapshot)
         }
     }
@@ -2364,6 +2652,12 @@ abstract class MainActivity : AppCompatActivity() {
         // later `siteTitleFor(origin)` call computing the identical value —
         // removed as a duplicate, not merely relocated).
         val site = snapshot?.site ?: SITE_NO_HANDOFF
+
+        // M3b POC: tier C never reaches MintGate (mode A/B's mint pipeline) — it has its own all-or-nothing answer path.
+        if (mode == PresentationMode.C && snapshot != null) {
+            presentTierC(verdict, chipAuthStatus, baseReport, dg1File, snapshot)
+            return
+        }
 
         // Single source of truth (MintGate) — see its doc for the root-cause
         // note on why the branch below now goes through emitReport, and for

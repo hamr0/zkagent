@@ -70,7 +70,7 @@ object SessionDisplay {
      * nested enum even if it wanted to) so this class stays free of any
      * `MainActivity` dependency, matching every sibling pure decision
      * object in this package. */
-    enum class LockedMode { A, B }
+    enum class LockedMode { A, B, C }
 
     /** The handoff-verification pipeline's phase AS OF the instant [render]
      * is called — not persisted state of its own. Every call site either
@@ -94,7 +94,10 @@ object SessionDisplay {
         // anything. Defaulted to `null` so every pre-S2 call site (this
         // constructor is used by three existing call sites/tests with only
         // two positional args) keeps compiling unchanged.
-        data class Verified(val origin: String, val tier: String?, val threshold: Int? = null) : HandoffState()
+        // M3b POC: [tierCLine] is the plain-words predicate line built from the SIGNED tier-C request
+        // ([TierCRequest.describeRequest]); null for every other tier. Defaulted so every existing call
+        // site and test compiles unchanged.
+        data class Verified(val origin: String, val tier: String?, val threshold: Int? = null, val tierCLine: String? = null) : HandoffState()
         data class Refused(val reason: String) : HandoffState()
     }
 
@@ -150,6 +153,8 @@ object SessionDisplay {
     fun modeLabel(locked: LockedMode): String = when (locked) {
         LockedMode.A -> "anonymous"
         LockedMode.B -> "recognisable to this site"
+        // M3b POC: tier C answers named questions about the document; it is neither anonymous nor a pseudonym.
+        LockedMode.C -> "answers named questions about your document"
     }
 
     /** Matches the pre-refactor `refreshModeStatus`'s own "no handoff
@@ -198,6 +203,9 @@ object SessionDisplay {
      */
     private fun questionTextFor(handoff: HandoffState): String {
         val verified = handoff as? HandoffState.Verified ?: return MintPromptText.NO_HANDOFF_FALLBACK
+        // M3b POC (item 7): a tier-C request shows the exact question(s) taken from the signed request,
+        // never the age sentence, so what is shown is what will be sent.
+        if (verified.tier == "C") return "This website asks: ${verified.tierCLine ?: "something about your document"}"
         val base = if (verified.threshold != null) {
             "This website asks if you are over ${verified.threshold}"
         } else {

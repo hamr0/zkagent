@@ -48,4 +48,11 @@ class OutcomeTextTest {
         assertTrue("original message body must appear verbatim, unmodified, at the start", withMode.startsWith(message))
         assertEquals(message, withMode.removeSuffix(" This scan was Mode B, recognisable to this site."))
     }
+
+    @Test
+    fun `mode C names a tier-C scan as answering questions, never as anonymous`() {
+        val result = OutcomeText.withModeSentence("Delivered.", SessionDisplay.LockedMode.C)
+        assertEquals("Delivered. This scan was Mode C, answers named questions about your document.", result)
+        assertTrue(!result.contains("anonymous"))
+    }
 }

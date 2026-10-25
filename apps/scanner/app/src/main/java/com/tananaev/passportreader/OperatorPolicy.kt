@@ -64,6 +64,14 @@ object OperatorPolicy {
      * validated-only in this POC (no runtime wiring; reserved field). */
     val EVIDENCE_PLUG: String = BuildConfig.OPERATOR_EVIDENCE_PLUG
 
+    /** M3b (§6.9.2 item 1): the tier-C capability switch. `false` for every build that does not opt in,
+     * which keeps §6.2 item 13's tier-C refusal exactly as it was. Consumed only by [TierCGate]. */
+    val TIER_C_ENABLED: Boolean = BuildConfig.OPERATOR_TIER_C_ENABLED
+
+    /** M3b (§6.9.2 item 2): the exact-hostname tier-C pin list. Never widened by [VERIFIERS] (item 23):
+     * a site is answered for tier C only if it is listed HERE. Consumed only by [TierCGate]. */
+    val TIER_C_VERIFIERS: Set<String> = parseHostnameList(BuildConfig.OPERATOR_TIER_C_VERIFIERS)
+
     val NAME: String = BuildConfig.OPERATOR_NAME
     val CONTACT_URL: String = BuildConfig.OPERATOR_CONTACT_URL
 

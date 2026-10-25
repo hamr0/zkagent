@@ -64,6 +64,10 @@ data class OperatorConfig(
     val verifiers: List<String>,
     val multiThresholdVerifiers: List<String>,
     val evidencePlug: String,
+    // M3b (D109(b), §6.9.2 items 1-2): the tier-C operator switch and the exact-hostname pin list.
+    // Default off/empty — see rules 7, 10 and 11 in [loadOperatorConfig].
+    val tierCEnabled: Boolean,
+    val tierCVerifiers: List<String>,
     val appName: String,
 )
 
@@ -137,7 +141,7 @@ fun loadOperatorConfig(file: java.io.File): OperatorConfig {
 
     val allowedTopKeys = setOf(
         "schema_version", "operator", "tiers", "thresholds", "verifiers",
-        "multi_threshold_verifiers", "evidence_plug", "tier_c_verifiers", "strings",
+        "multi_threshold_verifiers", "evidence_plug", "tier_c", "tier_c_verifiers", "strings",
     )
     for (key in parsed.keys) {
         if (key !is String || key !in allowedTopKeys) {
@@ -229,14 +233,50 @@ fun loadOperatorConfig(file: java.io.File): OperatorConfig {
         )
     }
 
-    // Rule 7 (default [])
+    // Rule 7 (default []) — RELAXED by M3b (D109(b), §6.9.2 item 2): was "must be empty"; now an array
+    // of bare hostnames, exactly like `verifiers` (no scheme, port, wildcard, comma, quote, backslash).
     val tierCVerifiersRaw = parsed["tier_c_verifiers"] ?: emptyList<Any>()
     if (tierCVerifiersRaw !is List<*>) {
         throw org.gradle.api.GradleException("operator.json: rule 7 — tier_c_verifiers must be an array")
     }
-    if (tierCVerifiersRaw.isNotEmpty()) {
+    val tierCVerifiers = tierCVerifiersRaw.map { entry ->
+        entry as? String
+            ?: throw org.gradle.api.GradleException("operator.json: rule 7 — tier_c_verifiers entries must be strings")
+    }
+    for (verifier in tierCVerifiers) {
+        if (!isBareHostname(verifier)) {
+            throw org.gradle.api.GradleException(
+                "operator.json: rule 7 — tier_c_verifiers entry '$verifier' must be a bare hostname (no scheme, no port, no wildcard)"
+            )
+        }
+    }
+
+    // tier_c switch (§6.9.2 item 1, D96(1)): `{ "enabled": false }`, default false/absent. Unknown keys are
+    // rule 8's business, like every other object in schema v1.
+    val tierCObj = parsed["tier_c"] ?: emptyMap<String, Any>()
+    if (tierCObj !is Map<*, *>) {
+        throw org.gradle.api.GradleException("operator.json: tier_c must be an object")
+    }
+    for (key in tierCObj.keys) {
+        if (key !is String || key != "enabled") {
+            throw org.gradle.api.GradleException("operator.json: rule 8 — unknown key 'tier_c.$key'")
+        }
+    }
+    val tierCEnabledRaw = tierCObj["enabled"] ?: false
+    if (tierCEnabledRaw !is Boolean) {
+        throw org.gradle.api.GradleException("operator.json: tier_c.enabled must be true or false (got: $tierCEnabledRaw)")
+    }
+    val tierCEnabled: Boolean = tierCEnabledRaw
+
+    // Rule 10 / rule 11 (D109(g)7): the two tier-C knobs may never disagree silently.
+    if (tierCEnabled && tierCVerifiers.isEmpty()) {
         throw org.gradle.api.GradleException(
-            "operator.json: rule 7 — tier_c_verifiers must be empty (tier C is refused outright until M3b, D73)"
+            "operator.json: rule 10 — tier_c.enabled is true but tier_c_verifiers is empty (a tier-C build must pin at least one site)"
+        )
+    }
+    if (!tierCEnabled && tierCVerifiers.isNotEmpty()) {
+        throw org.gradle.api.GradleException(
+            "operator.json: rule 11 — tier_c_verifiers is non-empty but tier_c.enabled is not true (the pin list is meaningless with the switch off)"
         )
     }
 
@@ -263,6 +303,8 @@ fun loadOperatorConfig(file: java.io.File): OperatorConfig {
         verifiers = verifiers,
         multiThresholdVerifiers = multiThresholdVerifiers,
         evidencePlug = evidencePlug,
+        tierCEnabled = tierCEnabled,
+        tierCVerifiers = tierCVerifiers,
         appName = appName,
     )
 }
@@ -270,7 +312,18 @@ fun loadOperatorConfig(file: java.io.File): OperatorConfig {
 // operator.json lives at the module root (apps/scanner/), one level up from
 // this app/ subproject's build.gradle.kts — same scoping `runGitCommand`'s
 // dirty-check below already uses for `projectDir.parentFile`.
-val operatorConfig: OperatorConfig = loadOperatorConfig(file("${projectDir.parentFile}/operator.json"))
+//
+// M3b POC: `-PoperatorJson=<path>` builds against a different operator.json (an absolute path, or one
+// relative to apps/scanner/) so the tier-C device runs can produce a switch-on/pinned APK and a
+// switch-off APK without editing the committed reference file. Unset, nothing changes.
+val operatorJsonOverride: String? = providers.gradleProperty("operatorJson").orNull
+val operatorConfig: OperatorConfig = loadOperatorConfig(
+    if (operatorJsonOverride == null) {
+        file("${projectDir.parentFile}/operator.json")
+    } else {
+        rootProject.file(operatorJsonOverride) // absolute, or relative to apps/scanner/
+    }
+)
 
 android {
     // Kotlin package/namespace left as upstream's (fork of spikes/m0, itself a fork
@@ -321,6 +374,11 @@ android {
             "\"${operatorConfig.multiThresholdVerifiers.joinToString(",") { escapeForStringLiteral(it) }}\"",
         )
         buildConfigField("String", "OPERATOR_EVIDENCE_PLUG", "\"${escapeForStringLiteral(operatorConfig.evidencePlug)}\"")
+        buildConfigField("boolean", "OPERATOR_TIER_C_ENABLED", operatorConfig.tierCEnabled.toString())
+        buildConfigField(
+            "String", "OPERATOR_TIER_C_VERIFIERS",
+            "\"${operatorConfig.tierCVerifiers.joinToString(",") { escapeForStringLiteral(it) }}\"",
+        )
 
         // §6.7 item 6 (app_name) — the ONE writer of the app_name resource;
         // apps/scanner/app/src/main/res/values/strings.xml no longer

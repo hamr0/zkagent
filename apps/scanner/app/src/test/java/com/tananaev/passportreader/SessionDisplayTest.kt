@@ -400,4 +400,30 @@ class SessionDisplayTest {
         val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.None)
         assertTrue(p.lockButtonEnabled)
     }
+
+    // ---------------------------------------------------------------- M3b POC: tier C wording
+
+    @Test
+    fun `a locked tier-C session says Mode C and never the age sentence`() {
+        val line = "does your document expire more than 6 months from today"
+        val verified = SessionDisplay.HandoffState.Verified("127.0.0.1:8787", "C", threshold = null, tierCLine = line)
+        val p = SessionDisplay.render(locked = SessionDisplay.LockedMode.C, handoff = SessionDisplay.HandoffState.None, handoffDrivenLock = true, lockedQuestionHandoff = verified)
+        assertEquals("Locked: mode C — tap your document now", p.modeStatusText)
+        assertEquals("This website asks: $line", p.questionText)
+        assertFalse(p.questionText.contains("over"))
+    }
+
+    @Test
+    fun `the tier-C question line is the one the request produced, so another request shows another line`() {
+        val a = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("h", "C", tierCLine = "line one"))
+        val b = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("h", "C", tierCLine = "line two"))
+        assertEquals("This website asks: line one", a.questionText)
+        assertEquals("This website asks: line two", b.questionText)
+        // a tier-C request whose line could not be built still never prints an age sentence
+        assertEquals("This website asks: something about your document",
+            SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("h", "C")).questionText)
+        // control: tier B still gets the age sentence
+        assertEquals("This website asks if you are over 18, and may recognise you again on this site",
+            SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("h", "B", 18)).questionText)
+    }
 }

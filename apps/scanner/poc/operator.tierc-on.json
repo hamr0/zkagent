@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "operator": {
+    "name": "zkagent M3b POC (tier C ON, 127.0.0.1 pinned)",
+    "contact_url": "https://github.com/hamr0/zkagent/issues"
+  },
+  "tiers": "A+B",
+  "thresholds": [15, 16, 18, 21, 60, 65],
+  "verifiers": ["127.0.0.1", "localhost"],
+  "multi_threshold_verifiers": [],
+  "evidence_plug": "none",
+  "tier_c": { "enabled": true },
+  "tier_c_verifiers": ["127.0.0.1"],
+  "strings": {
+    "app_name": "zkagent Scanner"
+  }
+}

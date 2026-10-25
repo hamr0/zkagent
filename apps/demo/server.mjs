@@ -48,6 +48,10 @@ import { DEV_REQUEST_SIGNER } from './dev-request-signer-key.mjs';
 // synchronously on any I/O/parse failure and that is left to propagate to
 // process top-level (fail closed, item 9 — see the bottom of this file).
 import { JsonFileStore, defaultStorePath } from './store.mjs';
+// M3b opening POC (milestones.md §6.9.1): the minimal tier-C round trip. POC-local, NOT chiproof; see the module.
+import {
+  validatePredicates, issueTierCChallenge, buildTierCRequestMember, verifyTierCPoc, describeVerdictForLog,
+} from './tierc-poc.mjs';
 
 // D31 (2026-09-01): the verifier accepts EITHER attester-sig plug, not one
 // fixed one — the device picks whichever its Keystore actually produced (F2:
@@ -488,7 +492,8 @@ export function createApp() {
       }
       let body = {};
       try { body = JSON.parse((await readBody(req)) || '{}'); } catch { body = {}; }
-      const mode = body.mode === 'B' ? 'B' : 'A';
+      // M3b POC: 'C' is a test-driven request (curl / scripts/tierc-poc-request.mjs), never offered by the page.
+      const mode = body.mode === 'B' ? 'B' : body.mode === 'C' ? 'C' : 'A';
       // ttlMs override is a SPIKE affordance so the expiry negative is testable
       // without waiting out the 2-minute default. Clamped; not part of the shape.
       let ttlMs = DEFAULT_TTL_MS;
@@ -496,7 +501,15 @@ export function createApp() {
 
       const transactionId = randomBytes(12).toString('base64url');
       const requestId = randomBytes(12).toString('base64url');
-      const challenge = verifier.issueChallenge({ tier: mode, ttlMs });
+      // M3b POC: tier C does not go through chiproof (item 14 is unbuilt). Its predicates are validated first so a
+      // bad request is a 400 here, never a half-made transaction.
+      let tierC = null;
+      if (mode === 'C') {
+        const v = validatePredicates(body.predicates);
+        if (!v.ok) { sendJson(res, 400, { error: v.reason }); return; }
+        tierC = { predicates: v.predicates, challenge: issueTierCChallenge({ ttlMs }) };
+      }
+      const challenge = mode === 'C' ? tierC.challenge : verifier.issueChallenge({ tier: mode, ttlMs });
 
       // TEST-ONLY (§6.5 S1 POC, D74) — an optional `threshold` query param,
       // NEVER the page's own default: THRESHOLD stays the hardcoded 18
@@ -519,7 +532,7 @@ export function createApp() {
       // read, which is this POC's own claim, nothing more.
       const TEST_ONLY_THRESHOLD_OVERRIDES = new Set([15, 16, 18, 21, 60, 65, 43]);
       const requestedTestThreshold = Number(url.searchParams.get('threshold'));
-      if (TEST_ONLY_THRESHOLD_OVERRIDES.has(requestedTestThreshold) && requestedTestThreshold !== THRESHOLD) {
+      if (mode !== 'C' && TEST_ONLY_THRESHOLD_OVERRIDES.has(requestedTestThreshold) && requestedTestThreshold !== THRESHOLD) {
         challenge.threshold = requestedTestThreshold;
       }
 
@@ -551,13 +564,15 @@ export function createApp() {
         // sig-ed25519/1 OR sig-p256/1 (D31) — evidence_required carries the
         // same alternatives shape as chiproof's evidence.require, so the app
         // knows it may send whichever its Keystore actually produced.
-        zkagent: {
-          spec: 'zkagent/1',
-          tier: mode,
-          evidence_required: mode === 'B' ? [[SIG_ED25519_KEY, SIG_P256_KEY]] : [],
-          evidence: [],
-          challenge,
-        },
+        zkagent: mode === 'C'
+          ? buildTierCRequestMember({ predicates: tierC.predicates, challenge })
+          : {
+            spec: 'zkagent/1',
+            tier: mode,
+            evidence_required: mode === 'B' ? [[SIG_ED25519_KEY, SIG_P256_KEY]] : [],
+            evidence: [],
+            challenge,
+          },
       };
 
       const links = buildAppLinks(requestUri, responseUri);
@@ -567,6 +582,7 @@ export function createApp() {
       const qrDataUrl = await QRCode.toDataURL(links.av, { margin: 1, width: 240 });
       const tx = {
         transactionId, requestId, mode, challenge, requestObject,
+        predicates: tierC ? tierC.predicates : null,
         status: 'pending', verdict: null, createdAt: Date.now(),
       };
       byTransactionId.set(transactionId, tx);
@@ -577,7 +593,11 @@ export function createApp() {
       // operator can see what was asked for next to the verdict that comes
       // back below.
       // eslint-disable-next-line no-console
-      console.log(`[apps/demo] tx created transactionId=${transactionId} mode=${mode} ttlMs=${ttlMs} threshold=${THRESHOLD} embedded_threshold=${challenge.threshold}`);
+      console.log(
+        mode === 'C'
+          ? `[apps/demo] tx created transactionId=${transactionId} mode=C ttlMs=${ttlMs} predicates=${tierC.predicates.map((p) => `${p.name}:${p.months}`).join(',')}`
+          : `[apps/demo] tx created transactionId=${transactionId} mode=${mode} ttlMs=${ttlMs} threshold=${THRESHOLD} embedded_threshold=${challenge.threshold}`,
+      );
 
       sendJson(res, 201, {
         transactionId,
@@ -643,6 +663,9 @@ export function createApp() {
       if (presentation === undefined) {
         // Not decodable — an answer was received and it did not check out.
         verdict = realNo('vp_token_undecodable');
+      } else if (tx.mode === 'C') {
+        // M3b POC: the tier-C answer is checked by the POC-local verifier (it also checks the nonce itself).
+        verdict = verifyTierCPoc(presentation, tx);
       } else if (presentation?.challenge?.nonce !== tx.challenge.nonce) {
         // Response must answer THIS transaction's challenge. A sealed challenge
         // from some other transaction is not this transaction's answer.
@@ -698,7 +721,11 @@ export function createApp() {
           ? 'bound_first_sight'
           : (Array.isArray(verdict.evidence) && verdict.evidence.length > 0 ? 'matched' : 'n/a');
         // eslint-disable-next-line no-console
-        console.log(
+        if (tx.mode === 'C') console.log(
+          `[apps/demo] verdict transactionId=${tx.transactionId} tier=C ok=${verdict.ok} allowed=${verdict.allowed} `
+          + `reason=${verdict.reason} ${describeVerdictForLog(verdict)}`,
+        );
+        else console.log(
           `[apps/demo] verdict transactionId=${tx.transactionId} tier=${verdict.tier ?? tx.mode} `
           + `threshold=${THRESHOLD} ok=${verdict.ok} allowed=${verdict.allowed} reason=${verdict.reason} `
           + `evidence=${JSON.stringify(verdict.evidence ?? [])} attester=${attesterStatus}`,
