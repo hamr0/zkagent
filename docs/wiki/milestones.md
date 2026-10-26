@@ -1285,7 +1285,11 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     lists (no per-presentation cap in this build, D109(h)2), returning `ok:false` for an off-list boundary or an
     out-of-vocabulary predicate, mirroring the existing never-throw verdict contract (D4). **The
     name-match predicate's request shape carries two labelled fields, `given_names` and `surname`
-    (D109(k)1), never one combined string; the exact wire encoding is still decided at build.** (b)
+    (D109(k)1), never one combined string. Final wire (built, chunk 2):** the
+    predicates ride inside the signed D20 challenge (`challenge.predicates`, `challenge.threshold` is
+    `null`), an answer is `{spec:'zkagent/1', tier:'C', challenge, answers:[{name, [months|age], result}]}`
+    (one entry per predicate, in order, nothing else), and a refusal is the OpenID4VP `error=access_denied`
+    plus `state` (D110). The POC-local `zkagent-poc-tierc/0` is gone.** (b)
     ~~A helper to embed an operator-issued membership statement into the site's request~~
     **DROPPED (D109)** with items 3-6: there are no statements. The letter is reserved. **`chiproof`
     has no knowledge of the pin list:** the pin list lives only in the holder's app build (item 2);
