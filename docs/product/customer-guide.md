@@ -99,7 +99,7 @@ short may read as "no match"); the number itself and your other fields are
 never sent. Before you confirm each scan the app shows the questions being asked, read from the
 site's signed request. The app answers every question in a request or refuses the whole request,
 never part of it, and a refusal tells the site only "refused". Age verification (tiers A and B) is
-open to any site once the build allows it (D109(i)); everything else here is gated behind the
+open to any site in a build whose `verifiers` is `"any"` (D109(i)); everything else here is gated behind the
 operator's list and your setting. A site gets **one age in total**: whichever age it asks about first,
 through an age check or through tier C's date-of-birth question, is the only one it can ever use, and
 a different one is refused (D109(i)3). **Limits, stated plainly:**
@@ -375,7 +375,7 @@ rebuilding; there is no over-the-air knob update.
 | `operator` | Required top-level object: `{ "name": "<string>", "contact_url": "<string>" }` — no other keys | Build fails if `operator` isn't an object, if `name` or `contact_url` isn't a string, or if any other key appears under `operator` |
 | `tiers` | `"A+B"` or `"B"` (exact string) | Build fails |
 | `thresholds` | Non-empty subset of the fixed, published list `{15, 16, 18, 21, 60, 65}` (D74) | Build fails, names the offending value — you cannot add a threshold outside this list |
-| `verifiers` | Non-empty array of bare hostnames — no scheme, no port, no wildcard. (Approved 2026-10-25, D109(i), in build, not yet built: alternatively the single string `"any"`, which opens age verification to any site; the array form stays valid.) | Build fails, names the bad entry (e.g. a wildcard or a `host:port` string). Once the `"any"` form is built, `"*"`, `"ANY"`, an empty string or `["any"]` also fail the build (rule 12) |
+| `verifiers` | Either a non-empty array of bare hostnames (no scheme, no port, no wildcard), or exactly the single lower-case string `"any"`, which opens age verification to any site (built, D109(i)). The two forms are mutually exclusive | Build fails, names the bad value. A bad array entry (e.g. a wildcard or a `host:port` string), or an empty array, fails as rule 4. Any other value fails as rule 12: `"*"`, `"ANY"`, `"any "`, an empty string, a number, an object, `null`, or an array that contains the entry `"any"` (`["any"]` is not the open form) |
 | `multi_threshold_verifiers` | Array of bare hostnames, same shape rule as `verifiers`; default `[]` | Build fails on the same shape violations as `verifiers` |
 | `evidence_plug` | `"none"` only, today | Build fails if it names anything else — no attestation plug ships in this repo yet |
 | `tier_c_verifiers` | Must stay `[]` today | Build fails if non-empty. (Approved 2026-10-25, D109(h), in build, not yet built: this becomes the exact-hostname pin list for tier C, together with a separate on/off switch; the two must agree or the build fails. Nothing of this exists in the code today.) |
@@ -389,10 +389,10 @@ no port. The local M3 dev origin `http://127.0.0.1:8787` is written as `"127.0.0
 field. If a site isn't on this list, the app refuses the request before doing anything else — see
 below for exactly what that looks like.
 
-*Approved 2026-10-25 (D109(i)), in build, not yet built: open age verification.* Under the approved
-design `verifiers` can instead be the single string `"any"`, and then a build answers an age check
-(tiers A and B, for the thresholds you listed) from any website, with no hostname list. The repo's
-showcase build will use it. The exact-list form stays valid if you want a closed build. `"any"` does
+*Open age verification (built, D109(i)).* `verifiers` can instead be the single string `"any"`, and
+then a build answers an age check (tiers A and B, for the thresholds you listed) from any website,
+with no hostname list. The repo's showcase build uses it. The exact-list form stays valid if you
+want a closed build. `"any"` does
 not open tier C: that stays behind `tier_c_verifiers`, the build's tier-C switch and the holder
 setting. What still protects you with `"any"`: each site is locked to the first age it ever asks about
 (§5), the request is signed and tied to the site's address, and every scan needs your own
@@ -440,7 +440,7 @@ one fails the build while naming the violated rule, then restores your real file
 clean build succeeds again. Run it after editing the validator itself, or any time you want to
 confirm the build-fails-closed behavior on your own machine.
 
-**What a refused site's users see.** If a site isn't in `verifiers` (this cannot happen in a build whose `verifiers` is `"any"`, once that form is built), the app shows an in-app
+**What a refused site's users see.** If a site isn't in `verifiers` (this cannot happen in a build whose `verifiers` is `"any"`: every site passes this check, and tier C is refused for an unpinned site by a different rule, see above), the app shows an in-app
 refusal naming the unlisted hostname — before any read or mint happens. The site itself receives
 no request at all; it has no way to tell the difference between "the user declined" and "the
 operator's allowlist doesn't include me."

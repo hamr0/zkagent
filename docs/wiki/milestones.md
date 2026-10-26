@@ -772,7 +772,7 @@ runtime), and a bad file is a build failure, never a silent default.
 `tiers`: enum `"A+B" | "B"`. `thresholds`: non-empty subset of `{15,16,18,21,60,65}` (D74).
 `verifiers`: exact **hostnames** (D84 point 1), not full origins — no scheme, no port, no
 wildcards; matches the app's existing D74/D38 host-only key shape (`ThresholdPolicy.hostnameOf`),
-so `http://127.0.0.1:8787` (the M3 dev origin, D76) is expressed as `"127.0.0.1"`. **Designed, NOT built (D109(i)1, in build):** `verifiers` may alternatively be the string `"any"` (age verification open to any site); see §6.9.2 item 23 and rule 12 below.
+so `http://127.0.0.1:8787` (the M3 dev origin, D76) is expressed as `"127.0.0.1"`. **Built 2026-10-26 (item 23, D109(i)1):** `verifiers` may alternatively be the string `"any"` (age verification open to any site); see §6.9.2 item 23 and rule 12 below.
 `multi_threshold_verifiers`: exact hostnames (same shape as `verifiers`), default `[]` — this
 **is** D74 rule 2's named-exceptions list, already in code as `ThresholdPolicy.NAMED_EXCEPTIONS`
 (`ThresholdPolicy.kt:46`, ships empty); exposing it as a knob is the model-A-correct reading of
@@ -814,7 +814,7 @@ rule 7 would be relaxed to the shape rule above (it forces `tier_c_verifiers` em
 and the tier-C switch is off. Both are build failures, so the two knobs can never disagree
 silently.
 
-**Designed addition, NOT built (D109(i)1, in build; rules 1-11 are not renumbered):** 12.
+**Addition, built 2026-10-26 (item 23, D109(i)1; rules 1-11 are not renumbered):** 12.
 `verifiers` is neither a non-empty array of bare hostnames nor exactly the string `"any"`, or the
 array form contains the entry `"any"` (rule 4 keeps the array shape violations). See §6.9.2 item 23.
 
@@ -1501,10 +1501,16 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     the tier-C switch stays off (item 1), so the showcase answers an age check for any site and
     refuses all of tier C. A device-test build turns tier C on separately.
     **Docs.** `customer-guide.md` (the operator.json knobs table, "Verifier hostnames", "What a
-    refused site's users see", §5, and the tier-C limits paragraph) is updated now, marked designed
-    and not built, and flips to built when this item lands. The root `README.md` wording rides on
-    item 20 at build time and is not edited now; `apps/scanner/README.md`'s operator.json lines are
-    updated when this is built.
+    refused site's users see", §5, and the tier-C limits paragraph) was updated first as designed and not built; it
+    now says built (2026-10-26). The root `README.md` wording rides on
+    item 20 at build time and is not edited here; `apps/scanner/README.md`'s operator.json lines were
+    updated when this was built.
+    **BUILT 2026-10-26 (code, unit table, negative script, reference file, docs; chunk 3).** Encoding settled in
+    code: a separate `BuildConfig` boolean `OPERATOR_VERIFIERS_ANY`, with the hostname field `OPERATOR_VERIFIERS`
+    empty under `"any"`, so the open form can never be a hostname-list entry (D86). The array gate for tier C and
+    for `multi_threshold_verifiers` calls the unchanged two-argument `isVerifierAllowed` with its own set, which has
+    no "open" input; only `admitsAgeVerifier` reads the flag. Pass criteria (c) and (d) are device and VPS runs, NOT
+    yet run: this item is not closed until they are.
     **Tests (pass criteria).** (a) Unit: a truth table on the existing pure allowlist decision
     (`"any"`: unlisted, listed and never-seen hostnames all admitted; array form: listed admitted,
     unlisted refused loudly with no mint; `multi_threshold_verifiers` orthogonal), with a negative

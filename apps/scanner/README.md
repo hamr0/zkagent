@@ -42,10 +42,16 @@ For a signed release build (per-operator keystore, `KEYSTORE_FILE`/`KEYSTORE_PAS
 Gradle at configure time (`app/build.gradle.kts`, §6.7 POC, D82/D84) — no
 file ships inside the APK, and a bad file fails the build rather than
 shipping a silent default. It sets the per-deployment verifier hostname
-allowlist, the D74 threshold subset, tier mode (A+B vs B-only), and the
-`app_name` string. See `docs/wiki/milestones.md` §6.7 for the schema and the
-nine build-time validation rules; `apps/scanner/scripts/operator-json-negative.sh`
-exercises fifteen deliberately-bad cases (covering all nine rules) against `:app:assembleRegularDebug`, then checks the good file is restored: 16 `PASS` lines in its output when all is well (re-run and counted 2026-10-24).
+allowlist (or `"verifiers": "any"`, which opens age verification to any
+site while tier C stays behind its own pin list and switch; the committed
+reference file uses `"any"`), the D74 threshold subset, tier mode (A+B vs
+B-only), and the `app_name` string. See `docs/wiki/milestones.md` §6.7 for
+the schema and the twelve build-time validation rules;
+`apps/scanner/scripts/operator-json-negative.sh` exercises deliberately-bad
+cases (covering rules 1-12) against `:app:assembleRegularDebug`, plus the
+positive cases that must build, then checks the good file is restored: the
+script's output ends with `all cases passed` and every case line starts
+`PASS` (counted 2026-10-26: 33 `PASS` lines, 0 `FAIL`).
 
 ## Unit tests (no device needed)
 

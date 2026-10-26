@@ -113,6 +113,7 @@ operator-facing mode).
 | `LINK_SCHEME` | `av` | `av` for the custom-scheme app link (default, D76: the only scheme the sideloaded scanner reaches this demo through); `https` for the app-link variant |
 | `APP_LINK_BASE` | `https://wallet.example.invalid/authorize` | where the `https` app link points (no online hosting is in scope for M3, D76 — this stays a non-resolving placeholder unless an operator has a real wallet app-link host) |
 | `SCOPE_DOMAIN` | `127.0.0.1` | must match the HOST the phone's request actually arrives on (D37) — stays `127.0.0.1` for the `adb reverse` recipe above |
+| `PUBLIC_SCHEME` | `http` | `http` or `https`: the scheme in the URIs the server hands out. Only for the test-only TLS run behind a proxy (`deploy/README.md`, item 23(d)); anything else stops the server at startup |
 | `CHALLENGE_SECRET` | dev-only baked-in default | HMAC key sealing the challenge nonce — a real deployment supplies its own (≥16 bytes) |
 | `DEMO_STORE_PATH` | `apps/demo/data/store.json` | the persistent store file (see above) |
 | `ATTESTER_KEY_ID` / `ATTESTER_PUBKEY_PEM` | DEV_ATTESTER (Ed25519) | pinned mode-B attester key, Ed25519 alternative |
