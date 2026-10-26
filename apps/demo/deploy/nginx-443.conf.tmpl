@@ -1,0 +1,59 @@
+
+# Port 443, three names, one demo process on 127.0.0.1:@DEMO_PORT@ (plain HTTP behind the proxy).
+#   GOOD      CA-valid cert (Let's Encrypt). Well-known serves the key that SIGNS the requests.
+#   MISMATCH  CA-valid cert. Well-known serves a DIFFERENT key (same kid), so the signature must fail.
+#   BADCERT   Self-signed cert no phone trusts: TLS must be refused. Well-known serves the good key.
+
+server {
+    listen 443 ssl;
+    server_name @GOOD_HOST@;
+    ssl_certificate     /etc/letsencrypt/live/zkagent-tls-test/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/zkagent-tls-test/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    access_log @WORK_DIR@/logs/nginx-access.log;
+    error_log  @WORK_DIR@/logs/nginx-error.log;
+    location = /.well-known/zkagent-verifier {
+        alias @WORK_DIR@/wk-good/zkagent-verifier;
+        default_type application/json;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:@DEMO_PORT@;
+        proxy_set_header Host $http_host;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name @MISMATCH_HOST@;
+    ssl_certificate     /etc/letsencrypt/live/zkagent-tls-test/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/zkagent-tls-test/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    access_log @WORK_DIR@/logs/nginx-access.log;
+    error_log  @WORK_DIR@/logs/nginx-error.log;
+    location = /.well-known/zkagent-verifier {
+        alias @WORK_DIR@/wk-mismatch/zkagent-verifier;
+        default_type application/json;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:@DEMO_PORT@;
+        proxy_set_header Host $http_host;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name @BADCERT_HOST@;
+    ssl_certificate     @WORK_DIR@/selfsigned/cert.pem;
+    ssl_certificate_key @WORK_DIR@/selfsigned/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    access_log @WORK_DIR@/logs/nginx-access.log;
+    error_log  @WORK_DIR@/logs/nginx-error.log;
+    location = /.well-known/zkagent-verifier {
+        alias @WORK_DIR@/wk-good/zkagent-verifier;
+        default_type application/json;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:@DEMO_PORT@;
+        proxy_set_header Host $http_host;
+    }
+}

@@ -1,0 +1,17 @@
+# TEST-ONLY (milestones.md section 6.9.2 item 23(d)). Generated into /etc/nginx/conf.d/zkagent-tls-test.conf by run.sh;
+# placeholders (@NAME@) are filled from the environment at run time. No default_server flag anywhere: these blocks
+# answer only for the names below and cannot take over traffic meant for another site.
+
+# Port 80: ACME http-01 challenge files for the two CA-valid names, nothing else.
+server {
+    listen 80;
+    server_name @GOOD_HOST@ @MISMATCH_HOST@;
+    access_log @WORK_DIR@/logs/nginx-access.log;
+    error_log  @WORK_DIR@/logs/nginx-error.log;
+    location /.well-known/acme-challenge/ {
+        root @WORK_DIR@/acme;
+    }
+    location / {
+        return 404;
+    }
+}

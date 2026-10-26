@@ -1,8 +1,8 @@
 // TEST-ONLY preflight + link maker for the TLS deploy kit (deploy/README.md). Node 22, no dependencies; run from ANY
 // machine that can reach the VPS (the host name is read from the environment, never written down).
 //
-//   VERIFIER_HOST=<name> node check.mjs            preflight: does each site behave as the phone should see it?
-//   VERIFIER_HOST=<name> node check.mjs link good|mismatch|badcert
+//   GOOD_HOST=<a> MISMATCH_HOST=<b> BADCERT_HOST=<c> node check.mjs            preflight: does each site behave as the phone should see it?
+//   (same three variables) node check.mjs link good|mismatch|badcert
 //                                                 print ONE single-use av:// link for that site (120 s lifetime)
 //
 // The preflight repeats, with node's own TLS stack and crypto, what the scanner does for a request: fetch the
@@ -11,12 +11,12 @@
 import https from 'node:https';
 import { createPublicKey, verify } from 'node:crypto';
 
-const HOST = process.env.VERIFIER_HOST;
-if (!HOST) { console.error('set VERIFIER_HOST'); process.exit(2); }
+const { GOOD_HOST, MISMATCH_HOST, BADCERT_HOST } = process.env;
+if (!GOOD_HOST || !MISMATCH_HOST || !BADCERT_HOST) { console.error('set GOOD_HOST, MISMATCH_HOST and BADCERT_HOST'); process.exit(2); }
 const SITES = {
-  good: { origin: `https://${HOST}`, expect: 'signature verifies' },
-  mismatch: { origin: `https://${HOST}:8444`, expect: 'key fetched, signature does NOT verify' },
-  badcert: { origin: `https://${HOST}:8445`, expect: 'TLS refused (certificate not trusted)' },
+  good: { origin: `https://${GOOD_HOST}`, expect: 'signature verifies' },
+  mismatch: { origin: `https://${MISMATCH_HOST}`, expect: 'key fetched, signature does NOT verify' },
+  badcert: { origin: `https://${BADCERT_HOST}`, expect: 'TLS refused (certificate not trusted)' },
 };
 
 function call(url, { method = 'GET', body, insecure = false } = {}) {
