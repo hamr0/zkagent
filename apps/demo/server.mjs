@@ -114,6 +114,13 @@ const DEFAULT_SCOPE_HOST = '127.0.0.1';
 // host-only, keep the consistency check on the full origin. Flagging for
 // owner confirmation; did not edit the PRD file myself.
 const SCOPE_DOMAIN = process.env.SCOPE_DOMAIN ?? DEFAULT_SCOPE_HOST;
+// The scheme the PUBLIC origin uses, for a test-only run behind a TLS-terminating proxy (apps/demo/deploy/, item 23(d)):
+// the node process itself always speaks plain HTTP, so the request/response URIs it hands out must name the scheme the
+// phone actually reaches it on. Default unchanged ('http'). Anything but http/https is a startup error, never a guess.
+const PUBLIC_SCHEME = process.env.PUBLIC_SCHEME ?? 'http';
+if (PUBLIC_SCHEME !== 'http' && PUBLIC_SCHEME !== 'https') {
+  throw new Error(`PUBLIC_SCHEME must be 'http' or 'https' (got '${PUBLIC_SCHEME}')`);
+}
 // Spike-only dev secret. A real deployment supplies its own (>=16 bytes).
 const CHALLENGE_SECRET =
   process.env.CHALLENGE_SECRET ?? 'm2-handoff-spike-dev-secret-not-for-production';
@@ -586,7 +593,7 @@ export function createApp() {
   const byRequestId = new Map();     // requestId -> tx
 
   function origin(req) {
-    return `http://${req.headers.host ?? BIND_HOST}`;
+    return `${PUBLIC_SCHEME}://${req.headers.host ?? BIND_HOST}`;
   }
 
   async function handle(req, res) {
