@@ -40,6 +40,10 @@ object TierCText {
         "Your document could not answer every question the website asked, so nothing was sent."
     const val COULD_NOT_ANSWER_RESULT = "Refused: your document could not answer every question"
 
+    /** D110: the report's "what was sent" line when the app tells the website, in one plain sentence, that the request
+     * was refused. No reason, nothing about the holder or the document. */
+    const val REFUSAL_NOTICE_SENT = "a plain \"refused\" notice to the website; no reason, nothing about you or your document"
+
     const val NOT_DELIVERED_DIALOG = "The answers could not be delivered to the website."
 
     /** The completion message after a delivered tier-C answer (finding #27): says it is done, how many answers went,

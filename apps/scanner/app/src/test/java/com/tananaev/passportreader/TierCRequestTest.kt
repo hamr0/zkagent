@@ -19,7 +19,8 @@ class TierCRequestTest {
 
     private fun request(predicates: Any?, tier: String = "C"): JSONObject {
         val z = JSONObject().put("spec", "zkagent/1").put("tier", tier)
-        if (predicates != null) z.put("predicates", predicates)
+        // The predicates ride inside the signed challenge (chiproof item 14), at zkagent.challenge.predicates.
+        z.put("challenge", JSONObject().also { c -> if (predicates != null) c.put("predicates", predicates) })
         return JSONObject().put("zkagent", z)
     }
 
@@ -232,6 +233,18 @@ class TierCRequestTest {
         )
     }
 
+    @Test
+    fun `predicates are read from the signed challenge only - the old zkagent-level list is not read`() {
+        val list = arr(one("name" to "expiry_beyond", "months" to 3))
+        val inChallenge = request(list)
+        assertTrue(TierCRequest.parse(inChallenge) is TierCRequest.Parse.Ok)
+        // the same list at the POC's old place (zkagent.predicates) and none in the challenge: not a request
+        val oldPlace = JSONObject().put("zkagent", JSONObject().put("tier", "C").put("predicates", list).put("challenge", JSONObject()))
+        assertEquals(TierCRequest.Parse.Refuse("predicates_absent"), TierCRequest.parse(oldPlace))
+        // no challenge object at all
+        assertEquals(TierCRequest.Parse.Refuse("predicates_absent"), TierCRequest.parse(JSONObject().put("zkagent", JSONObject().put("tier", "C").put("predicates", list))))
+    }
+
     // ---------------------------------------------------------------- the answer on the wire
 
     @Test
@@ -245,7 +258,7 @@ class TierCRequestTest {
             TierCAnswers.Answered(TierCRequest.Predicate.NationalityNotIn(listOf("CUB", "RUS")), true),
         )
         val p = TierCAnswers.presentation(challenge, answered)
-        assertEquals("zkagent-poc-tierc/0", p.getString("spec"))
+        assertEquals("zkagent/1", p.getString("spec"))
         assertEquals("C", p.getString("tier"))
         assertEquals("n-1", p.getJSONObject("challenge").getString("nonce"))
         val a = p.getJSONArray("answers")

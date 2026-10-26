@@ -21,12 +21,12 @@ class TierCAdmissionTest {
     private fun dob(vararg ages: Int): JSONObject {
         val a = JSONArray()
         for (age in ages) a.put(JSONObject().put("name", "dob_at_least").put("age", age))
-        return JSONObject().put("zkagent", JSONObject().put("tier", "C").put("predicates", a))
+        return JSONObject().put("zkagent", JSONObject().put("tier", "C").put("challenge", JSONObject().put("predicates", a)))
     }
 
     private fun other(): JSONObject = JSONObject().put(
         "zkagent",
-        JSONObject().put("tier", "C").put("predicates", JSONArray().put(JSONObject().put("name", "expiry_beyond").put("months", 6))),
+        JSONObject().put("tier", "C").put("challenge", JSONObject().put("predicates", JSONArray().put(JSONObject().put("name", "expiry_beyond").put("months", 6)))),
     )
 
     private fun decide(
@@ -66,7 +66,7 @@ class TierCAdmissionTest {
 
     @Test
     fun `an unparseable request is refused whole with the parse reason, after the gates pass`() {
-        val bad = JSONObject().put("zkagent", JSONObject().put("tier", "C").put("predicates", JSONArray().put(JSONObject().put("name", "dob_at_least").put("age", 19))))
+        val bad = JSONObject().put("zkagent", JSONObject().put("tier", "C").put("challenge", JSONObject().put("predicates", JSONArray().put(JSONObject().put("name", "dob_at_least").put("age", 19)))))
         val d = decide(bad) as TierCAdmission.Decision.Refuse
         assertEquals(TierCAdmission.Refusal.REQUEST_NOT_ANSWERABLE, d.refusal)
         assertEquals("boundary_off_list", d.reason)

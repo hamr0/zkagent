@@ -1027,17 +1027,36 @@ abstract class MainActivity : AppCompatActivity() {
     private fun refuseTierC(verified: RequestTrust.VerifiedRequest, refusal: TierCAdmission.Decision.Refuse) {
         val text = TierCText.refusalFor(refusal.refusal)
         Log.e(TAG, "M3b tier-C: REFUSED before any read or mint — cause=${refusal.refusal.name.lowercase(Locale.ROOT)} reason=${refusal.reason} chip_read=false mint=false")
+        // D110: a request that passed the gates (verified, operator on, host pinned) is told one generic "refused".
+        val notice = TierCRefusalReply.plan(verified, OperatorPolicy.TIER_C_ENABLED, OperatorPolicy.TIER_C_VERIFIERS)
         emitReport(
             "handoff: REFUSED — ${text.result}",
             ReportLog.DisclosureSummary(
                 site = siteTitleFor(verified.origin),
                 result = text.result,
-                sent = "nothing left this device",
+                sent = if (notice != null) TierCText.REFUSAL_NOTICE_SENT else "nothing left this device",
                 shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
             ),
             outcome = ReportLog.Outcome.FAIL,
         )
+        sendGenericTierCRefusal(notice, refusal.refusal.name.lowercase(Locale.ROOT))
         showBlockingOutcomeDialog(text.dialog, isAccessEstablishmentFailure = false)
+    }
+
+    /** D110: posts the one generic `access_denied` ([TierCRefusalReply]) on a background thread, fire and forget. One
+     * attempt, never retried; the outcome is only logged (value-free), and the holder's in-app refusal is unchanged
+     * whether or not it arrives. [notice] is null when a gate blocked it (nothing is sent). */
+    private fun sendGenericTierCRefusal(notice: TierCRefusalReply.Plan?, cause: String) {
+        if (notice == null) {
+            Log.i(TAG, "M3b tier-C: generic refusal NOT sent (no verified, pinned, operator-enabled request) cause=$cause")
+            return
+        }
+        Thread {
+            when (val r = TierCRefusalReply.send(notice)) {
+                is TierCRefusalReply.Outcome.Sent -> Log.i(TAG, "M3b tier-C: generic refusal sent cause=$cause http_status=${r.httpStatus}")
+                is TierCRefusalReply.Outcome.Failed -> Log.w(TAG, "M3b tier-C: generic refusal NOT delivered cause=$cause error=${r.label} (not retried)")
+            }
+        }.start()
     }
 
     /** Positive path: the decision is re-made NOW (the holder setting or the age map may have changed since the lock
@@ -1060,17 +1079,21 @@ abstract class MainActivity : AppCompatActivity() {
         val micros = (System.nanoTime() - t0) / 1_000
         if (answered is TierCAnswers.Result.Refused) {
             Log.e(TAG, "M3b tier-C: answer_all result=refused reason=${answered.reason} read_to_boolean_us=$micros nothing_sent=true age_lock_written=false")
+            // D110: after the read the request has already passed the gates (it was admitted above), so the same
+            // generic "refused" goes out; the reason stays here.
+            val notice = TierCRefusalReply.plan(snapshot.request, OperatorPolicy.TIER_C_ENABLED, OperatorPolicy.TIER_C_VERIFIERS)
             emitReport(
-                baseReport + "\ntier_c: REFUSED whole — ${answered.reason}; nothing sent",
+                baseReport + "\ntier_c: REFUSED whole — ${answered.reason}; no answer sent" + if (notice != null) ", a plain refused notice was sent" else "",
                 ReportLog.DisclosureSummary(
                     site = snapshot.site,
                     result = TierCText.COULD_NOT_ANSWER_RESULT,
                     chipAuthenticity = chipAuthLabel(chipAuthStatus),
-                    sent = "nothing left this device",
+                    sent = if (notice != null) TierCText.REFUSAL_NOTICE_SENT else "nothing left this device",
                     shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                 ),
                 outcome = ReportLog.Outcome.FAIL,
             )
+            sendGenericTierCRefusal(notice, "document_could_not_answer")
             showBlockingOutcomeDialog(TierCText.COULD_NOT_ANSWER_DIALOG, isAccessEstablishmentFailure = false)
             return
         }
@@ -1131,7 +1154,7 @@ abstract class MainActivity : AppCompatActivity() {
             chipAuthenticity = chipAuthLabel(chipAuthStatus),
             sent = if (deliveryResult == DeliveryResult.Accepted) "yes/no answers to the question(s) asked, nothing else" else "nothing the site kept",
             shared = if (deliveryResult == DeliveryResult.Accepted) ReportLog.DisclosureSummary.Shared.Disclosed(claims) else ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
-            technicalNote = "tier-C POC wire (zkagent-poc-tierc/0), no zktag, no device key",
+            technicalNote = "tier-C answers (chiproof item 14 wire), no zktag, no device key",
         )
         runOnUiThread {
             if (!fence.passes()) {

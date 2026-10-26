@@ -9,8 +9,9 @@ import java.time.LocalDate
  * for ALL five item-8 predicate kinds (expiry bucket, two-field name match, date-of-birth range, nationality in
  * both modes, document-number match).
  *
- * **The wire shape below is still POC-local, not a ruling.** §6.9.2 item 14 (`chiproof` tier-C schema) is chunk 2
- * and replaces it. The request carries `zkagent.predicates`:
+ * **The wire is chiproof's (§6.9.2 item 14, chunk 2).** The predicates ride INSIDE the signed challenge, at
+ * `zkagent.challenge.predicates` (the challenge signature covers them), and the challenge carries `"threshold": null`
+ * so a tier-C ask can never touch the per-site age lock through a threshold field:
  *
  *  - `{"name":"expiry_beyond","months":3|6|12}`
  *  - `{"name":"name_match","given_names":"..","surname":".."}`        (D109(k): two labelled fields)
@@ -19,7 +20,7 @@ import java.time.LocalDate
  *  - `{"name":"nationality_not_in","codes":["CUB","RUS"]}`              (exclusion mode, 1..10 codes)
  *  - `{"name":"document_number_is","number":".."}`
  *
- * The answer is [TierCAnswers.presentation]'s `zkagent-poc-tierc/0` object: one `{name, [months|age], result}` per
+ * The answer is [TierCAnswers.presentation]'s `{spec:"zkagent/1", tier:"C", challenge, answers}` object: one `{name, [months|age], result}` per
  * predicate, in request order. A site-supplied name, number or code is never echoed back, and never logged,
  * rendered or put in a report: [Predicate.toString] is redacted for the two sensitive kinds, and
  * [describe] names the question without the value (§6.9.2 item 16(a)).
@@ -63,7 +64,7 @@ object TierCRequest {
 
     /** Parses `zkagent.predicates` of a VERIFIED request. Never throws; anything unexpected is a refusal. */
     fun parse(requestJson: JSONObject): Parse {
-        val raw = requestJson.optJSONObject("zkagent")?.opt("predicates")
+        val raw = requestJson.optJSONObject("zkagent")?.optJSONObject("challenge")?.opt("predicates")
         if (raw !is JSONArray) return Parse.Refuse("predicates_absent")
         if (raw.length() == 0) return Parse.Refuse("predicates_empty")
         val out = ArrayList<Predicate>(raw.length())
@@ -161,7 +162,8 @@ object TierCAnswers {
 
     sealed class Result {
         data class Answered(val answers: List<TierCAnswers.Answered>) : Result()
-        /** Refused whole: [reason] is a fixed code, never a value. The site gets nothing (D92). */
+        /** Refused whole: [reason] is a fixed code, never a value. The site is told only a generic "refused" (D110, see
+         * [TierCRefusalReply]), never the reason (D92). */
         data class Refused(val reason: String) : Result()
     }
 
@@ -195,9 +197,10 @@ object TierCAnswers {
         return Result.Answered(answers)
     }
 
-    const val POC_SPEC = "zkagent-poc-tierc/0"
+    /** chiproof's presentation spec (the same one tiers A and B use); tier C is told apart by `tier` and `answers`. */
+    const val SPEC = "zkagent/1"
 
-    /** The POC presentation: echoes the challenge (the demo matches its nonce) and carries, per predicate in request
+    /** The tier-C presentation (chiproof item 14): echoes the challenge (the demo matches its nonce) and carries, per predicate in request
      * order, the predicate name, its fixed boundary where it has one (months, age) and the boolean. Never a site value. */
     fun presentation(challenge: JSONObject, answered: List<Answered>): JSONObject {
         val arr = JSONArray()
@@ -210,7 +213,7 @@ object TierCAnswers {
             }
             arr.put(o.put("result", a.result))
         }
-        return JSONObject().put("spec", POC_SPEC).put("tier", "C").put("challenge", challenge).put("answers", arr)
+        return JSONObject().put("spec", SPEC).put("tier", "C").put("challenge", challenge).put("answers", arr)
     }
 
     /** The plain-words, value-free label for one answered predicate (report and log tab). */
