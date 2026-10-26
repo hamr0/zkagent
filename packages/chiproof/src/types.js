@@ -29,12 +29,30 @@
  * @property {string} nonce
  * @property {'A'|'B'|'C'} tier
  * @property {string[]} verbs
- * @property {number} threshold
+ * @property {number|null} threshold `null` on a tier-C predicate challenge
  * @property {number|null} max_scan_age
  * @property {number} issued_at
  * @property {number} expires_at
+ * @property {TierCPredicate[]} [predicates] tier C only (item 14)
  * @property {string} [key_id]
  * @property {string} [sig]
+ */
+
+/**
+ * One tier-C question (milestones.md §6.9.2 items 8, 9, 14), from the fixed vocabulary and boundary lists.
+ *
+ * @typedef {{name: 'expiry_beyond', months: 3|6|12}
+ *   | {name: 'dob_at_least', age: 15|16|18|21|60|65}
+ *   | {name: 'nationality_is', code: string}
+ *   | {name: 'nationality_not_in', codes: string[]}
+ *   | {name: 'name_match', given_names: string, surname: string}
+ *   | {name: 'document_number_is', number: string}} TierCPredicate
+ */
+
+/**
+ * One tier-C answer: the predicate's name, its fixed boundary where it has one, and the boolean. Never a site value.
+ *
+ * @typedef {{name: string, months?: number, age?: number, result: boolean}} TierCAnswer
  */
 
 /**
@@ -45,7 +63,8 @@
  * @typedef {object} IssueChallengeOptions
  * @property {'A'|'B'|'C'} tier
  * @property {string[]} [verbs]
- * @property {number} threshold
+ * @property {number} [threshold] required at tiers A/B; must be omitted with `predicates`
+ * @property {TierCPredicate[]} [predicates] tier C only: the questions asked (item 14)
  * @property {number|null} [max_scan_age]
  * @property {number} ttlMs
  * @property {{privateKey: unknown, key_id: string}|null} [issuer]
@@ -59,6 +78,16 @@
  * @property {string} type
  * @property {string|number} version
  * @property {unknown} data
+ */
+
+/**
+ * A tier-C answer presentation (item 14, D110): one boolean per question asked, in the challenge's order.
+ *
+ * @typedef {object} TierCPresentation
+ * @property {string} spec
+ * @property {'C'} tier
+ * @property {Challenge} challenge
+ * @property {TierCAnswer[]} answers
  */
 
 /**

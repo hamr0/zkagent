@@ -11,6 +11,10 @@
 export { cannotCheck, realNo, yes } from './verdict.js';
 export { canonicalize, sha256 } from './canonical.js';
 export { issueChallenge, verifyChallenge, spendNonce } from './challenge.js';
+export {
+  validateTierCPredicates, checkTierCAnswers, verifyTierCRefusal, tierCPredicateLabel,
+  TIER_C_EXPIRY_MONTHS, TIER_C_DOB_AGES, TIER_C_MAX_EXCLUSION_SET,
+} from './tier-c.js';
 export { InMemoryNonceStore } from './stores/memory.js';
 export { InMemoryAttesterStore } from './stores/attester.js';
 export { EvidenceRegistry, assertPlug, routeEvidence, normalizeRequire } from './evidence.js';
@@ -25,6 +29,7 @@ import {
   issueChallenge as issueChallengeImpl, verifyChallenge, spendNonce,
 } from './challenge.js';
 import { InMemoryNonceStore } from './stores/memory.js';
+import { checkTierCAnswers } from './tier-c.js';
 import { EvidenceRegistry, routeEvidence, normalizeRequire } from './evidence.js';
 
 const SPEC = 'zkagent/1';
@@ -148,15 +153,17 @@ export function createVerifier(config) {
       // Ruling 2026-08-30: the verifier serves ONE threshold. A caller asking
       // for another is a config error -- fail loud, never mint a challenge
       // verify() would then refuse.
-      if (opts.threshold !== undefined && opts.threshold !== settled.threshold) {
+      if (opts.threshold !== undefined && opts.threshold !== settled.threshold && opts.predicates === undefined) {
         throw new TypeError(`issueChallenge: threshold ${opts.threshold} differs from config.threshold ${settled.threshold}`);
       }
       // opts.tier/opts.ttlMs are optional in THIS wrapper's type only because the
       // default `{}` must type-check; issueChallengeImpl still requires and
       // validates them at runtime (throws loud if either is missing), so the
       // cast below documents that hand-off rather than widening a real check.
+      // A tier-C predicate challenge (item 14) carries no threshold at all: the impl refuses one alongside predicates.
+      const thresholdPart = opts.predicates === undefined ? { threshold: settled.threshold } : { threshold: undefined };
       return issueChallengeImpl(/** @type {Parameters<typeof issueChallengeImpl>[0]} */ ({
-        ...opts, threshold: settled.threshold, challengeSecret: settled.challengeSecret,
+        ...opts, ...thresholdPart, challengeSecret: settled.challengeSecret,
       }));
     },
     verify: (presentation, ctx) => verify(settled, presentation, ctx),
@@ -190,6 +197,10 @@ async function verifyInner(settled, presentation, ctx) {
   // --- spec ---------------------------------------------------------------
   if (!isPlainObject(presentation)) return realNo('presentation_malformed');
   if (presentation.spec !== SPEC) return realNo('unsupported_spec');
+
+  // Tier-C answers (item 14): a presentation that carries `answers` is a "prove specific attributes" reply, not an
+  // age claim. It has its own shape and its own checks; the claim pipeline below never sees it.
+  if (presentation.answers !== undefined) return verifyTierC(settled, presentation, now);
 
   // --- shape --------------------------------------------------------------
   const {
@@ -276,4 +287,38 @@ async function verifyInner(settled, presentation, ctx) {
   return tier === 'A'
     ? yes({ tier, reason, evidence: routed.verified, ...extra })
     : yes({ tier, zktag, reason, evidence: routed.verified, ...extra });
+}
+
+/**
+ * Tier-C answers (item 14, D110): spec → shape → challenge (ours + live + SIGNED, D20) → spend nonce → tier →
+ * the challenge's own predicates → answers match them one for one. Each step refuses before the next runs. The
+ * predicates are read from the verified (signed) challenge, so there is no separate transaction state to trust.
+ * Never throws (the caller wraps it).
+ */
+async function verifyTierC(settled, presentation, now) {
+  const keys = Object.keys(presentation);
+  if (presentation.tier !== 'C') return realNo('tier_invalid');
+  if (!keys.every((k) => ['spec', 'tier', 'challenge', 'answers'].includes(k))) return realNo('presentation_malformed');
+  const { challenge, answers } = presentation;
+  if (!isPlainObject(challenge) || !Array.isArray(answers)) return realNo('presentation_malformed');
+
+  const ch = verifyChallenge(challenge, {
+    now, challengeSecret: settled.challengeSecret, trustedChallengeIssuers: settled.trustedChallengeIssuers,
+  });
+  if (!ch.ok) return cannotCheck(ch.reason);
+  if (!ch.valid) return realNo(ch.reason);
+
+  const spend = await spendNonce(challenge, settled.nonceStore, { now });
+  if (!spend.ok) return cannotCheck(spend.reason);
+  if (!spend.valid) return realNo(spend.reason);
+
+  if (challenge.tier !== 'C') return realNo('tier_below_requested');
+  if (tierRank(settled.maxTier) < tierRank('C')) return realNo('tier_exceeds_max');
+  // Tier-C answers carry no evidence in this build; a verifier configured to REQUIRE some at tier C cannot be
+  // satisfied, which is "could not check", never a "no" about the holder.
+  if (settled.slot.require.C.length > 0) return cannotCheck('tier_c_evidence_unsupported');
+
+  const checked = checkTierCAnswers(challenge.predicates, answers);
+  if (!checked.ok) return realNo(checked.reason);
+  return yes({ tier: 'C', reason: 'answers-received', answers: checked.answers });
 }

@@ -35,6 +35,7 @@
 
 import { randomBytes, createHmac, timingSafeEqual, sign as edSign, verify as edVerify } from 'node:crypto';
 import { canonicalize } from './canonical.js';
+import { validateTierCPredicates } from './tier-c.js';
 
 const RANDOM_LEN = 16;
 const ISSUED_AT_LEN = 8; // uint64 BE, ms since epoch
@@ -149,12 +150,24 @@ function verifySignature(publicKey, challengeWithoutSig, sigB64) {
  * @returns {import('./types.js').Challenge}
  */
 export function issueChallenge({
-  tier, verbs = [], threshold, max_scan_age = null, ttlMs, issuer = null, challengeSecret, now = Date.now(),
+  tier, verbs = [], threshold, max_scan_age = null, ttlMs, issuer = null, challengeSecret, now = Date.now(), predicates,
 }) {
   if (tierRank(tier) === undefined) {
     throw new TypeError(`issueChallenge: tier must be 'A', 'B', or 'C', got ${JSON.stringify(tier)}`);
   }
-  if (typeof threshold !== 'number' || !Number.isFinite(threshold)) {
+  // Tier C "prove specific attributes" (item 14): the challenge carries the predicates and NO threshold, so a
+  // tier-C ask can never touch the holder app's one-age-per-site lock through a threshold field. The predicates
+  // are validated against the fixed vocabulary and boundary lists here, so a verifier never mints a challenge
+  // its own verify() (or the holder app) would refuse.
+  /** @type {object[]|undefined} */
+  let tierCPredicates;
+  if (predicates !== undefined) {
+    if (tier !== 'C') throw new TypeError(`issueChallenge: predicates are for tier 'C' only, got tier ${JSON.stringify(tier)}`);
+    if (threshold !== undefined && threshold !== null) throw new TypeError('issueChallenge: a tier-C predicate challenge carries no threshold');
+    const v = validateTierCPredicates(predicates);
+    if (!v.ok) throw new TypeError(`issueChallenge: predicates invalid (${v.reason})`);
+    tierCPredicates = v.predicates;
+  } else if (typeof threshold !== 'number' || !Number.isFinite(threshold)) {
     throw new TypeError(`issueChallenge: threshold must be a finite number, got ${threshold}`);
   }
   if (typeof ttlMs !== 'number' || !Number.isFinite(ttlMs) || ttlMs <= 0) {
@@ -172,11 +185,14 @@ export function issueChallenge({
   const challenge = {
     tier,
     verbs: Array.isArray(verbs) ? verbs : [],
-    threshold,
+    threshold: tierCPredicates ? null : threshold,
     max_scan_age,
     issued_at: issuedAt,
     expires_at: expiresAt,
   };
+  // Not in the nonce HMAC (its sealed fields are fixed): the tier-C signature (D20, required at tier C) covers every
+  // field of the challenge, `predicates` included, so editing the list after minting breaks the signature.
+  if (tierCPredicates) challenge.predicates = tierCPredicates;
   // Seal AFTER the fields are final: the tag covers every one of them.
   challenge.nonce = mintNonce(challengeSecret, issuedAt, challenge);
 
