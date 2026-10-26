@@ -24,6 +24,10 @@ import java.nio.charset.StandardCharsets
  */
 object TierCRefusalReply {
 
+    /** Per-phase (connect, read) timeout of the refusal post the dialog waits for: worst case about twice this, so the
+     * holder is never left waiting more than ~6 s. One attempt, never retried (D110 4c). */
+    const val DIALOG_TIMEOUT_MS = 3_000
+
     /** The only error code ever sent. */
     const val ERROR = "access_denied"
 
@@ -67,13 +71,13 @@ object TierCRefusalReply {
         }
 
     /** Plain `application/x-www-form-urlencoded` POST; returns the status and drains the body. Pure JVM, so the unit
-     * tests run it against a real local HTTP server. Timeouts as the answer path's (10 s). */
-    fun postForm(uri: String, body: String): Int {
+     * tests run it against a real local HTTP server. [timeoutMs] applies to connect and to read (default 10 s, as the answer path; the refusal dialog passes [DIALOG_TIMEOUT_MS]). */
+    fun postForm(uri: String, body: String, timeoutMs: Int = 10_000): Int {
         val conn = (URL(uri).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
-            connectTimeout = 10_000
-            readTimeout = 10_000
+            connectTimeout = timeoutMs
+            readTimeout = timeoutMs
             setRequestProperty("content-type", "application/x-www-form-urlencoded")
         }
         try {

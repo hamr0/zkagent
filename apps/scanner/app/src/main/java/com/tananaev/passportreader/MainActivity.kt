@@ -1024,38 +1024,45 @@ abstract class MainActivity : AppCompatActivity() {
     /** One tier-C refusal BEFORE any chip read or mint, in plain words ([TierCText]). Logged and reported (item 16,
      * never silent). This runs at the lock tap on a request the user chose to verify, not on a foreign intent, so the
      * outcome dialog (which clears the pending request) is the right surface (findings #12/#13 are about foreign intents). */
-    private fun refuseTierC(verified: RequestTrust.VerifiedRequest, refusal: TierCAdmission.Decision.Refuse) {
-        val text = TierCText.refusalFor(refusal.refusal)
-        Log.e(TAG, "M3b tier-C: REFUSED before any read or mint — cause=${refusal.refusal.name.lowercase(Locale.ROOT)} reason=${refusal.reason} chip_read=false mint=false")
+    private fun refuseTierC(verified: RequestTrust.VerifiedRequest, refusal: TierCAdmission.Decision.Refuse, afterRead: Boolean = false) {
+        val reason = TierCText.refusalResult(refusal.refusal)
+        Log.e(TAG, "M3b tier-C: REFUSED ${if (afterRead) "after the read (answer-time re-decision)" else "before any read or mint"} — cause=${refusal.refusal.name.lowercase(Locale.ROOT)} reason=${refusal.reason} chip_read=$afterRead mint=false")
         // D110: a request that passed the gates (verified, operator on, host pinned) is told one generic "refused".
         val notice = TierCRefusalReply.plan(verified, OperatorPolicy.TIER_C_ENABLED, OperatorPolicy.TIER_C_VERIFIERS)
-        emitReport(
-            "handoff: REFUSED — ${text.result}",
-            ReportLog.DisclosureSummary(
-                site = siteTitleFor(verified.origin),
-                result = text.result,
-                sent = if (notice != null) TierCText.REFUSAL_NOTICE_SENT else "nothing left this device",
-                shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
-            ),
-            outcome = ReportLog.Outcome.FAIL,
-        )
-        sendGenericTierCRefusal(notice, refusal.refusal.name.lowercase(Locale.ROOT))
-        showBlockingOutcomeDialog(text.dialog, isAccessEstablishmentFailure = false)
+        deliverGenericTierCRefusal(notice, refusal.refusal.name.lowercase(Locale.ROOT)) { delivery ->
+            val line = TierCText.logLine(reason, delivery)
+            emitReport(
+                "handoff: REFUSED — $line",
+                ReportLog.DisclosureSummary(
+                    site = siteTitleFor(verified.origin),
+                    result = line,
+                    sent = TierCText.refusalSent(delivery),
+                    shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                ),
+                outcome = ReportLog.Outcome.FAIL,
+            )
+            showBlockingOutcomeDialog(TierCText.refusalDialog(refusal.refusal, afterRead, delivery), isAccessEstablishmentFailure = false)
+        }
     }
 
-    /** D110: posts the one generic `access_denied` ([TierCRefusalReply]) on a background thread, fire and forget. One
-     * attempt, never retried; the outcome is only logged (value-free), and the holder's in-app refusal is unchanged
-     * whether or not it arrives. [notice] is null when a gate blocked it (nothing is sent). */
-    private fun sendGenericTierCRefusal(notice: TierCRefusalReply.Plan?, cause: String) {
+    /** D110: posts the one generic `access_denied` ([TierCRefusalReply]) on a background thread and hands the
+     * [TierCText.Delivery] to [then] on the UI thread, so the dialog and the Log line say only what actually happened.
+     * One attempt, never retried; each phase times out after [TierCRefusalReply.DIALOG_TIMEOUT_MS], so the holder waits
+     * at most about twice that. [notice] is null when a gate blocked it (nothing is sent, [then] runs at once). */
+    private fun deliverGenericTierCRefusal(notice: TierCRefusalReply.Plan?, cause: String, then: (TierCText.Delivery) -> Unit) {
         if (notice == null) {
             Log.i(TAG, "M3b tier-C: generic refusal NOT sent (no verified, pinned, operator-enabled request) cause=$cause")
+            then(TierCText.Delivery.NoNotice)
             return
         }
         Thread {
-            when (val r = TierCRefusalReply.send(notice)) {
-                is TierCRefusalReply.Outcome.Sent -> Log.i(TAG, "M3b tier-C: generic refusal sent cause=$cause http_status=${r.httpStatus}")
-                is TierCRefusalReply.Outcome.Failed -> Log.w(TAG, "M3b tier-C: generic refusal NOT delivered cause=$cause error=${r.label} (not retried)")
+            val outcome = TierCRefusalReply.send(notice) { uri, body -> TierCRefusalReply.postForm(uri, body, TierCRefusalReply.DIALOG_TIMEOUT_MS) }
+            when (outcome) {
+                is TierCRefusalReply.Outcome.Sent -> Log.i(TAG, "M3b tier-C: generic refusal posted cause=$cause http_status=${outcome.httpStatus}")
+                is TierCRefusalReply.Outcome.Failed -> Log.w(TAG, "M3b tier-C: generic refusal NOT delivered cause=$cause error=${outcome.label} (not retried)")
             }
+            val delivery = TierCText.Delivery.from(notice, outcome)
+            runOnUiThread { then(delivery) }
         }.start()
     }
 
@@ -1066,7 +1073,7 @@ abstract class MainActivity : AppCompatActivity() {
         val hostname = ThresholdPolicy.hostnameOf(snapshot.origin)
         val admission = decideTierC(snapshot.request.json, hostname)
         if (admission is TierCAdmission.Decision.Refuse) {
-            refuseTierC(snapshot.request, admission)
+            refuseTierC(snapshot.request, admission, afterRead = true)
             return
         }
         admission as TierCAdmission.Decision.Admit
@@ -1080,21 +1087,23 @@ abstract class MainActivity : AppCompatActivity() {
         if (answered is TierCAnswers.Result.Refused) {
             Log.e(TAG, "M3b tier-C: answer_all result=refused reason=${answered.reason} read_to_boolean_us=$micros nothing_sent=true age_lock_written=false")
             // D110: after the read the request has already passed the gates (it was admitted above), so the same
-            // generic "refused" goes out; the reason stays here.
+            // generic "refused" goes out; the reason stays here. The dialog and Log line wait for the post's result.
             val notice = TierCRefusalReply.plan(snapshot.request, OperatorPolicy.TIER_C_ENABLED, OperatorPolicy.TIER_C_VERIFIERS)
-            emitReport(
-                baseReport + "\ntier_c: REFUSED whole — ${answered.reason}; no answer sent" + if (notice != null) ", a plain refused notice was sent" else "",
-                ReportLog.DisclosureSummary(
-                    site = snapshot.site,
-                    result = TierCText.COULD_NOT_ANSWER_RESULT,
-                    chipAuthenticity = chipAuthLabel(chipAuthStatus),
-                    sent = if (notice != null) TierCText.REFUSAL_NOTICE_SENT else "nothing left this device",
-                    shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
-                ),
-                outcome = ReportLog.Outcome.FAIL,
-            )
-            sendGenericTierCRefusal(notice, "document_could_not_answer")
-            showBlockingOutcomeDialog(TierCText.COULD_NOT_ANSWER_DIALOG, isAccessEstablishmentFailure = false)
+            deliverGenericTierCRefusal(notice, "document_could_not_answer") { delivery ->
+                val line = TierCText.logLine(TierCText.COULD_NOT_ANSWER_RESULT, delivery)
+                emitReport(
+                    baseReport + "\ntier_c: REFUSED whole — ${answered.reason}; no answer sent" + if (delivery.told) ", a plain refused notice was sent" else "",
+                    ReportLog.DisclosureSummary(
+                        site = snapshot.site,
+                        result = line,
+                        chipAuthenticity = chipAuthLabel(chipAuthStatus),
+                        sent = TierCText.refusalSent(delivery),
+                        shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
+                    ),
+                    outcome = ReportLog.Outcome.FAIL,
+                )
+                showBlockingOutcomeDialog(TierCText.couldNotAnswerDialog(delivery), isAccessEstablishmentFailure = false)
+            }
             return
         }
         val answers = (answered as TierCAnswers.Result.Answered).answers
