@@ -28,14 +28,14 @@
 
 import { createServer } from 'node:http';
 import { networkInterfaces } from 'node:os';
-import { randomBytes, createPublicKey, createPrivateKey } from 'node:crypto';
+import { randomBytes, createPublicKey, createPrivateKey, generateKeyPairSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 // NEW DEPENDENCY, spike-only — never added to packages/chiproof (D68 part b,
 // decisions.md; finding #18). Pure-JS QR encoder; renders app_link_av as a
 // scannable image instead of text-only. Pinned exact version in package.json.
 import QRCode from 'qrcode';
 import {
-  createVerifier, realNo, sigEd25519, sigP256,
+  createVerifier, realNo, sigEd25519, sigP256, validateTierCPredicates, verifyTierCRefusal, tierCPredicateLabel,
 } from 'chiproof';
 import { DEV_ATTESTER } from './dev-attester-key.mjs';
 import { DEV_ATTESTER_P256 } from './dev-attester-key-p256.mjs';
@@ -48,10 +48,11 @@ import { DEV_REQUEST_SIGNER } from './dev-request-signer-key.mjs';
 // synchronously on any I/O/parse failure and that is left to propagate to
 // process top-level (fail closed, item 9 — see the bottom of this file).
 import { JsonFileStore, defaultStorePath } from './store.mjs';
-// M3b opening POC (milestones.md §6.9.1): the minimal tier-C round trip. POC-local, NOT chiproof; see the module.
+// M3b chunk 2 (milestones.md §6.9.2 items 14 and 15): tier C goes through chiproof like tiers A and B. The demo-only
+// helpers (loopback gate, value-free log line, device-test hook) live in tierc.mjs.
 import {
-  validatePredicates, issueTierCChallenge, buildTierCRequestMember, verifyTierCPoc, describeVerdictForLog, predicateLabel,
-} from './tierc-poc.mjs';
+  DEFAULT_PREDICATES, isLoopbackRequest, describeVerdictForLog, resignWithRawPredicates,
+} from './tierc.mjs';
 
 // D31 (2026-09-01): the verifier accepts EITHER attester-sig plug, not one
 // fixed one — the device picks whichever its Keystore actually produced (F2:
@@ -61,6 +62,7 @@ import {
 // preimage, same item shape) and is retired in favor of it.
 const SIG_ED25519_KEY = 'sig-ed25519/1';
 const SIG_P256_KEY = 'sig-p256/1';
+const CHALLENGE_ISSUER_KEY_ID = 'demo-tierc-challenge-issuer';
 
 // ---------------------------------------------------------------- config ----
 // §6.3 item 7/10: the demo must be reachable from the phone's own browser at
@@ -184,6 +186,7 @@ export function makeVerifier() {
   // predates D38): a pinned key_id is resolved before the store is ever
   // consulted, letting the owner keep pinning a real Pixel key today, ahead
   // of the scanner sending `pubkey`.
+  const challengeIssuer = generateKeyPairSync('ed25519');
   const attesterStoreEd25519 = store.attesterView('ed25519');
   const attesterStoreP256 = store.attesterView('p256');
   const verifier = createVerifier({
@@ -191,7 +194,10 @@ export function makeVerifier() {
     challengeSecret: CHALLENGE_SECRET,
     threshold: THRESHOLD,
     stores: { nonce: store },
-    tiers: { max: 'B' },
+    tiers: { max: 'C' },
+    // Tier-C challenges are signed (D20). The demo signs them with a key made fresh at every start: a challenge only
+    // matters for its own few minutes, so nothing about this key needs to outlive the process or sit in the tree.
+    trustedChallengeIssuers: [{ pubkey: challengeIssuer.publicKey, key_id: CHALLENGE_ISSUER_KEY_ID, maxTier: 'C' }],
     evidence: {
       plugs: {
         [SIG_ED25519_KEY]: sigEd25519({
@@ -208,7 +214,7 @@ export function makeVerifier() {
       require: { A: [], B: [[SIG_ED25519_KEY, SIG_P256_KEY]] },
     },
   });
-  return { verifier, store };
+  return { verifier, store, challengeIssuer };
 }
 
 // ------------------------------------------------------------ app links ----
@@ -232,7 +238,9 @@ const COMPARE_JS = readFileSync(new URL('./compare.mjs', import.meta.url), 'utf8
 // browser regains focus after the app returns (owner device nit,
 // docs/logs/M3-POC-EVIDENCE-2026-09-04.md), tier A/B vocabulary only (D19,
 // never "mode A/B" on the page), no tier C control, no threshold picker, no
-// ZK language, no PII (tier A/B carry none; the zktag pseudonym MAY be shown).
+// ZK language, no PII (tier A/B carry none; the zktag pseudonym MAY be shown). Chunk 2 (items 14/15, D109(g)8,
+// D110): a third action, "Prove specific attributes" (tier C), shown on loopback only. It shows per question its name
+// and the yes/no answer, and ONE generic "Refused" outcome, never a value and never a reason.
 const PAGE = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -257,6 +265,10 @@ const PAGE = `<!doctype html>
   #outcomeHeading.allowed { color: #0a7a2f; }
   #outcomeHeading.notAllowed { color: #a10000; }
   #outcomeHeading.noAnswer { color: #8a5400; }
+  #outcomeHeading.refused { color: #6b2a7a; }
+  label.field { display: block; margin: .5rem 0 .15rem; font-weight: 600; font-size: .9em; }
+  input[type=text], select { font: inherit; padding: .5rem .6rem; width: 100%; border: 1px solid #888; border-radius: 6px; background: #fff; color: inherit; }
+  ul#tierCAnswers { margin: .3rem 0; padding-left: 1.2rem; }
   #alreadyRegistered { font-weight: bold; color: #a15a00; border: 1px solid #e0b060; background: #fff6e8; padding: .5rem .7rem; border-radius: 6px; margin: .4rem 0; }
   #qrimg { max-width: 240px; width: 100%; height: auto; display: block; }
   table { border-collapse: collapse; width: 100%; }
@@ -273,12 +285,35 @@ const PAGE = `<!doctype html>
 <div class="buttons">
   <button id="goA">Prove you're over 18</button>
   <button id="goB">Prove you're a unique adult human</button>
+  <button id="goC" hidden>Prove specific attributes</button>
 </div>
+
+<section id="tierCForm" hidden>
+  <h2>Prove specific attributes</h2>
+  <p class="muted">Fill in only what you want to ask. The app answers each question yes or no and never sends a value from the document. This runs on this computer only (127.0.0.1).</p>
+  <label class="field" for="cExpiry">Document still valid for more than</label>
+  <select id="cExpiry"><option value="">not asked</option><option value="3">3 months</option><option value="6">6 months</option><option value="12">12 months</option></select>
+  <label class="field" for="cAge">Holder is at least</label>
+  <select id="cAge"><option value="">not asked</option><option>15</option><option>16</option><option>18</option><option>21</option><option>60</option><option>65</option></select>
+  <label class="field" for="cNatIs">Nationality is (1 to 3 letters)</label>
+  <input type="text" id="cNatIs" maxlength="3" autocomplete="off" autocapitalize="characters" spellcheck="false">
+  <label class="field" for="cNatNot">Nationality is none of (up to 10, comma separated)</label>
+  <input type="text" id="cNatNot" autocomplete="off" autocapitalize="characters" spellcheck="false">
+  <label class="field" for="cGiven">Given names (name match)</label>
+  <input type="text" id="cGiven" autocomplete="off" spellcheck="false">
+  <label class="field" for="cSurname">Surname (name match)</label>
+  <input type="text" id="cSurname" autocomplete="off" spellcheck="false">
+  <label class="field" for="cNumber">Document number</label>
+  <input type="text" id="cNumber" autocomplete="off" spellcheck="false">
+  <p id="cError" class="muted" role="alert"></p>
+  <div class="buttons"><button id="askC">Ask the app</button></div>
+</section>
 
 <section id="outcome" hidden>
   <h2 id="outcomeHeading"></h2>
   <div id="alreadyRegistered" hidden>Already registered at this site</div>
   <p id="outcomeLine"></p>
+  <ul id="tierCAnswers" hidden></ul>
   <p class="muted">What the app sent back:</p>
   <pre id="verdictJson" class="scrollpre"></pre>
   <p id="storeState" class="muted"></p>
@@ -333,7 +368,64 @@ const compareTbody = document.querySelector('#compareTable tbody');
 
 function log(...args) { console.log('[zkagent-demo]', ...args); }
 
+// Tier C (D110): per question its plain name and the yes/no answer, never a value. The boundaries (months, age) are
+// fixed public numbers; a name, a number or a country code is never shown, because the verdict never carries one.
+const tierCAnswers = document.getElementById('tierCAnswers');
+function tierCLine(a) {
+  const names = {
+    expiry_beyond: 'Document valid for more than ' + a.months + ' months',
+    dob_at_least: 'Holder is at least ' + a.age + ' years old',
+    nationality_is: 'Nationality matches the one asked',
+    nationality_not_in: 'Nationality is none of the ones listed',
+    name_match: 'Name matches the one asked',
+    document_number_is: 'Document number matches the one asked',
+  };
+  return (names[a.name] || a.name) + ': ' + (a.result === true ? 'yes' : 'no');
+}
+function renderTierC(s) {
+  outcomeSection.hidden = false;
+  alreadyRegistered.hidden = true;
+  storeState.textContent = '';
+  tierCAnswers.hidden = true;
+  tierCAnswers.textContent = '';
+  const v = s.verdict;
+  if (s.status === 'expired') {
+    outcomeHeading.textContent = 'No answer';
+    outcomeHeading.className = 'noAnswer';
+    outcomeLine.textContent = 'The request expired and nothing came back. The holder may have walked away.';
+    verdictJson.textContent = '';
+    log('outcome', { tier: 'C', status: 'expired' });
+    return;
+  }
+  verdictJson.textContent = JSON.stringify(v, null, 2);
+  if (v.refused === true) {
+    outcomeHeading.textContent = 'Refused';
+    outcomeHeading.className = 'refused';
+    outcomeLine.textContent = "The holder's app refused this request. It does not say why, and nothing was disclosed.";
+  } else if (v.ok === true && v.allowed === true && Array.isArray(v.answers)) {
+    outcomeHeading.textContent = 'Answered';
+    outcomeHeading.className = 'allowed';
+    outcomeLine.textContent = 'The app answered every question asked:';
+    for (const a of v.answers) {
+      const li = document.createElement('li');
+      li.textContent = tierCLine(a);
+      tierCAnswers.appendChild(li);
+    }
+    tierCAnswers.hidden = false;
+  } else if (v.allowed === false) {
+    outcomeHeading.textContent = 'Not accepted';
+    outcomeHeading.className = 'notAllowed';
+    outcomeLine.textContent = 'The response was not accepted (' + v.reason + ').';
+  } else {
+    outcomeHeading.textContent = 'No answer';
+    outcomeHeading.className = 'noAnswer';
+    outcomeLine.textContent = 'The verifier could not check (' + v.reason + ').';
+  }
+  log('outcome', { tier: 'C', allowed: v.allowed, refused: v.refused === true, reason: v.reason });
+}
+
 function renderOutcome(tier, s) {
+  if (tier === 'C') { renderTierC(s); return; }
   outcomeSection.hidden = false;
   const v = s.verdict;
   let headingClass = 'noAnswer';
@@ -400,11 +492,13 @@ function renderCompare(tier, presentation) {
   log('tier-A compare', { differingFields });
 }
 
-async function start(tier) {
+async function start(tier, predicates) {
   if (pollTimer) clearInterval(pollTimer);
   const mode = tier; // wire-level field is still named "mode" (server.mjs contract, unchanged)
-  const res = await fetch('/ui/presentations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode }) });
+  const payload = tier === 'C' ? { mode, predicates } : { mode };
+  const res = await fetch('/ui/presentations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
   const tx = await res.json();
+  if (tier === 'C' && !res.ok) { cError.textContent = 'The request was not accepted (' + (tx.error || res.status) + ').'; return; }
   outcomeSection.hidden = true;
   handoffSection.hidden = false;
   log('transaction created', { transactionId: tx.transactionId, tier });
@@ -415,9 +509,9 @@ async function start(tier) {
     const r = await fetch('/ui/presentations/' + tx.transactionId);
     if (!r.ok) return;
     const s = await r.json();
-    if (s.status === 'done') {
+    if (s.status === 'done' || s.status === 'expired') {
       clearInterval(pollTimer); pollTimer = null;
-      log('poll done', { transactionId: tx.transactionId });
+      log('poll done', { transactionId: tx.transactionId, status: s.status });
       renderOutcome(tier, s);
       renderCompare(tier, s.presentation);
     }
@@ -425,6 +519,37 @@ async function start(tier) {
 }
 document.getElementById('goA').addEventListener('click', () => start('A'));
 document.getElementById('goB').addEventListener('click', () => start('B'));
+
+// Tier C is offered on loopback only (D109(g)8); the server refuses it anywhere else too.
+const goC = document.getElementById('goC');
+const tierCForm = document.getElementById('tierCForm');
+const cError = document.getElementById('cError');
+const cText = ['cNatIs', 'cNatNot', 'cGiven', 'cSurname', 'cNumber'].map((id) => document.getElementById(id));
+if (['127.0.0.1', 'localhost', '[::1]'].includes(location.hostname)) goC.hidden = false;
+goC.addEventListener('click', () => { tierCForm.hidden = !tierCForm.hidden; });
+function readTierC() {
+  const val = (id) => document.getElementById(id).value.trim();
+  const predicates = [];
+  if (val('cExpiry')) predicates.push({ name: 'expiry_beyond', months: Number(val('cExpiry')) });
+  if (val('cAge')) predicates.push({ name: 'dob_at_least', age: Number(val('cAge')) });
+  if (val('cNatIs')) predicates.push({ name: 'nationality_is', code: val('cNatIs') });
+  if (val('cNatNot')) predicates.push({ name: 'nationality_not_in', codes: val('cNatNot').split(',').map((c) => c.trim()).filter((c) => c) });
+  if (val('cGiven') || val('cSurname')) {
+    if (!val('cGiven') || !val('cSurname')) return { error: 'Name match needs both given names and surname.' };
+    predicates.push({ name: 'name_match', given_names: val('cGiven'), surname: val('cSurname') });
+  }
+  if (val('cNumber')) predicates.push({ name: 'document_number_is', number: val('cNumber') });
+  if (predicates.length === 0) return { error: 'Fill in at least one question.' };
+  return { predicates };
+}
+document.getElementById('askC').addEventListener('click', () => {
+  const r = readTierC();
+  cError.textContent = r.error || '';
+  if (r.error) return;
+  // The typed values live in the signed request only; clear the fields so nothing lingers on the page.
+  for (const el of cText) el.value = '';
+  start('C', r.predicates);
+});
 </script>`;
 
 // -------------------------------------------------------------- helpers ----
@@ -455,7 +580,7 @@ function b64urlToJson(s) {
 
 // ------------------------------------------------------------------ app ----
 export function createApp() {
-  const { verifier, store } = makeVerifier();
+  const { verifier, store, challengeIssuer } = makeVerifier();
   const requestSignerKey = createPrivateKey(REQUEST_SIGNER_PRIVKEY_PEM);
   const byTransactionId = new Map(); // transactionId -> tx
   const byRequestId = new Map();     // requestId -> tx
@@ -492,7 +617,8 @@ export function createApp() {
       }
       let body = {};
       try { body = JSON.parse((await readBody(req)) || '{}'); } catch { body = {}; }
-      // M3b POC: 'C' is a test-driven request (curl / scripts/tierc-poc-request.mjs), never offered by the page.
+      // 'C' (tier C, "prove specific attributes") is offered by the page on loopback only and by
+      // scripts/tierc-poc-request.mjs; the loopback gate is applied below.
       const mode = body.mode === 'B' ? 'B' : body.mode === 'C' ? 'C' : 'A';
       // ttlMs override is a SPIKE affordance so the expiry negative is testable
       // without waiting out the 2-minute default. Clamped; not part of the shape.
@@ -501,18 +627,32 @@ export function createApp() {
 
       const transactionId = randomBytes(12).toString('base64url');
       const requestId = randomBytes(12).toString('base64url');
-      // M3b POC: tier C does not go through chiproof (item 14 is unbuilt). Its predicates are validated first so a
-      // bad request is a 400 here, never a half-made transaction.
-      let tierC = null;
+      // Tier C goes through chiproof (item 14). D109(g)8: loopback only, whatever the BIND_HOST. The predicates are
+      // validated by chiproof first, so a bad request is a 400 here, never a half-made transaction.
+      let challenge;
+      let tierCLabels = null;
       if (mode === 'C') {
-        // POC-ONLY test hook (device check of the app's whole-request refusal): with TIERC_POC_ALLOW_RAW=1 the verifier
-        // signs `rawPredicates` exactly as given, so an off-list boundary can reach the app. Off by default.
+        if (!isLoopbackRequest(req.headers.host, req.socket.remoteAddress)) { sendJson(res, 403, { error: 'tier_c_loopback_only' }); return; }
+        // DEVICE-TEST HOOK (off unless TIERC_POC_ALLOW_RAW=1): signs `rawPredicates` exactly as given, so an off-list
+        // boundary can reach the app and its whole-request refusal can be device-checked.
         const raw = process.env.TIERC_POC_ALLOW_RAW === '1' && Array.isArray(body.rawPredicates) ? body.rawPredicates : null;
-        const v = raw ? { ok: true, predicates: raw } : validatePredicates(body.predicates);
-        if (!v.ok) { sendJson(res, 400, { error: v.reason }); return; }
-        tierC = { predicates: v.predicates, challenge: issueTierCChallenge({ ttlMs }) };
+        const asked = body.predicates === undefined ? DEFAULT_PREDICATES : body.predicates;
+        const issuer = { privateKey: challengeIssuer.privateKey, key_id: CHALLENGE_ISSUER_KEY_ID };
+        try {
+          if (raw) {
+            const base = verifier.issueChallenge({ tier: 'C', predicates: DEFAULT_PREDICATES, ttlMs, issuer });
+            challenge = resignWithRawPredicates(base, raw, challengeIssuer.privateKey);
+            tierCLabels = raw.map((p) => tierCPredicateLabel(p));
+          } else {
+            const v = validateTierCPredicates(asked);
+            if (!v.ok) { sendJson(res, 400, { error: v.reason }); return; }
+            challenge = verifier.issueChallenge({ tier: 'C', predicates: v.predicates, ttlMs, issuer });
+            tierCLabels = v.predicates.map((p) => tierCPredicateLabel(p));
+          }
+        } catch { sendJson(res, 400, { error: 'predicates_invalid' }); return; }
+      } else {
+        challenge = verifier.issueChallenge({ tier: mode, ttlMs });
       }
-      const challenge = mode === 'C' ? tierC.challenge : verifier.issueChallenge({ tier: mode, ttlMs });
 
       // TEST-ONLY (§6.5 S1 POC, D74) — an optional `threshold` query param,
       // NEVER the page's own default: THRESHOLD stays the hardcoded 18
@@ -568,7 +708,7 @@ export function createApp() {
         // same alternatives shape as chiproof's evidence.require, so the app
         // knows it may send whichever its Keystore actually produced.
         zkagent: mode === 'C'
-          ? buildTierCRequestMember({ predicates: tierC.predicates, challenge })
+          ? { spec: 'zkagent/1', tier: 'C', challenge } // the predicates ride INSIDE the signed challenge (item 14)
           : {
             spec: 'zkagent/1',
             tier: mode,
@@ -585,7 +725,7 @@ export function createApp() {
       const qrDataUrl = await QRCode.toDataURL(links.av, { margin: 1, width: 240 });
       const tx = {
         transactionId, requestId, mode, challenge, requestObject,
-        predicates: tierC ? tierC.predicates : null,
+        predicates: tierCLabels,
         status: 'pending', verdict: null, createdAt: Date.now(),
       };
       byTransactionId.set(transactionId, tx);
@@ -598,7 +738,7 @@ export function createApp() {
       // eslint-disable-next-line no-console
       console.log(
         mode === 'C'
-          ? `[apps/demo] tx created transactionId=${transactionId} mode=C ttlMs=${ttlMs} predicates=${tierC.predicates.map((p) => predicateLabel(p)).join(',')}`
+          ? `[apps/demo] tx created transactionId=${transactionId} mode=C ttlMs=${ttlMs} predicates=${tierCLabels.join(',')}`
           : `[apps/demo] tx created transactionId=${transactionId} mode=${mode} ttlMs=${ttlMs} threshold=${THRESHOLD} embedded_threshold=${challenge.threshold}`,
       );
 
@@ -646,29 +786,31 @@ export function createApp() {
       let raw;
       try { raw = await readBody(req); } catch { sendJson(res, 413, { error: 'body_too_large' }); return; }
       const ctype = String(req.headers['content-type'] ?? '');
-      let state, vpToken;
+      let state, vpToken, errorParam;
       if (ctype.includes('application/json')) {
         let body = {};
         try { body = JSON.parse(raw || '{}'); } catch { /* fall through */ }
-        state = body.state; vpToken = body.vp_token;
+        state = body.state; vpToken = body.vp_token; errorParam = body.error;
       } else {
         // OpenID4VP direct_post is application/x-www-form-urlencoded
         const form = new URLSearchParams(raw);
-        state = form.get('state'); vpToken = form.get('vp_token');
+        state = form.get('state'); vpToken = form.get('vp_token'); errorParam = form.get('error') ?? undefined;
       }
-      if (!state || !vpToken) { sendJson(res, 400, { error: 'missing_state_or_vp_token' }); return; }
+      // D110: a refusal is the standard OpenID4VP error response (`error=access_denied` plus `state`), no vp_token.
+      if (!state || (!vpToken && typeof errorParam !== 'string')) { sendJson(res, 400, { error: 'missing_state_or_vp_token' }); return; }
       const tx = byRequestId.get(state);
       if (!tx) { sendJson(res, 404, { error: 'unknown_state' }); return; }
       if (tx.status === 'done') { sendJson(res, 409, { error: 'already_responded' }); return; }
 
-      const presentation = b64urlToJson(vpToken);
       let verdict;
-      if (presentation === undefined) {
+      let presentation;
+      if (!vpToken) {
+        // Only a tier-C transaction accepts an error response (D110); for tiers A and B it stays the 400 it always was.
+        if (tx.mode !== 'C') { sendJson(res, 400, { error: 'missing_state_or_vp_token' }); return; }
+        verdict = verifyTierCRefusal({ error: errorParam, state });
+      } else if ((presentation = b64urlToJson(vpToken)) === undefined) {
         // Not decodable — an answer was received and it did not check out.
         verdict = realNo('vp_token_undecodable');
-      } else if (tx.mode === 'C') {
-        // M3b POC: the tier-C answer is checked by the POC-local verifier (it also checks the nonce itself).
-        verdict = verifyTierCPoc(presentation, tx);
       } else if (presentation?.challenge?.nonce !== tx.challenge.nonce) {
         // Response must answer THIS transaction's challenge. A sealed challenge
         // from some other transaction is not this transaction's answer.
@@ -689,7 +831,9 @@ export function createApp() {
       // `verdict` in the poll response below, exactly as it arrived
       // (b64urlToJson's decode of vp_token) — chiproof's verdict itself
       // stays completely untouched by this addition.
-      tx.presentation = presentation === undefined ? null : presentation;
+      // Tier C: the echoed challenge carries the site-supplied name, number and codes, so the poll response never
+      // returns the presentation (the page shows names and booleans from the verdict only).
+      tx.presentation = presentation === undefined || tx.mode === 'C' ? null : presentation;
       // §6.3 item 3/4: tier-B duplicate rejection. This is the DEMO's own
       // dedupe state -- chiproof stores nothing (D3, FR3) and its verdict
       // is never rewritten here (the wire contract with the scanner stays
@@ -743,7 +887,11 @@ export function createApp() {
       const transactionId = path.slice('/ui/presentations/'.length);
       const tx = byTransactionId.get(transactionId);
       if (!tx) { sendJson(res, 404, { error: 'unknown_transaction' }); return; }
-      if (tx.status !== 'done') { sendJson(res, 200, { status: 'pending' }); return; }
+      if (tx.status !== 'done') {
+        // Tier C only (D110): a request that expired with nothing received is "no answer", distinct from a refusal.
+        sendJson(res, 200, { status: tx.mode === 'C' && Date.now() > tx.challenge.expires_at ? 'expired' : 'pending' });
+        return;
+      }
       // §6.3 item 3/4: zktag_seen_before/already_registered are sibling
       // fields alongside chiproof's own, untouched verdict -- see the
       // direct_post handler above for why they are computed there.

@@ -26,6 +26,10 @@
 //                            how the app's whole-request refusal of an off-list boundary is device-checked.
 // --ttl SECONDS sets the request lifetime (default 120, the verifier clamps at 600) for human-paced device checks.
 //
+// Since D110 a refused request ends as RESULT status=done ... reason=refused_by_holder refused=true (the app posts one
+// generic access_denied); a request that ran out with nothing received ends as RESULT status=expired. --wait polls for
+// either. Tier C is accepted by the demo on loopback only (127.0.0.1 / localhost), whatever --host says elsewhere.
+//
 // Prints transaction ids, link, status, ok/allowed/reason, predicate names and boolean answers. It never prints a
 // document value, a name or a number.
 
@@ -42,7 +46,8 @@ const ttlSec = Number(opt('ttl', '0'));
 if (!['A', 'B', 'C'].includes(tier)) { console.error('--tier must be A, B or C'); process.exit(2); }
 
 import { execFileSync } from 'node:child_process';
-import { adbForceStopArgs, adbLaunchArgs, predicateLabel } from '../tierc-poc.mjs';
+import { tierCPredicateLabel as predicateLabel } from 'chiproof';
+import { adbForceStopArgs, adbLaunchArgs } from '../tierc.mjs';
 
 const base = `http://${host}:${port}`;
 
@@ -94,10 +99,11 @@ if (waitSec > 0) {
   for (;;) {
     const r = await fetch(`${base}/ui/presentations/${tx.transactionId}`);
     const s = await r.json();
+    if (s.status === 'expired') { console.log('RESULT status=expired (the request ran out with nothing received: "no answer")'); process.exit(0); }
     if (s.status === 'done') {
       const v = s.verdict ?? {};
       const answered = Array.isArray(v.answers) ? v.answers.map((a) => `${predicateLabel(a)}=${a.result}`).join(',') : 'none';
-      console.log(`RESULT status=done ok=${v.ok} allowed=${v.allowed} reason=${v.reason} answered=${answered} presentation_nonempty=${s.presentation !== null && s.presentation !== undefined}`);
+      console.log(`RESULT status=done ok=${v.ok} allowed=${v.allowed} reason=${v.reason} answered=${answered} refused=${v.refused === true} presentation_nonempty=${s.presentation !== null && s.presentation !== undefined}`);
       process.exit(0);
     }
     if (Date.now() > deadline) { console.log('RESULT status=pending (nothing reached the verifier within the wait)'); process.exit(0); }
