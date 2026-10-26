@@ -1,3 +1,9 @@
+# Global options. skip_install_trust: the badcert site below uses Caddy's internal CA; without this, Caddy (run as root)
+# would try to install that root CA into the VPS's SYSTEM trust store. It must never enter it.
+{
+	skip_install_trust
+}
+
 # TEST-ONLY (milestones.md §6.9.2 item 23(d)). Three sites on ONE host name, all proxying the same demo process, so a
 # single run covers the pass case and both paired negatives. {$VERIFIER_HOST} and {$WORK_DIR} come from the environment
 # (run.sh sets them); no host name is written down here.

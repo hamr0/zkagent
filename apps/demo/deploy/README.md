@@ -52,6 +52,8 @@ VERIFIER_HOST=HOSTNAME node check.mjs link good        # also: mismatch, badcert
 `run.sh down` stops without deleting. Caddy's certificate store stays under root's data directory; `purge` tells you
 where. Delete the DNS record afterwards if it was created for this test.
 
+The Caddyfile sets `skip_install_trust`, so the badcert site's internal CA is never installed into the VPS's system trust store. `purge` leaves Caddy's data dir (including that internal CA) under root's data dir, as `run.sh` prints.
+
 ## Phone side
 
 The right APK is a release variant, not a debug build (the debug build has a cleartext exception for loopback; it
