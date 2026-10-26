@@ -1290,3 +1290,45 @@ JUnit XML, not from a device run.
 - **Anchor**: `docs/logs/M3B-CHUNK1-EVIDENCE-2026-10-25.md` check 4; the question-area rendering in `MainActivity`
 - **Finding**: with a request of expiry 6 plus an off-list age, the question area read only "This website asks: something about your document that this app cannot answer"; it did NOT list the answerable expiry question. This is consistent with all-or-nothing (the whole request is refused before any read) and the refusal dialog is correct, but the owner may want to rule on the wording. Severity guess: LOW (wording only; no data effect).
 - **Status**: OPEN (owner may want to rule on the wording; nothing here is a ruling).
+
+### 2026-10-26 — #30: M3b chunk 2 — the refusal dialog can appear up to ~6 s after Verify with no "Sending…" indicator
+- **Source**: agent (chunk 2 coder bounds) plus device run; recorded by agent
+- **Anchor**: scanner generic-refusal post (3 s connect + 3 s read bound), `MainActivity` refusal path; evidence `docs/logs/M3B-CHUNK2-EVIDENCE-2026-10-26.md` @ `183f407`
+- **Finding**: if the site is slow, the dialog appears up to about 6 s after Verify with nothing on screen saying the app is sending the refusal, so a double tap is possible. Not observed as a problem on loopback. Severity guess: LOW.
+- **Status**: OPEN (nothing here is a ruling).
+
+### 2026-10-26 — #31: M3b chunk 2 — the customer guide / in-app disclosure must say a pinned site learns "refused" (not why)
+- **Source**: agent, from the chunk 2 design (D110); recorded by agent
+- **Anchor**: milestones.md §6.9.7 item 17 (chunk 4); evidence doc checks 1, 4, 6
+- **Finding**: item 17's text must state that a pinned site learns that the request was refused (not the reason), and can therefore tell a refusal from the holder walking away. Severity guess: MEDIUM (disclosure honesty).
+- **Status**: OPEN (build input for chunk 4; nothing here is a ruling).
+
+### 2026-10-26 — #32: M3b chunk 2 — the demo page lead undercounts: "Two things a website can ask"
+- **Source**: agent, from the chunk 2 page work; recorded by agent
+- **Anchor**: `apps/demo` page lead text
+- **Finding**: the lead says "Two things a website can ask"; with tier C on loopback there are now three. Severity guess: LOW (wording).
+- **Status**: OPEN, FOLDED into milestones.md §6.9.2 item 24 (D111, 2026-10-26): the lead fix is part of that item; closes when item 24 is built.
+
+### 2026-10-26 — #33: M3b chunk 2 — the refusal notice is unauthenticated; first write wins
+- **Source**: agent (chunk 2 review of the wire); recorded by agent
+- **Anchor**: demo server refusal endpoint; scanner `access_denied` post; evidence doc check 1
+- **Finding**: anyone who knows a transaction's state could post `access_denied` and mark it refused (first write wins), so a third party could suppress a real answer. Low on loopback; note for the branch review. Severity guess: LOW on loopback, MEDIUM if a non-loopback verifier ever uses this wire.
+- **Status**: OPEN (for `/branch-review`; nothing here is a ruling).
+
+### 2026-10-26 — #34: M3b chunk 2 device run — the phone keeps showing a stale request after it expires
+- **Source**: orchestrator, during check 6 (tx `FbZvvWrSjpZ3cyCm`); recorded by agent
+- **Anchor**: `docs/logs/M3B-CHUNK2-EVIDENCE-2026-10-26.md` check 6; milestones.md §6.9.7 item 18 (chunk 4)
+- **Finding**: after the site marks a request expired, the app still shows "This website asks:" with the old question until Verify, because it checks expiry only then. Linked to item 18 (link-once / stale handling). Severity guess: LOW.
+- **Status**: OPEN (build input for chunk 4; nothing here is a ruling).
+
+### 2026-10-26 — #35: M3b chunk 2 device run — the NL ID card's name and number on the new wire were not exercised
+- **Source**: orchestrator, during check 3 (tx `H-XAPwQxoCgG8B7_`); recorded by agent
+- **Anchor**: `docs/logs/M3B-CHUNK2-EVIDENCE-2026-10-26.md` check 3
+- **Finding**: the name and number fields were left empty, so `name_match` and `document_number_is` on the new wire are proven on the US passport only. The NL card answered them in chunk 1 on the POC wire. Coverage gap; rerun with the fields filled to close it. Severity guess: LOW.
+- **Status**: OPEN (nothing here is a ruling).
+
+### 2026-10-26 — #36: owner REQUEST — keep the demo page as a test page for anyone using chiproof
+- **Source**: owner remark, 2026-10-26; recorded by agent
+- **Anchor**: `apps/demo`; PRD scope gate (NO-GO #10)
+- **Finding**: the owner said the demo page should be kept as a test page for anyone using chiproof. This is a request pending a scope decision, not a ruling, and it is not yet in the PRD; under the scope gate it cannot enter a milestone until it is written there.
+- **Status**: RULED by D111 (2026-10-26, owner): `apps/demo` is the official LOCAL test and showcase page, every scenario triggerable from it; scope in milestones.md §6.9.2 item 24 (chunk 4). History kept: it was first recorded as an owner REQUEST pending a scope decision.

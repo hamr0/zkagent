@@ -1542,6 +1542,62 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     **scanner** (`OperatorPolicy`, `build.gradle.kts` validation, `BuildConfig` generation), the
     negative script, **docs**. Tag: ENHANCEMENT. Implements: D109(i)1; amends D84 point 1; leaves
     D74 unchanged.
+24. **Demo page as the official local test and showcase page (D111, ENHANCEMENT, demo + docs).**
+    `apps/demo` is the official LOCAL test and showcase page for chiproof adopters: loopback
+    `http://127.0.0.1:8787`, dev/throwaway signing key, never hosted (a hosted verifier reintroduces
+    NO-GO #3; D76, D109(g)8). **Rule:** EVERY scenario in the list below is triggerable from the page,
+    each with one plain-language line saying what it demonstrates. The page shows verdicts, booleans and
+    predicate names only, never PII or a raw field value (item 16). Test-only request shapes get page
+    controls labelled "test-only", present only when the demo is started in an explicit test mode
+    (a new switch, name settled in code; off by default; the existing `TIERC_POC_ALLOW_RAW=1` gate
+    folds into it). The page's lead, "Two things a website can ask" (finding #32), is corrected to
+    cover every thing the page can ask. M3 item 6's default (threshold 18, no picker) stands outside test
+    mode. The list is enumerated from the existing docs; a scenario not in a cited source is not added
+    here without a further owner ruling (NO-GO #10). "Build" = needs a specific scanner build;
+    "Phone" = needs a phone action; "Test-only" = needs a request shape the default page does not send.
+
+    | # | Scenario (one line on the page) | Source | Needs |
+    |---|---|---|---|
+    | 1 | Tier A answered, over the threshold | M3 item 1, D66 | Phone |
+    | 2 | Tier A answered, under the threshold: an honest "no" (`allowed:false`) | D66 | Phone, an under-age document |
+    | 3 | Tier A twice: the two presentations differ only in nonce and challenge timestamps | M3 item 5, D77 | Phone, two scans |
+    | 4 | Tier B answered, first registration at this site | M3 items 1, 3, 4 | Phone |
+    | 5 | Tier B, same document again: "already registered" | M3 item 4 | Phone, second scan |
+    | 6 | One age per site: a different age asked by the same site is refused in the app (any tier, shared lock) | D74 rule 1, item 9, D109(i)2 | Phone, Test-only (second threshold) |
+    | 7 | Multi-age exemption: a site on `multi_threshold_verifiers` may ask more than one age | D74 rule 2, D84, D109(j)2 | Phone, Build (`127.0.0.1` in `multi_threshold_verifiers`), Test-only |
+    | 8 | Tier C answered: expiry bucket | item 8(a), item 9 | Phone, Build (switch ON, `127.0.0.1` pinned), holder setting ON |
+    | 9 | Tier C answered: name match (`given_names` plus `surname`) | item 8(b), D109(k) | same as 8 |
+    | 10 | Tier C answered: date-of-birth range | item 8(c), item 9 | same as 8 |
+    | 11 | Tier C answered: nationality, exclusion mode and confirmation mode | item 8(d), D102 | same as 8 |
+    | 12 | Tier C answered: document-number match (a boolean, never the number) | item 8(e), D9 | same as 8 |
+    | 13 | Tier C, several predicates in one request: all answered or the whole request refused | item 13, D92 | same as 8 |
+    | 14 | Tier C refused: holder setting "Allow additional verifications" OFF | item 7, D109(h)3 | Phone, setting OFF |
+    | 15 | Tier C refused: a question this app does not answer (off-list boundary, more than 10 countries) | item 8, item 9, D102 | Phone, Test-only (`--raw` shape) |
+    | 16 | Tier C refused: an age that conflicts with the site's age lock | item 9, D109(i)2 | Phone, Test-only (second threshold) |
+    | 17 | Tier C refused: the site is not on the pin list | item 2, D19, D20 | Phone, Build (pin list without the page's host; how the page presents an unpinned host is not sourced, see below) |
+    | 18 | Tier C refused: operator switch OFF in the build | item 1, D96(1) | Phone, Build (switch OFF) |
+    | 19 | Every refusal in 14-18 shows the ONE generic "Refused" on the page; the reasons show in the app only | D92, D109(g)5, D110 | as above |
+    | 20 | "No answer": the holder walked away and the request expired, distinct from "Refused" | D110, item 15 | Phone (walk away) |
+    | 21 | Stale or already-used link: opening an old link shows "Verification session expired" in the app | M3-POC-EVIDENCE case 3 (`SESSION_EXPIRED_MESSAGE`); item 18 | Phone (reopen an old link) |
+    | 22 | Link-once: a forced recreation does not replay a link or start a second verification | item 18 | Phone, ADB recreation (item 18 pass criteria 2-4) |
+    | 23 | Wrong document details typed in: the app re-arms and keeps the pending link | D79(c)(i) | Phone (type wrong details) |
+    | 24 | Card lifted mid-read: "Couldn't read", the flow stays open | D79(c), M3-POC-EVIDENCE case 2 | Phone (lift the card) |
+    | 25 | Open age verification: a site NOT on any list gets an age answer (tiers A and B) | item 23, D109(i)1 | Phone, Build (`"verifiers": "any"`, the reference build), second host |
+    | 26 | Open age verification: the same unlisted site is refused for tier C | item 23, D109(i)1, item 2 | as 25, Build (switch ON) |
+
+    Rows 21, 22 and 25-26 are added by item 18 and chunk 3 (item 23) and MUST appear on the page.
+    Not sourced, NOT added: any scenario outside the table, including the chunk 2 check 5 case "site
+    unreachable at refusal time" (scanner-side only, D110 later note; the page cannot cause it). Docs:
+    a short "Test it with a real phone" section in `packages/chiproof/README.md` and in the main
+    `README.md` (item 20), pointing at the page and at `apps/demo/README.md`'s run recipe. Pass
+    criteria: (1) the page offers every row above (a test lists the rows against the page's
+    controls; a negative control removes one control and turns it red); (2) every row has its
+    one-line explanation and its "needs" marking visible; (3) with test mode OFF, no test-only
+    control is present and the server refuses a test-only request shape (a test with a count above
+    zero for the controls excluded); (4) device: rows 1, 5, 8, 14, 17, 20, 25 run from the page on the
+    Pixel 6a, the human reading the screen; (5) the lead no longer says "Two things". Touches:
+    **demo** (`server.mjs` page and controls, test mode), **docs** (two READMEs), no `chiproof`
+    change expected. Tag: ENHANCEMENT. Implements: D111; folds finding #32; closes finding #36.
 
 ### 6.9.3 Traceability — decision → item
 
@@ -1603,6 +1659,7 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
 | D87 (malformed `av://` guard) | 18 (link-once is its sibling guard) |
 | D84/D86 (`operator.json` validation, comma/quote/backslash) | 2, 19 |
 | D72 (lockstep versioning) | 21 |
+| D111 (demo page as the local test and showcase page; finding #32 folded) | 24 |
 
 Every ruled decision D89-D107 still lands in at least one row above, either as an item or as an
 explicit SUPERSEDED entry; none is orphaned.
@@ -1709,11 +1766,11 @@ This sat on the current branch's own history and was never an M3b task.
 
 ### 6.9.6 Size estimate
 
-**Re-estimated 2026-10-25 for the D109 scope, then for D109(h), then for D109(i).** **16 numbered units**: the
-§6.9.1 POC plus 15 live scope items (items 1, 2, 7, 8, 9, 13-17, the new items 18-21, and the new item 23, open age verification, D109(i)). Items
+**Re-estimated 2026-10-25 for the D109 scope, then for D109(h), then for D109(i).** **17 numbered units** (after D111): the
+§6.9.1 POC plus 15 live scope items (items 1, 2, 7, 8, 9, 13-17, the new items 18-21, the new item 23, open age verification, D109(i), and the new item 24, the demo page as the local test page, D111). Items
 3, 4, 5 and 6 are DROPPED and items 10, 11 and 12 are DEFERRED (D109(h)), all with their numbers
 reserved; item 22 is a procedure (the status flip, done), not build work, so none of those is
-counted. The section counted 18 units before D109, 18 after D109, 15 after D109(h), and 16 after D109(i) (+1 unit: item 23).
+counted. The section counted 18 units before D109, 18 after D109, 15 after D109(h), 16 after D109(i) (+1 unit: item 23), and 17 after D111 (+1 unit: item 24, demo plus docs).
 
 - **Gone (D109):** item 4 (app-side membership-statement verifier), item 3 (the signing tool) and
   items 5/6 (lifetime bound and wording): the one unit whose size could not be bounded and a whole
@@ -1748,9 +1805,11 @@ Owner-approved 2026-10-25 ("agreed, update prd with the order"). Items 3-6 are d
 1. **Chunk 1, tier C in the app.** Items 1 (operator switch) and 2 (hostname pin), both partly built in the POC at `2720daa`; 7 (the real "Allow additional verifications" switch in a Settings location, replacing the POC's Diagnostics-tab placement); 8 (all five predicates, two-field name match, ICAO transliteration including the German umlaut forms per ICAO 9303 Part 3); 9 (fixed boundaries plus the shared one-age-per-site lock, with the multi-threshold exemption); 13 (all-or-nothing); 16 (standing rules); and finding #27's UX gaps (plain wording, no separate test controls in the real flow, a completion message). *Device check:* one tier-C request carrying several predicates, answered from one scan.
 2. **Chunk 2, the site side.** Item 14 (chiproof verifies tier-C answers; replaces the POC-local `zkagent-poc-tierc/0` wire and `apps/demo/tierc-poc.mjs`) and item 15 (the demo page's tier-C section: two name fields, one generic refusal, loopback only). **D110 (2026-10-26) adds the app's one generic `access_denied` refusal to the site for a gated tier-C refusal** (scanner, small; see decisions.md D110); the page shows it as the one "refused" outcome. *Device check:* end to end through the demo page.
 3. **Chunk 3, open age verification.** Item 23 (`verifiers: "any"`, rule 12, reference build switched), including 23(d), the real-TLS test on the owner's VPS. *Device check:* an unlisted site gets an age answer but no tier-C answer.
-4. **Chunk 4, leftovers and release.** Items 18 (link-once, device check), 19 (negative cases, rule 5), 17 (disclosed limitations in the guide and in-app), 20 (README rewrite; an approved draft exists), 21 (version lines). Then /self-review, /branch-review, /release as **0.9.0** (lockstep, D72: chiproof, demo, scanner versionName 0.9.0 / versionCode 8).
+4. **Chunk 4, leftovers and release.** Items 18 (link-once, device check), 19 (negative cases, rule 5), 17 (disclosed limitations in the guide and in-app), 20 (README rewrite; an approved draft exists), 21 (version lines), 24 (the demo page as the local test and showcase page, D111; built after chunk 3 and item 18 so their scenarios are on it; its README sections sit beside item 20). Then /self-review, /branch-review, /release as **0.9.0** (lockstep, D72: chiproof, demo, scanner versionName 0.9.0 / versionCode 8).
 
 **Owner supplies:** the phone and both documents at the chunk 1-3 checks; the VPS for chunk 3 (hostname given at test time, never written in docs); the `pass` unlock plus a go for merge, tag and publish at release.
+
+**Item 24 note (D111):** the scenarios added by chunk 3 (item 23: rows 25-26) and by item 18 (rows 21-22) MUST appear on the page; item 24 is therefore built last in chunk 4.
 
 **Placement notes:** item 16 (standing rules) sits in chunk 1 because it governs the new app UI and paths; item 17 sits in chunk 4 with the guide, but its in-app disclosures are drafted as the chunk 1-3 UI lands; item 19 sits in chunk 4 though it touches `operator.json` validation (rule 5) that chunk 3 also changes, so run its cases again after chunk 3.
 
