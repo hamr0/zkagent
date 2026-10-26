@@ -1292,8 +1292,13 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     a site that is not on a given build's list is simply refused by that build, and the site
     learns nothing. Site-side enforcement of the same vocabulary and boundary lists the scanner enforces
     holder-side is the point of (a): a dishonest scanner build must not be the only place these
-    caps are checked. Touches: **chiproof** (`packages/chiproof/src`, new tier-C validation module).
-    Tag: ENHANCEMENT. Implements: D19, D20, D90, D95, D97.
+    caps are checked. **D110 (2026-10-26):** the app now sends the site ONE generic refusal
+    (OpenID4VP `error=access_denied`, plus `state`) for a refused tier-C request that passed the
+    app's own gates (item 2's pin and the operator switch, and a verified JWS); `chiproof` therefore
+    also verifies that response as a distinct, explicit "refused" verdict (`ok:true, allowed:false`,
+    never a pass, never a throw; any other `error` value is `ok:false, allowed:null`), carrying no
+    reason. Touches: **chiproof** (`packages/chiproof/src`, new tier-C validation module).
+    Tag: ENHANCEMENT. Implements: D19, D20, D90, D95, D97, D110.
 15. **Demo page extension over M3 (§6 table's M3b row). Adjusted by D109(d).** `apps/demo` gains a
     third action — "prove specific attributes" (tier C) — alongside M3's existing tier-A/B actions,
     gated to a demo-side `operator.json`-equivalent (or the existing env-var config, per D84 point
@@ -1313,7 +1318,11 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     any refusal reason, for example the holder setting being off). D92 says a site only ever learns "refused" or "answered everything", so the
     demo's verifier cannot know either. The page therefore shows ONE generic refusal outcome
     (distinct from a successful disclosure, mirroring M3 item 4's "already registered" pattern);
-    the reasons and the lock state are shown in the app only. D92 is UNCHANGED. The page keeps the
+    the reasons and the lock state are shown in the app only. D92 is UNCHANGED. **D110 (2026-10-26):** the generic
+    "refused" outcome is now something the site really receives (the app posts `access_denied`,
+    item 14), so the page can tell "refused" from "no answer" (a request that expired with nothing
+    posted, for example a holder who walked away); the three outcomes on the page are answered,
+    refused, and no answer. The page keeps the
     demo's own server-side per-origin state only. The demo's verifier and its logs MUST record predicate names and verdicts only,
     never the site-supplied name or number being tested. **Name match on the demo page (D109(k)):
     the demo's input is two labelled fields, given names and surname, so the page never asks for or
@@ -1733,7 +1742,7 @@ the first reading of expiry and nationality from real chips.
 Owner-approved 2026-10-25 ("agreed, update prd with the order"). Items 3-6 are dropped, 10-12 deferred, item 22 is done; every other live item is in exactly one chunk. **Rule:** each chunk is committed and device-checked before the next starts.
 
 1. **Chunk 1, tier C in the app.** Items 1 (operator switch) and 2 (hostname pin), both partly built in the POC at `2720daa`; 7 (the real "Allow additional verifications" switch in a Settings location, replacing the POC's Diagnostics-tab placement); 8 (all five predicates, two-field name match, ICAO transliteration including the German umlaut forms per ICAO 9303 Part 3); 9 (fixed boundaries plus the shared one-age-per-site lock, with the multi-threshold exemption); 13 (all-or-nothing); 16 (standing rules); and finding #27's UX gaps (plain wording, no separate test controls in the real flow, a completion message). *Device check:* one tier-C request carrying several predicates, answered from one scan.
-2. **Chunk 2, the site side.** Item 14 (chiproof verifies tier-C answers; replaces the POC-local `zkagent-poc-tierc/0` wire and `apps/demo/tierc-poc.mjs`) and item 15 (the demo page's tier-C section: two name fields, one generic refusal, loopback only). *Device check:* end to end through the demo page.
+2. **Chunk 2, the site side.** Item 14 (chiproof verifies tier-C answers; replaces the POC-local `zkagent-poc-tierc/0` wire and `apps/demo/tierc-poc.mjs`) and item 15 (the demo page's tier-C section: two name fields, one generic refusal, loopback only). **D110 (2026-10-26) adds the app's one generic `access_denied` refusal to the site for a gated tier-C refusal** (scanner, small; see decisions.md D110); the page shows it as the one "refused" outcome. *Device check:* end to end through the demo page.
 3. **Chunk 3, open age verification.** Item 23 (`verifiers: "any"`, rule 12, reference build switched), including 23(d), the real-TLS test on the owner's VPS. *Device check:* an unlisted site gets an age answer but no tier-C answer.
 4. **Chunk 4, leftovers and release.** Items 18 (link-once, device check), 19 (negative cases, rule 5), 17 (disclosed limitations in the guide and in-app), 20 (README rewrite; an approved draft exists), 21 (version lines). Then /self-review, /branch-review, /release as **0.9.0** (lockstep, D72: chiproof, demo, scanner versionName 0.9.0 / versionCode 8).
 

@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D109
+title: zkagent — owner decisions D1–D110
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D109
+# Owner decisions D1–D110
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -545,3 +545,11 @@ Closes finding #26 item 1 (name order). Nothing here calls any of this zero-know
 3. **Chunk 3, open age verification:** item 23, including 23(d) (real TLS on the owner's VPS).
 4. **Chunk 4, leftovers and release:** items 18, 19, 17, 20, 21, then /self-review, /branch-review and /release as 0.9.0 (lockstep, D72).
 Owner supplies the phone and both documents at the chunk 1-3 checks, the VPS (hostname given at test time, never written in docs) for chunk 3, and the `pass` unlock plus a go for merge, tag and publish at release. Nothing here calls any of this zero-knowledge.
+
+**D110 (2026-10-26, owner) — a tier-C refusal sends the site ONE generic "refused" notice; the reasons stay in the app only.** Context: chunk 1 sends the site nothing on a tier-C refusal, so a site cannot tell "the holder refused" from "the holder walked away" (the request just stays pending until it expires). Question put to the owner, with two options. Option 1: the app posts one generic refusal. Option 2: stay silent, and the demo page shows "no answer" after the request expires. The owner chose option 1. Ruling:
+1. **The app posts one generic refusal to the request's `response_uri`.** It is the standard OpenID4VP error response over the same `direct_post` channel: form body `error=access_denied`, plus `state` when the request carried one. The body is IDENTICAL for every refusal reason: no `error_description`, no reason code, no predicate, no per-predicate map. This keeps D92's property (a site learns only "refused" or "answered everything asked") and D109(g)5 (the reasons show in the app only). A holder who is refused because of one specific predicate looks the same to the site as one refused for any other cause.
+2. **It is sent only for a request that already passed the app's own gates:** the request object's JWS verified (D34/D37), the requesting host is on the build's `tier_c_verifiers` pin list, and the operator switch is on. Never to an unpinned or unverified site, and never before those gates. A site that fails a gate still learns nothing (operator switch off, host not pinned). This is the line that keeps the notice from leaking link-open and device IP to a site the operator did not list (the lesson of the 2026-09 allowlist-gate-before-fetch fix).
+3. **Scope default, orchestrator default, NOT an owner ruling (the owner can overrule it):** tier C only. Tier A and B refusals are unchanged (they send nothing, as today).
+4. **Edge cases, orchestrator defaults, NOT owner rulings:** (a) the holder's "Allow additional verifications" switch OFF passes the operator and pin gates, so it DOES send the generic refusal (the site learns "refused", not why, and not that the cause was the holder's setting). (b) A refusal that happens after the chip read (the document cannot answer a predicate, or the pre-read decision no longer holds at answer time) is also sent, generic and identical. (c) If the post itself fails (no network, a timeout, any non-2xx), the app logs the status or exception class, the holder still sees the same in-app refusal, and the app NEVER retries. (d) A `409 already_responded` from the verifier is logged as it is today and changes nothing. (e) A holder who simply abandons a request (closes the app, never taps) sends nothing, so "abandoned" stays distinguishable from "refused" on the site.
+5. **Site side (chiproof, chunk 2):** an `access_denied` response verifies as a distinct, explicit "refused" verdict (`ok:true, allowed:false`, a `refused` marker): never a pass and never a crash; any other `error` value is "could not check" (`ok:false, allowed:null`). The demo page shows ONE generic "refused" outcome, distinct from success and from "no answer".
+Disclosed: the notice lets a pinned site know the holder actively refused; a pinned site that learns that on one request can still not learn why. Nothing here calls any of this zero-knowledge. Applied in milestones.md §6.9.2 items 14 and 15 and §6.9.7 (chunk 2). Rejected: option 2, silence. See D92, D109(g)5, D109(h).
