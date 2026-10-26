@@ -390,6 +390,25 @@ run_case_ok "tier-c-on-with-pin-builds" '{
   "strings": {"app_name": "x"}
 }'
 
+# Item 23 (D109(i)1, rule 12): `verifiers` is EITHER a non-empty array of bare hostnames OR exactly the string "any".
+# Same file but for the one `verifiers` value, so the only variable is that value. Each bad value MUST exit non-zero
+# AND name "rule 12"; "any" MUST build clean. A wildcard ARRAY entry is still rule 4 (case 4 above); an empty array too.
+verifiers_body() {
+    printf '{"schema_version": 1, "operator": {"name": "x", "contact_url": "https://x.example"}, "tiers": "A+B", "thresholds": [18], "verifiers": %s, "multi_threshold_verifiers": [], "evidence_plug": "none", "tier_c_verifiers": [], "strings": {"app_name": "x"}}' "$1"
+}
+run_case "verifiers-star-string" "rule 12" "$(verifiers_body '"*"')"
+run_case "verifiers-ANY-uppercase" "rule 12" "$(verifiers_body '"ANY"')"
+run_case "verifiers-any-trailing-space" "rule 12" "$(verifiers_body '"any "')"
+run_case "verifiers-empty-string" "rule 12" "$(verifiers_body '""')"
+run_case "verifiers-number" "rule 12" "$(verifiers_body '5')"
+run_case "verifiers-object" "rule 12" "$(verifiers_body '{"any": true}')"
+run_case "verifiers-null" "rule 12" "$(verifiers_body 'null')"
+run_case "verifiers-array-containing-any" "rule 12" "$(verifiers_body '["any"]')"
+run_case "verifiers-array-any-among-hostnames" "rule 12" "$(verifiers_body '["127.0.0.1", "any"]')"
+run_case "verifiers-empty-array-still-rule-4" "rule 4" "$(verifiers_body '[]')"
+run_case "verifiers-wildcard-array-entry-still-rule-4" "rule 4" "$(verifiers_body '["*.example.com"]')"
+run_case_ok "verifiers-any-builds" "$(verifiers_body '"any"')"
+
 # Restore and prove the good file builds clean again (belt-and-suspenders —
 # `cleanup` on EXIT also does this, but a mid-script restore lets this
 # script assert the positive case too).

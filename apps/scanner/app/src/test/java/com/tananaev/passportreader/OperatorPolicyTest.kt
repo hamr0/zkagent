@@ -89,17 +89,66 @@ class OperatorPolicyTest {
 
     @Test
     fun `gateMessageFor - listed hostname admits (null message)`() {
-        // gateMessageFor's one-arg form reads THIS build's committed
-        // reference operator.json (verifiers=["127.0.0.1"], D84 point 2).
-        assertEquals(null, OperatorPolicy.gateMessageFor("127.0.0.1"))
+        assertEquals(null, OperatorPolicy.gateMessageFor("127.0.0.1", open = false, allowedHosts = setOf("127.0.0.1")))
     }
 
     @Test
     fun `gateMessageFor - unlisted hostname is refused, naming the hostname`() {
         assertEquals(
             "This site (evil.example) is not on this app's approved verifier list — refused.",
-            OperatorPolicy.gateMessageFor("evil.example"),
+            OperatorPolicy.gateMessageFor("evil.example", open = false, allowedHosts = setOf("127.0.0.1")),
         )
+    }
+
+    // ---------------------------------------- item 23: verifiers "any" (D109(i)1)
+    // Truth table on the pure age-gate decision, every expectation spelled out here (never read from the build's
+    // own knobs). `open` is the "any" form; the set is the array form's hostname list.
+
+    private val listed = setOf("state.gov", "127.0.0.1")
+    private val probes = listOf("state.gov", "127.0.0.1", "localhost", "never-seen.example", "ANY")
+
+    @Test
+    fun `any - admits listed, unlisted and never-seen hostnames alike`() {
+        for (host in probes) {
+            assertTrue("open form must admit $host", OperatorPolicy.admitsAgeVerifier(host, open = true, allowedHosts = listed))
+            assertEquals(null, OperatorPolicy.gateMessageFor(host, open = true, allowedHosts = listed))
+        }
+        // the open form does not depend on the (empty, in a real build) list at all
+        assertTrue(OperatorPolicy.admitsAgeVerifier("localhost", open = true, allowedHosts = emptySet()))
+    }
+
+    @Test
+    fun `array form - admits only listed hostnames and refuses the rest loudly`() {
+        val admitted = probes.filter { OperatorPolicy.admitsAgeVerifier(it, open = false, allowedHosts = listed) }
+        val refused = probes.filterNot { OperatorPolicy.admitsAgeVerifier(it, open = false, allowedHosts = listed) }
+        assertEquals(listOf("state.gov", "127.0.0.1"), admitted)
+        // count above zero: the negative half must actually exclude something (a guard that matches nothing passes vacuously)
+        assertEquals(listOf("localhost", "never-seen.example", "ANY"), refused)
+        for (host in refused) {
+            assertEquals(
+                "This site ($host) is not on this app's approved verifier list — refused.",
+                OperatorPolicy.gateMessageFor(host, open = false, allowedHosts = listed),
+            )
+        }
+    }
+
+    @Test
+    fun `any - an origin with no resolvable hostname is still refused, never implicitly allowed`() {
+        assertEquals(
+            "This site's origin could not be resolved to a hostname — refused.",
+            OperatorPolicy.gateMessageFor(null, open = true, allowedHosts = emptySet()),
+        )
+    }
+
+    @Test
+    fun `any - never widens the tier-C pin list or the multi-threshold list (they take their own set)`() {
+        // Tier C (TierCGate / TierCRefusalReply) and the named exceptions call the two-argument isVerifierAllowed with
+        // their OWN set, which has no "open" input. A host outside that set stays refused whatever the age gate does.
+        val pinned = setOf("127.0.0.1")
+        assertTrue(OperatorPolicy.admitsAgeVerifier("localhost", open = true, allowedHosts = emptySet()))
+        assertFalse(OperatorPolicy.isVerifierAllowed("localhost", pinned))
+        assertTrue(OperatorPolicy.isVerifierAllowed("127.0.0.1", pinned))
+        assertFalse(OperatorPolicy.isVerifierAllowed("localhost", emptySet())) // empty pin list pins nothing, even under "any"
     }
 
     // ---------------------------------------------------- isTierAllowed
@@ -119,17 +168,21 @@ class OperatorPolicyTest {
     // ------------------------------------- wiring: this build's operator.json
 
     // The committed reference apps/scanner/operator.json (D84 point 2)
-    // declares verifiers=["127.0.0.1"], tiers="A+B", thresholds=the six
+    // declares verifiers="any" (item 23), tiers="A+B", thresholds=the six
     // D74 values, multi_threshold_verifiers=[]. Expected values spelled out
     // independently here, not read back from OperatorPolicy's own fields,
     // so this test can actually fail if Gradle stopped wiring the file
     // through to BuildConfig.
 
     @Test
-    fun `this build's OPERATOR_VERIFIERS wiring contains the committed reference hostname`() {
-        assertEquals(setOf("127.0.0.1"), OperatorPolicy.VERIFIERS)
+    fun `this build's OPERATOR_VERIFIERS wiring is the open form with an empty hostname list`() {
+        // Reference operator.json: "verifiers": "any" (item 23). The open form is its own boolean; the hostname
+        // list stays empty, so "any" can never be read back as a hostname-list entry.
+        assertTrue(OperatorPolicy.VERIFIERS_ANY)
+        assertTrue(OperatorPolicy.VERIFIERS.isEmpty())
         assertTrue(OperatorPolicy.isVerifierAllowed("127.0.0.1"))
-        assertFalse(OperatorPolicy.isVerifierAllowed("evil.example"))
+        assertTrue(OperatorPolicy.isVerifierAllowed("evil.example"))
+        assertEquals(null, OperatorPolicy.gateMessageFor("localhost"))
     }
 
     @Test

@@ -397,11 +397,11 @@ class RequestTrustTest {
 
     @Test
     fun `verifyHandoff - G1, unlisted hostname is refused BEFORE resolveKey or fetchRaw is ever called`() {
-        // This build's committed reference operator.json declares
-        // verifiers=["127.0.0.1"] (D84 point 2) — "evil.example" is not on
-        // it.
+        // The array form (a closed build) listing only 127.0.0.1 — "evil.example" is not on it. The reference
+        // operator.json is the open form now (item 23), so the closed gate is passed in explicitly.
+        val closedGate: (String?) -> String? = { OperatorPolicy.gateMessageFor(it, open = false, allowedHosts = setOf("127.0.0.1")) }
         val handoff = HandoffClient.PendingHandoff(clientId = null, requestUri = "http://evil.example/request")
-        val outcome = RequestTrust.verifyHandoff(handoff, refusingResolveKey, refusingFetchRaw)
+        val outcome = RequestTrust.verifyHandoff(handoff, refusingResolveKey, refusingFetchRaw, closedGate)
         assertTrue(outcome is RequestTrust.Outcome.PolicyRefused)
         val refused = outcome as RequestTrust.Outcome.PolicyRefused
         assertEquals("evil.example", refused.gateHostname)
@@ -409,6 +409,21 @@ class RequestTrustTest {
         // (no assertion needed beyond the lambdas above never throwing —
         // AssertionError would have propagated out of verifyHandoff and
         // failed this test already if either had been invoked.)
+    }
+
+    @Test
+    fun `verifyHandoff - item 23, under the open form an unlisted hostname proceeds past the gate (paired with the closed-gate refusal above)`() {
+        var resolveKeyCalled = false
+        val openGate: (String?) -> String? = { OperatorPolicy.gateMessageFor(it, open = true, allowedHosts = emptySet()) }
+        val handoff = HandoffClient.PendingHandoff(clientId = null, requestUri = "http://evil.example/request")
+        val outcome = RequestTrust.verifyHandoff(
+            handoff,
+            resolveKey = { resolveKeyCalled = true; null },
+            fetchRaw = refusingFetchRaw,
+            gate = openGate,
+        )
+        assertTrue("the open gate must let the host reach key resolution", resolveKeyCalled)
+        assertTrue("no key resolvable -> an ordinary Refused, not PolicyRefused: $outcome", outcome is RequestTrust.Outcome.Refused)
     }
 
     @Test

@@ -61,6 +61,9 @@ data class OperatorConfig(
     val contactUrl: String,
     val tiers: String,
     val thresholds: List<Int>,
+    // Item 23 (D109(i)1): `verifiers` is EITHER a list of exact hostnames OR the open form "any". The open form is a
+    // separate boolean (never a list entry), so it can never travel through the comma-joined hostname field.
+    val verifiersAny: Boolean,
     val verifiers: List<String>,
     val multiThresholdVerifiers: List<String>,
     val evidencePlug: String,
@@ -192,20 +195,43 @@ fun loadOperatorConfig(file: java.io.File): OperatorConfig {
         }
     }
 
-    // Rule 4
+    // Rule 4 / rule 12 (item 23, D109(i)1): `verifiers` is EITHER a non-empty array of bare hostnames (rule 4 owns
+    // every array-shape violation) OR exactly the string "any" (age verification open to any site). Anything else
+    // is rule 12: a different string ("*", "ANY", "any ", ""), a number, an object, null/missing, or an array that
+    // contains the entry "any" (a legal hostname label, so ["any"] must not be mistaken for the open form).
     val verifiersRaw = parsed["verifiers"]
-    if (verifiersRaw !is List<*> || verifiersRaw.isEmpty()) {
-        throw org.gradle.api.GradleException("operator.json: rule 4 — verifiers must be a non-empty array")
-    }
-    val verifiers = verifiersRaw.map { entry ->
-        entry as? String ?: throw org.gradle.api.GradleException("operator.json: rule 4 — verifiers entries must be strings")
-    }
-    for (verifier in verifiers) {
-        if (!isBareHostname(verifier)) {
-            throw org.gradle.api.GradleException(
-                "operator.json: rule 4 — verifiers entry '$verifier' must be a bare hostname (no scheme, no port, no wildcard)"
-            )
+    val verifiersAny: Boolean
+    val verifiers: List<String>
+    when {
+        verifiersRaw == "any" -> {
+            verifiersAny = true
+            verifiers = emptyList()
         }
+        verifiersRaw is List<*> -> {
+            if (verifiersRaw.isEmpty()) {
+                throw org.gradle.api.GradleException("operator.json: rule 4 — verifiers must be a non-empty array")
+            }
+            verifiers = verifiersRaw.map { entry ->
+                entry as? String ?: throw org.gradle.api.GradleException("operator.json: rule 4 — verifiers entries must be strings")
+            }
+            if (verifiers.any { it.trim().lowercase() == "any" }) {
+                throw org.gradle.api.GradleException(
+                    "operator.json: rule 12 — verifiers array contains the entry \"any\"; the open form is the bare string " +
+                        "\"verifiers\": \"any\", not an array entry"
+                )
+            }
+            for (verifier in verifiers) {
+                if (!isBareHostname(verifier)) {
+                    throw org.gradle.api.GradleException(
+                        "operator.json: rule 4 — verifiers entry '$verifier' must be a bare hostname (no scheme, no port, no wildcard)"
+                    )
+                }
+            }
+            verifiersAny = false
+        }
+        else -> throw org.gradle.api.GradleException(
+            "operator.json: rule 12 — verifiers must be a non-empty array of bare hostnames or exactly the string \"any\" (got: $verifiersRaw)"
+        )
     }
 
     // Rule 5 (default [])
@@ -300,6 +326,7 @@ fun loadOperatorConfig(file: java.io.File): OperatorConfig {
         contactUrl = contactUrl,
         tiers = tiers,
         thresholds = thresholds,
+        verifiersAny = verifiersAny,
         verifiers = verifiers,
         multiThresholdVerifiers = multiThresholdVerifiers,
         evidencePlug = evidencePlug,
@@ -365,6 +392,9 @@ android {
         buildConfigField("String", "OPERATOR_CONTACT_URL", "\"${escapeForStringLiteral(operatorConfig.contactUrl)}\"")
         buildConfigField("String", "OPERATOR_TIERS", "\"${escapeForStringLiteral(operatorConfig.tiers)}\"")
         buildConfigField("String", "OPERATOR_THRESHOLDS", "\"${operatorConfig.thresholds.joinToString(",")}\"")
+        // Item 23: the open form is its own boolean, never a hostname-list entry (D86's comma-split hazard); when it is
+        // true the hostname list below is empty. OperatorPolicy is the one reader of both.
+        buildConfigField("boolean", "OPERATOR_VERIFIERS_ANY", operatorConfig.verifiersAny.toString())
         buildConfigField(
             "String", "OPERATOR_VERIFIERS",
             "\"${operatorConfig.verifiers.joinToString(",") { escapeForStringLiteral(it) }}\"",

@@ -50,8 +50,14 @@ object OperatorPolicy {
 
     /** The verifier-hostname allowlist (§6.7 item 2, this POC's target).
      * Exact hostnames only — no wildcards, no ports (validated at build
-     * time, rule 4). */
+     * time, rule 4). Empty when [VERIFIERS_ANY] is true. */
     val VERIFIERS: Set<String> = parseHostnameList(BuildConfig.OPERATOR_VERIFIERS)
+
+    /** Item 23 (D109(i)1): `"verifiers": "any"` — age verification (tiers A and B) is open to any hostname. Its own
+     * boolean in [BuildConfig], not a hostname-list entry, so the comma-split in [parseHostnameList] can never
+     * turn it into one (D86). It widens ONLY the age gate ([admitsAgeVerifier]); tier C is gated by
+     * [TIER_C_VERIFIERS] and never reads this, and [MULTI_THRESHOLD_VERIFIERS] stays an independent list. */
+    val VERIFIERS_ANY: Boolean = BuildConfig.OPERATOR_VERIFIERS_ANY
 
     /** D74 rule 2's named-exceptions list, exposed as a knob (D84) —
      * consumed by [ThresholdPolicy.NAMED_EXCEPTIONS]. */
@@ -75,8 +81,14 @@ object OperatorPolicy {
     val NAME: String = BuildConfig.OPERATOR_NAME
     val CONTACT_URL: String = BuildConfig.OPERATOR_CONTACT_URL
 
-    /** Convenience overload reading this build's [VERIFIERS]. */
-    fun isVerifierAllowed(hostname: String): Boolean = isVerifierAllowed(hostname, VERIFIERS)
+    /** The age-verification gate for this build: open under `"verifiers": "any"`, else the exact-hostname list. */
+    fun isVerifierAllowed(hostname: String): Boolean = admitsAgeVerifier(hostname, VERIFIERS_ANY, VERIFIERS)
+
+    /** Item 23: the pure age-gate decision. [open] (the `"any"` form) admits every hostname; otherwise [allowedHosts]
+     * decides by exact match. The tier-C pin list and the multi-threshold list use [isVerifierAllowed] with their
+     * own set instead, so `"any"` can never widen them. */
+    fun admitsAgeVerifier(hostname: String, open: Boolean, allowedHosts: Set<String>): Boolean =
+        open || isVerifierAllowed(hostname, allowedHosts)
 
     /** Exact, case-insensitive hostname match — no wildcards, no ports, no
      * suffix/prefix matching. [hostname] MUST already be a bare host (the
@@ -100,9 +112,13 @@ object OperatorPolicy {
      * message. [hostname] null means "could not resolve a hostname from
      * the origin" (refused, never implicitly allowed); returns null when
      * [hostname] is allowed (nothing to refuse). */
-    fun gateMessageFor(hostname: String?): String? = if (hostname == null) {
+    fun gateMessageFor(hostname: String?): String? = gateMessageFor(hostname, VERIFIERS_ANY, VERIFIERS)
+
+    /** Same decision with the build's knobs passed in, so the truth table is testable without [BuildConfig]. Under
+     * `"any"` every RESOLVED hostname is admitted; an origin with no hostname is still refused, never implicitly allowed. */
+    fun gateMessageFor(hostname: String?, open: Boolean, allowedHosts: Set<String>): String? = if (hostname == null) {
         "This site's origin could not be resolved to a hostname — refused."
-    } else if (!isVerifierAllowed(hostname)) {
+    } else if (!admitsAgeVerifier(hostname, open, allowedHosts)) {
         "This site ($hostname) is not on this app's approved verifier list — refused."
     } else {
         null

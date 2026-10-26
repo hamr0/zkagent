@@ -450,6 +450,10 @@ object RequestTrust {
         handoff: HandoffClient.PendingHandoff,
         resolveKey: (String) -> ResolvedKey?,
         fetchRaw: (String) -> HandoffClient.RawFetch,
+        // The §6.7 age-gate decision for a hostname (null = admitted). Production uses this build's operator.json;
+        // injected so the "refused before any network call" path stays testable now that the reference build is open
+        // (`"verifiers": "any"`, item 23) and so admits every host.
+        gate: (String?) -> String? = { OperatorPolicy.gateMessageFor(it) },
     ): Outcome {
         val requestUriOrigin = originOf(handoff.requestUri)
             ?: return Outcome.Refused("request_uri has no parseable origin: ${handoff.requestUri}")
@@ -466,7 +470,7 @@ object RequestTrust {
         // defence-in-depth check in MainActivity re-runs — one refusal
         // wording, not two copies.
         val gateHostname = ThresholdPolicy.hostnameOf(origin)
-        val gateMessage = OperatorPolicy.gateMessageFor(gateHostname)
+        val gateMessage = gate(gateHostname)
         if (gateMessage != null) {
             return Outcome.PolicyRefused(gateHostname, gateMessage)
         }

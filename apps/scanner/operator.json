@@ -6,7 +6,7 @@
   },
   "tiers": "A+B",
   "thresholds": [15, 16, 18, 21, 60, 65],
-  "verifiers": ["127.0.0.1"],
+  "verifiers": "any",
   "multi_threshold_verifiers": [],
   "evidence_plug": "none",
   "tier_c_verifiers": [],
