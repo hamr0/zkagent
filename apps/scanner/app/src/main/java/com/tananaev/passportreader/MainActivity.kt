@@ -210,6 +210,9 @@ abstract class MainActivity : AppCompatActivity() {
 
     // ---- handoff: see class doc item 8 / HandoffClient ----
     private var pendingHandoff: HandoffClient.PendingHandoff? = null
+    // Item 18 / #48: the whole-link key ([LinkOnce]) of the intent that produced
+    // [pendingHandoff]; null for a pasted/QR link. Cleared with it.
+    private var pendingLinkKey: String? = null
 
     // ---- verified handoff request object: see class doc items 13/14 ----
     // Set ONLY by [applyHandoffVerificationOutcome] on a successful verify;
@@ -569,7 +572,7 @@ abstract class MainActivity : AppCompatActivity() {
         }
 
         refreshSessionDisplay()
-        handleIncomingIntent(intent)
+        handleIncomingIntent(intent, LinkOnce.Source.CREATE)
     }
 
     /** FIX pass (D57 exit criterion 2 / findings.md #5) — the module's
@@ -1183,7 +1186,7 @@ abstract class MainActivity : AppCompatActivity() {
                 Log.w(TAG, "M3b lifecycle: fence closed — dropped tier-C report/confirmation (the answer already left the device)")
                 return@runOnUiThread
             }
-            pendingHandoff = null
+            releasePendingHandoff()
             verifiedRequest = null
             authorizedHandoff = null
             refreshSessionDisplay()
@@ -1261,15 +1264,85 @@ abstract class MainActivity : AppCompatActivity() {
         outState.putInt(STATE_TAB_INDEX, paneState.tabIndexToSave())
     }
 
+    /** Every end of a handoff funnels here (replaces the bare `pendingHandoff = null`
+     * writes): the link it came from is now TERMINAL in the [LinkOnce] record. */
+    private fun releasePendingHandoff() {
+        markLinkTerminal(pendingLinkKey)
+        pendingLinkKey = null
+        pendingHandoff = null
+    }
+
+    /** Same-process recreation of an in-flight handoff (owner ruling on criterion 3): re-show the
+     * question and Verify verb from [inFlightHandoff]. Only handoff/request data comes back; any lock,
+     * MRZ or chip read is gone (item 6), so the user re-enters and rescans. If the request had not
+     * finished VERIFYING, the verification is re-run once here (a second, logged GET) and the dead
+     * instance's late result is dropped via takeover. The request's own expires_at still applies. */
+    private fun restoreInFlightHandoff(linkKey: String) {
+        val snap = inFlightHandoff.snapshot(linkKey) ?: return
+        showPane()
+        paneState.onIncomingHandoffIntent(admitted = true)
+        if (snap.verified != null) {
+            pendingHandoff = snap.pending
+            pendingLinkKey = linkKey
+            verifiedRequest = snap.verified
+            Log.i(TAG, "M3b link-once: restored the verified in-flight handoff after recreation (no second request_uri GET)")
+            refreshSessionDisplay()
+        } else {
+            Log.i(TAG, "M3b link-once: recreation hit while VERIFYING - re-running the verification once (second request_uri GET); the dead instance's result will be dropped")
+            beginHandoffVerification(snap.pending, linkKey)
+            inFlightHandoff.markTakenOver(linkKey)
+        }
+    }
+
+    private fun markLinkTerminal(linkKey: String?) {
+        if (linkKey == null) return
+        inFlightHandoff.clear(linkKey)
+        linkOnceLedger().markTerminal(linkKey)
+        persistLinkOnce()
+    }
+
+    /** Process-wide record, loaded once from app-private prefs (survives process death). */
+    private fun linkOnceLedger(): LinkOnce = synchronized(MainActivity::class.java) {
+        linkOnceInstance ?: LinkOnce.deserialize(
+            applicationContext.getSharedPreferences(LINK_ONCE_PREFS, Context.MODE_PRIVATE).getString(LINK_ONCE_KEY, null)
+        ).also { linkOnceInstance = it }
+    }
+
+    private fun persistLinkOnce() {
+        try {
+            applicationContext.getSharedPreferences(LINK_ONCE_PREFS, Context.MODE_PRIVATE)
+                .edit().putString(LINK_ONCE_KEY, linkOnceLedger().serialize()).commit()
+        } catch (e: Exception) {
+            Log.w(TAG, "M3b link-once: could not persist the handled-link record (${e.javaClass.simpleName}: ${e.message})")
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleIncomingIntent(intent)
+        handleIncomingIntent(intent, LinkOnce.Source.NEW_INTENT)
     }
 
-    private fun handleIncomingIntent(intent: Intent) {
+    private fun handleIncomingIntent(intent: Intent, source: LinkOnce.Source) {
         val data: Uri? = intent.data
         if (intent.action == Intent.ACTION_VIEW && data != null) {
+            // M3b chunk 4 item 18 / finding #48 (link-once): an onCreate replay
+            // of an already-handled link (recreation, or the OS restarting the
+            // activity with its last launch intent after process death /
+            // `adb install -r`) is dropped here: no fetch, no popup, no Log
+            // entry. See [LinkOnce]'s doc for the in-flight vs terminal rule.
+            val linkKey = data.toString()
+            val ledger = linkOnceLedger()
+            val verdict = ledger.decide(linkKey, source, holderHasEntry = inFlightHandoff.has(linkKey))
+            if (verdict == LinkOnce.Verdict.IGNORE) {
+                Log.i(TAG, "M3b link-once: ignored an already-handled av:// link replayed on $source (no fetch, no popup, no log entry)")
+                return
+            }
+            if (verdict == LinkOnce.Verdict.RESTORE) {
+                restoreInFlightHandoff(linkKey)
+                return
+            }
+            persistLinkOnce()
             val handoff = HandoffClient.parseAvLink(data)
             if (handoff != null) {
                 // Finding #10 (.claude/remember/findings.md) MITIGATION: an
@@ -1306,6 +1379,7 @@ abstract class MainActivity : AppCompatActivity() {
                 if (!HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = lockedMode != null, readInProgress = paneState.readInProgress)) {
                     Log.e(TAG, "M2 stage: av:// handoff REFUSED — session locked or read in progress (D57 mitigation for finding #10)")
                     Snackbar.make(lockButton, HANDOFF_REFUSED_MID_SESSION_MESSAGE, Snackbar.LENGTH_LONG).show()
+                    markLinkTerminal(linkKey)
                     return
                 }
                 Log.i(TAG, "M2 stage: pendingHandoff captured from av:// intent")
@@ -1331,7 +1405,7 @@ abstract class MainActivity : AppCompatActivity() {
                 // against (see its class doc's own hazard predicate).
                 paneState.onIncomingHandoffIntent(admitted = true)
                 showPane()
-                beginHandoffVerification(handoff)
+                beginHandoffVerification(handoff, linkKey)
                 return
             }
             // Finding #23 FIX (D87): handoff == null here means this VIEW
@@ -1347,6 +1421,7 @@ abstract class MainActivity : AppCompatActivity() {
             // outcome of any locked session.
             Log.w(TAG, "M2 stage: av:// handoff intent REFUSED — data did not parse into a handoff (malformed or truncated link): $data")
             Snackbar.make(lockButton, HANDOFF_LINK_MALFORMED_MESSAGE, Snackbar.LENGTH_LONG).show()
+            markLinkTerminal(linkKey)
             return
         }
         if (NfcAdapter.ACTION_TECH_DISCOVERED == intent.action) {
@@ -1457,7 +1532,7 @@ abstract class MainActivity : AppCompatActivity() {
         // fresh handoff always replaces whatever was pending. See
         // [pasteFieldRevealed]'s doc.
         pasteFieldRevealed = false
-        beginHandoffVerification(handoff)
+        beginHandoffVerification(handoff, null)
     }
 
     // ------------------------------------------------------- items 13/14
@@ -1467,7 +1542,11 @@ abstract class MainActivity : AppCompatActivity() {
      * window where the user could lock a session against an
      * unverified/wrong tier (2026-09: there is no mode radio left to hold
      * off — [refreshSessionDisplay] shows "verifying…" instead). */
-    private fun beginHandoffVerification(handoff: HandoffClient.PendingHandoff) {
+    private fun beginHandoffVerification(handoff: HandoffClient.PendingHandoff, linkKey: String?) {
+        // Item 18: a newer handoff supersedes the old one, which therefore ends here.
+        markLinkTerminal(pendingLinkKey)
+        pendingLinkKey = linkKey
+        if (linkKey != null) inFlightHandoff.begin(linkKey, handoff)
         pendingHandoff = handoff
         verifiedRequest = null
         // D58 step 4: [refreshSessionDisplay] re-derives [currentHandoffState]
@@ -1505,6 +1584,10 @@ abstract class MainActivity : AppCompatActivity() {
             // this instance is already destroyed — [MainActivity.onResume]
             // is where the next live instance picks it up.
             runOnUiThread {
+                if (!fence.passes() && inFlightHandoff.isTakenOver(pendingLinkKey)) {
+                    Log.i(TAG, "M3b link-once: dead instance's verification result dropped - a recreated instance re-ran it")
+                    return@runOnUiThread
+                }
                 if (!fence.passes()) {
                     Log.i(TAG, "M2 lifecycle: fence closed — outcome still applied, UI relayed if user-facing")
                 }
@@ -1642,7 +1725,7 @@ abstract class MainActivity : AppCompatActivity() {
 
                 if (policyMessage != null) {
                     Log.e(TAG, "M2 stage: handoff REFUSED by threshold policy (S1, D74) — host=$hostname threshold=$threshold")
-                    pendingHandoff = null
+                    releasePendingHandoff()
                     verifiedRequest = null
                     emitReport(
                         "handoff: REFUSED — threshold policy (S1/D74): $policyMessage",
@@ -1677,7 +1760,7 @@ abstract class MainActivity : AppCompatActivity() {
                     locks = originThresholdLocks,
                 )
                 if (arrival is TierCArrival.Plan.Refuse) {
-                    pendingHandoff = null
+                    releasePendingHandoff()
                     verifiedRequest = null
                     refreshSessionDisplay()
                     refuseTierC(outcome.request, arrival.refusal, onArrival = true)
@@ -1685,6 +1768,7 @@ abstract class MainActivity : AppCompatActivity() {
                 }
 
                 verifiedRequest = outcome.request
+                inFlightHandoff.setVerified(pendingLinkKey, outcome.request)
                 // §6.2 item 13 (D33): SHOW the mode the request set the instant
                 // verification succeeds (2026-09: via refreshSessionDisplay —
                 // there is no control left to write to, only a display). C/
@@ -1699,6 +1783,9 @@ abstract class MainActivity : AppCompatActivity() {
             }
             is RequestTrust.Outcome.Refused -> {
                 Log.e(TAG, "M2 stage: handoff REFUSED — ${outcome.reason}")
+                // Item 18 / #48: refused = terminal NOW, not on the dialog's OK
+                // (the process can die with the popup still up).
+                markLinkTerminal(pendingLinkKey)
                 // §6.2 item 16 (D46): the handoff's origin was never
                 // VERIFIED (that is exactly what failed here), so the entry
                 // title is the fixed no-site label, not the unconfirmed
@@ -1765,7 +1852,7 @@ abstract class MainActivity : AppCompatActivity() {
      * pre-fetch case where nothing has been verified yet (D46). */
     private fun refuseByOperatorPolicy(site: String, gateHostname: String?, gateMessage: String) {
         Log.e(TAG, "M2 stage: handoff REFUSED by operator policy (§6.7 POC) — host=$gateHostname")
-        pendingHandoff = null
+        releasePendingHandoff()
         verifiedRequest = null
         emitReport(
             "handoff: REFUSED — operator policy (§6.7): $gateMessage",
@@ -2257,7 +2344,7 @@ abstract class MainActivity : AppCompatActivity() {
             .setPositiveButton(R.string.dialog_ok) { dialog, _ ->
                 dialog.dismiss()
                 if (!keepMrzAndMode) {
-                    pendingHandoff = null
+                    releasePendingHandoff()
                     verifiedRequest = null
                     // D58 step 3: cleared in the SAME lockstep — see
                     // [authorizedHandoff]'s doc.
@@ -3099,7 +3186,7 @@ abstract class MainActivity : AppCompatActivity() {
                 Log.i(TAG, "M2 lifecycle: fence closed — dropped post-present session clear/display refresh")
                 return@runOnUiThread
             }
-            pendingHandoff = null
+            releasePendingHandoff()
             verifiedRequest = null
             authorizedHandoff = null
             refreshSessionDisplay()
@@ -3638,7 +3725,7 @@ abstract class MainActivity : AppCompatActivity() {
                 Log.i(TAG, "M2 lifecycle: fence closed — dropped post-mint session clear/display refresh")
                 return@runOnUiThread
             }
-            pendingHandoff = null
+            releasePendingHandoff()
             verifiedRequest = null
             // D58 step 3: cleared in the SAME lockstep as pendingHandoff/
             // verifiedRequest — see [authorizedHandoff]'s doc.
@@ -4055,6 +4142,12 @@ abstract class MainActivity : AppCompatActivity() {
         // durable log — see [persistLog]'s doc. Not a shared-prefs key: a
         // single JSON file, per that function's own storage-choice note.
         private const val LOG_STORE_FILENAME = "m2_report_log.json"
+        // Item 18 / #48: hashed handled-link record, see [LinkOnce].
+        private const val LINK_ONCE_PREFS = "zkagent_link_once"
+        private const val LINK_ONCE_KEY = "handled_links"
+        @Volatile private var linkOnceInstance: LinkOnce? = null
+        // Owner ruling on criterion 3: in-memory only, handoff/request data only, see [InFlightHandoff].
+        private val inFlightHandoff = InFlightHandoff<HandoffClient.PendingHandoff, RequestTrust.VerifiedRequest>()
         // D58 step 2 (finding #1): the app's own tab index — see
         // [PaneState]'s class doc for why this is the fix.
         private const val STATE_TAB_INDEX = "m2_tab_index"
