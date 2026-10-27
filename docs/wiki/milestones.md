@@ -1361,6 +1361,7 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     read failures and the key, biometric and date-of-birth errors); red means it did not work: success popups
     (mint confirmed, "Read OK — nothing was sent.") and normal asks stay as they are. Tag: FIX for findings #37, #41, #44 (owner-ruled), no new scope. Device run PASSED 2026-10-27 (#37, #44; #41 unit-proven only): docs/logs/M3B-D113-EVIDENCE-2026-10-27.md. Implements: D113;
     findings #37, #39, #41, #44.
+    (j) **D114 (2026-10-27):** the Settings help for "Allow additional verifications" ends with "An approved website can ask the same questions again on later scans. This setting turns off again if you reinstall the app."; the scan-pane status line for a refused site request (finding #49, wording only: never user-visible behind the popup) reads exactly "This website's request could not be verified. You can still scan your document for yourself." (technical reason in the Log tab and logcat only; operator-policy and tier-C refusals keep their own text). Tag: owner-ruled wording, no new scope. Implements: D114; finding #49.
 17. **Disclosed limitations (MUST be stated in customer-guide.md and/or in-app, not silently
     carried). Adjusted by D109(d).** (a) **Per-install reset** — the holder setting (item 7) is
     per-install state and returns to OFF on an uninstall/reinstall, the same disclosed-not-mitigated
@@ -1425,6 +1426,7 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     pin list, the operator switch and the holder setting. The guide MUST say so. Touches: **docs** (customer-guide.md tier-C section, once
     written), **scanner** (in-app disclosure text, Settings tab, Log tab). Tag: documentation
     MUST, not code. Implements: D74 (disclosed-limit convention), D101 (truncation), Q11 (residual), D90 item 5 (document-number residual), D109(d) (h)-(j), D109(h)8 (k), D109(i) (b), (e), (k), (l), (m).
+    **As built (2026-10-27, chunk 4):** `docs/product/customer-guide.md` §4.1 states (a), (b), (d), (e), (f), (h), (i), (j), (k), (l), (m) ((c) dropped, (g) deferred), plus findings #31 (a pinned site learns only "refused", D110) and #42 (under `"verifiers": "any"` an unpinned tier-C request still costs the key fetch and the `request_uri` GET before the refusal; the order was checked in `RequestTrust.verifyHandoff`). (l) is rewritten as fact: key discovery was run once on a real HTTPS host (23(d)), wide interop is untested, and the key fetch follows no redirects (D113). (a) is also in-app, in the Settings help text (D114 (a)). Item 17 BUILT.
 18. **Link-once: handle each incoming link only once (D109(e), FIX).** Today
     `MainActivity.onCreate` calls `handleIncomingIntent(intent)` unconditionally (about line 541),
     with no consume-once guard, and `onNewIntent` does the same after `setIntent`. So an Activity

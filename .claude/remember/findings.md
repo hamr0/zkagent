@@ -1301,7 +1301,7 @@ JUnit XML, not from a device run.
 - **Source**: agent, from the chunk 2 design (D110); recorded by agent
 - **Anchor**: milestones.md §6.9.7 item 17 (chunk 4); evidence doc checks 1, 4, 6
 - **Finding**: item 17's text must state that a pinned site learns that the request was refused (not the reason), and can therefore tell a refusal from the holder walking away. Severity guess: MEDIUM (disclosure honesty).
-- **Status**: OPEN (build input for chunk 4; nothing here is a ruling).
+- **Status**: CLOSED (disclosed) 2026-10-27: stated in docs/product/customer-guide.md §4.1 ("A refusal tells the site only 'refused'"), per milestones.md §6.9.2 item 17. Nothing here is a ruling.
 
 ### 2026-10-26 — #32: M3b chunk 2 — the demo page lead undercounts: "Two things a website can ask"
 - **Source**: agent, from the chunk 2 page work; recorded by agent
@@ -1367,7 +1367,7 @@ JUnit XML, not from a device run.
 - **Source**: agent (chunk 3 coder); recorded by agent
 - **Anchor**: scanner open-verifier path; milestones.md §6.9.7 item 17 (customer guide tier-C limits)
 - **Finding**: The tier is not known until the request is fetched, so under `"verifiers": "any"` a tier-C request from an unpinned host still causes a `request_uri` GET (link-open and device IP reach that host). Any host can now reach this. Disclose it in the guide's tier-C limits (item 17). Severity guess: LOW to MEDIUM (disclosure).
-- **Status**: OPEN (build input for chunk 4, item 17; nothing here is a ruling).
+- **Status**: CLOSED (disclosed) 2026-10-27: stated in docs/product/customer-guide.md §4.1 ("Unapproved sites still learn the link was opened"); order checked in `RequestTrust.verifyHandoff` (age gate, key fetch, request_uri GET, JWS verify, only then is the tier known). Nothing here is a ruling.
 
 ### 2026-10-27 — #43: the document-fields check still runs before the defensive Verify-tap tier-C check
 - **Source**: orchestrator (D112 review); recorded by agent
@@ -1409,4 +1409,4 @@ JUnit XML, not from a device run.
 - **Source**: agent (D113 fix); recorded by agent
 - **Anchor**: scanner `SessionDisplay.render` `HandoffState.Refused` (`handoffStatusText = "Handoff refused (${handoff.reason}) — you may still scan manually."`)
 - **Finding**: D113 made the refusal popup plain, but the pane status line under the dialog still shows "Handoff refused (reason)" with the technical text (e.g. signature_invalid). The owner decides whether to neutralise it. Severity guess: LOW.
-- **Status**: OPEN (needs an owner decision).
+- **Status**: CLOSED (2026-10-27, glance): wording fixed per D114 and unit-tested, but not user-visible: the blocking popup covers the pane and dismissing it resets the screen (owner: "i can't see behind it"). Nothing more to do.

@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D113
+title: zkagent — owner decisions D1–D114
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D113
+# Owner decisions D1–D114
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -577,3 +577,9 @@ Applied in milestones.md §6.9.2 item 16 (new standing rule (e)). Closes finding
 2. **No redirects on the key fetch (finding #41).** The fetch of `/.well-known/zkagent-verifier` follows NO redirect at all, not even to the same host. Any 3xx counts as "key not resolvable" and shows the popup from rule 1. This closes finding #41 (a signing key could come from a host other than the origin) and gives the fetch the unit coverage finding #39 asked for.
 3. **Red for every non-success popup (finding #44).** Every popup whose outcome is not a success is shown in the same red refusal colour as D112 rule 2 (day and night): the under-threshold popup, the "website refused the response" popup, the tier-C not-delivered popup, the lock-fields-incomplete popup, the not-met result, read failures and the key, biometric and date-of-birth error popups. Red means it did not work. Success popups, including the mint-confirmed popup and "Read OK — nothing was sent." (a clean read that logs as PASS), and normal asks stay as they are (blue asks).
 Applied in milestones.md §6.9.2 item 16 (standing rules (g)-(i)). Closes findings #37 and #44 (device-checked 2026-10-27), #41 (unit-proven with real loopback sockets, not device-run) and #39 (new unit tests); evidence docs/logs/M3B-D113-EVIDENCE-2026-10-27.md. See D112, D34, D37; findings #37, #39, #41, #44.
+
+**D114 (2026-10-27, owner) — the Settings help says approved sites can ask again and that the setting resets on reinstall, and the pane status line for a refused site request is plain.** Context: item 17 (disclosed limitations) and finding #49 (the pane status line under the D113 popup still showed "Handoff refused (reason)"). Ruling:
+1. **Settings help (item 17 (a), (k)).** The help text of "Allow additional verifications" ends with: "An approved website can ask the same questions again on later scans. This setting turns off again if you reinstall the app." Both statements are true in code: the setting lives in app-private SharedPreferences (backup is off), and there is no cap on repeat requests.
+2. **Pane status line (finding #49).** For a refused site request (`RequestTrust.Outcome.Refused`, the only user of `HandoffState.Refused`) the scan-pane status line reads exactly: "This website's request could not be verified. You can still scan your document for yourself." The technical reason stays only in the Log tab and logcat. Operator-policy and tier-C refusals have their own text and are unchanged.
+3. **Same-day owner follow-up (formatting).** The Settings help is shown as three paragraphs separated by a blank line ("\n\n" in a plain TextView): "Off: ..." first, then "On: ..." with its sentences, then the two D114 rule 1 sentences. Every word is unchanged.
+Applied in milestones.md §6.9.2 item 16 (standing rule (j)) and item 17. Finding #49: wording fixed and unit-tested, but the status line is never visible to the user (the blocking popup covers the pane and dismissing it resets the screen), so it was closed at the 2026-10-27 glance. See D113; findings #49.

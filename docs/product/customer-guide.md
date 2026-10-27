@@ -102,19 +102,83 @@ never part of it, and a refusal tells the site only "refused". Age verification 
 open to any site in a build whose `verifiers` is `"any"` (D109(i)); everything else here is gated behind the
 operator's list and your setting. A site gets **one age in total**: whichever age it asks about first,
 through an age check or through tier C's date-of-birth question, is the only one it can ever use, and
-a different one is refused (D109(i)3). **Limits, stated plainly:**
-(1) there is **no cap** on the other questions in this build, so a pinned site cannot narrow your age
-down (the one-age lock stops that, per website address) **unless the operator has named that site as
-allowed to ask several ages (`multi_threshold_verifiers`, D109(j)2): such a site is exempt from the
-lock, for age checks and for tier C's date-of-birth question, and CAN narrow your age down; the
-reference build names no such site**, but it can ask again on later scans and
-confirm guesses of a name, a document number or a nationality until one is right, and it can combine
-the 3, 6 and 12 month expiry questions to narrow down your document's expiry date; this is limited to
-pinned sites, and you can switch the setting off, and limits on how many questions a site may ask
-are a later item; a party running many website addresses gets one age per address; (2) the pin is by hostname only, so it
-trusts whoever controls that hostname's DNS and TLS; (3) the pin list changes only when the app is
-rebuilt and you install the new build, with no remote revocation; (4) nothing vouches that a pinned
-site is legitimate beyond the operator having put it on the list.
+a different one is refused (D109(i)3). The limits are in the next subsection, stated plainly.
+
+### 4.1 Limits of tier C and open age verification, stated plainly
+
+Nothing below is hidden by the design and none of it is fixed; each is a disclosed limit.
+
+**Who can ask what**
+
+- **Any site can ask an age check, if the build is open.** In a build whose `verifiers` is `"any"`
+  (the showcase build is one), any website can ask an age check (tiers A and B). What still protects
+  you: each site is locked to the first age it asks about (§5), the request is signed and tied to the
+  site's own address, and every scan needs your own confirmation on the phone, which shows the site and
+  the question. No list limits which sites may ask; an operator who wants a list uses the exact-list form.
+- **Tier C is not open.** It stays behind three things together: the operator's tier-C switch, an exact
+  hostname on the operator's pin list, and your own setting "Allow additional verifications", which is
+  OFF by default. An operator who built the app with tier C off, or with an empty list (the showcase
+  build is one), answers no tier-C question at all.
+- **Many addresses, many ages.** The age lock is per website address. A party that runs many addresses
+  can ask a different age on each and combine the answers. This is more exposed in an open build, where
+  no list limits which addresses may ask. Not covered, not prevented.
+
+**What a pinned site can still learn**
+
+- **Repeat questions.** Nothing limits how often an approved site asks. It can ask the same
+  questions on later scans and keep confirming guesses of a name, a document number or a nationality
+  until one is right. Your setting is the brake: turn it off and tier C is never answered.
+- **Expiry date.** The 3, 6 and 12 month expiry questions are three different questions and are not
+  locked, so a site can combine them to narrow down your document's expiry date. That is not prevented.
+- **Age.** Age narrowing is prevented: a site gets one age in total, whichever it asks first, through an
+  age check or through tier C's date-of-birth question, and a different one is refused. **One exception,
+  said plainly:** a site the operator names in `multi_threshold_verifiers` is exempt from the lock and CAN
+  ask several ages, so it can narrow your age down. That is the operator's explicit grant. The showcase
+  build names no such site.
+- **One bit about your date of birth.** Even with the lock, the one age a site gets is still one bit
+  about your date of birth (over or under that age). Nothing removes it.
+- **Document number.** A "yes" to a document-number question tells the site that you are the person
+  behind a number it already had. The number is not extracted from your phone, but that is a real link
+  between you and what the site already knew.
+- **A very long name.** A very long name may read as "no match" even when you typed it correctly: the
+  document's machine-readable line cuts long names short, and given names must match in full. A "no match"
+  is therefore not proof that the name differs.
+- **A refusal tells the site only "refused".** An approved (pinned) site that is refused learns that the
+  request was refused, never why (the setting being off, a question the app does not answer, an age
+  conflict and the rest all look the same to it). It can tell a refusal from you walking away.
+  The reasons show in the app only.
+- **Unapproved sites still learn the link was opened.** In an open build the app cannot know a request
+  is tier C until it has fetched it. So even for a site that is not on the pin list, the app first
+  fetches that site's signing key and the request itself (two requests to that site), and the site
+  learns that the link was opened and from which network address. The app then refuses before anything
+  is read from your document, and sends that site no reply.
+
+**What the pin does and does not mean**
+
+- **The pin is by hostname only.** It trusts whoever controls that hostname's DNS and TLS, because the
+  site's signing key is fetched from the hostname itself. A hijacked or lapsed hostname passes the gate.
+  There is no key pin.
+- **The list changes only with a new build.** A site added to or dropped from the pin list reaches you
+  only when you install a newer build. There is no auto-update and no remote revocation, so an older
+  install keeps its old list for as long as you keep it.
+- **No authority stands behind the list.** Nothing vouches that a pinned site is legitimate beyond the
+  operator having put it there.
+
+**What was tested**
+
+- **Real-internet key discovery was run once.** Fetching a site's signing key over real HTTPS was run
+  once, against one real host, in a test (chunk 3, check 23(d), `docs/logs/M3B-CHUNK3-EVIDENCE-2026-10-27.md`):
+  a good key answered, a mismatched key was refused and an untrusted certificate was refused. Wide
+  real-world interop beyond that one host is untested. The key fetch follows no redirects at all: any
+  redirect counts as "key not found" and the request is refused (D113).
+
+**Your setting**
+
+- **Reinstalling turns it off again.** "Allow additional verifications" is stored only on this install,
+  so it returns to OFF if you uninstall and reinstall the app (the same as the age locks, §6.10).
+  The same words are in the app next to the setting.
+- **Chip cloning.** See §10: a cloned chip on a document without chip authentication is not detected.
+
 
 ## 5. Preset age thresholds and per-site locking
 
@@ -396,8 +460,10 @@ want a closed build. `"any"` does
 not open tier C: that stays behind `tier_c_verifiers`, the build's tier-C switch and the holder
 setting. What still protects you with `"any"`: each site is locked to the first age it ever asks about
 (§5), the request is signed and tied to the site's address, and every scan needs your own
-confirmation on the phone, which shows the site and the question. Not yet tested: fetching an
-arbitrary website's signing key over real HTTPS has only been tried against the local test key.
+confirmation on the phone, which shows the site and the question. Tested once only: fetching a
+website's signing key over real HTTPS was run against one real host in a test (a good key answered, a
+mismatched key and an untrusted certificate were refused); wide real-world interop is untested, and the
+key fetch follows no redirects. See §4.1.
 
 **`multi_threshold_verifiers`.** This is D74 rule 2's named-exceptions list, exposed as a knob —
 the same list `ThresholdPolicy.NAMED_EXCEPTIONS` already carries in code, ships empty by default.
@@ -416,7 +482,7 @@ switch, and a build with the switch on and an empty list, or a non-empty list an
 will fail. Limits that will apply: a pin is only as strong as the hostname's DNS and TLS;
 the list changes only when you rebuild and a holder installs the new build (no remote revocation);
 and there is no authority behind the list. With no per-site caps, a pinned site can also repeat
-requests and narrow facts down over time (see §4). None of this is built.
+requests and narrow facts down over time (see §4.1). None of this is built.
 
 **`operator`.** Two required strings, `name` and `contact_url`, identifying who operates this
 build. Gradle validates that `operator` is an object, that both fields are strings, and that no
@@ -490,10 +556,11 @@ What's actually checked, and what isn't yet:
 |---|---|
 | Clone replay on non-chip-authenticated documents | Disclosed, not mitigated — a cloned chip mints the same zktag as the real one when `chip_auth` is false |
 | Not zero-knowledge | Never marketed as such — third-party ZK only enters as a validation-grade, tier-A-only evidence option |
-| Tier C (name/expiry/other fields) | Not built — approved 2026-10-25 (D109(h)) and in build as M3b; see §4 for the limits it will carry, including no per-site caps |
+| Tier C (name/expiry/other fields) | Not built — approved 2026-10-25 (D109(h)) and in build as M3b; see §4.1 for the limits it will carry, including no per-site caps |
 | Play Store / HTTPS reachability | Moot — the Play track is parked (D83); distribution is GitHub Releases + sideload, and the demo is reached over `adb reverse` (D76) |
 | Online hosting | Out of scope for the current demo — operator runs it locally, USB only |
-| Per-install state | Keys, zktag bindings' local record, threshold locks, and the log all reset on reinstall (see §6.10) |
+| Per-install state | Keys, zktag bindings' local record, threshold locks, the "Allow additional verifications" setting (back to OFF), and the log all reset on reinstall (see §6.10, §4.1) |
+| Tier-C and open-age limits | Repeat questions, expiry bracketing, the multi-age exception, hostname-only pins, no remote revocation and the rest are listed in §4.1 |
 | LAN cleartext | Refused outright by the app's network settings — no plain HTTP over Wi-Fi, ever |
 | Key-loss recovery | Unsolved — no way to re-enrol at a site after losing the original device/key |
 | App can't report the site's decision | The app cannot tell you the site's decision; read the page — see "Two answers, two places" |
