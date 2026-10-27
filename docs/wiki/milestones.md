@@ -782,13 +782,13 @@ stays DEFERRED; this field is the existing single-hostname exception mechanism, 
 capability. `evidence_plug`: enum `"none"` only today — `"sig-ed25519/1"`/`"sig-p256/1"` are
 device-capability fallbacks the app already always tries, not a build choice; no attestation plug
 exists in the repo to name as a second enum value yet, so the schema reserves the field but
-validates against a list of exactly one until one ships. `tier_c_verifiers`: MUST be `[]`; a
-non-empty array fails the build until M3b exists (D73). **Designed, NOT built (D109, approved
-2026-10-25 by D109(h), in build; the code and the build rules above are unchanged today):** under the amended M3b design
-(§6.9.2 items 1-2, D109(g)1) this field would become the tier-C pin list, exact bare hostnames
+validates against a list of exactly one until one ships. `tier_c_verifiers`: was `[]`-only (a
+non-empty array failed the build until M3b existed, D73). **Built in chunk 1 (D109, approved
+2026-10-25 by D109(h)); rule 7 and rules 10-11 below are as built:** under the amended M3b design
+(§6.9.2 items 1-2, D109(g)1) this field is the tier-C pin list, exact bare hostnames
 only (the `verifiers` shape rule: no scheme, port, wildcard, comma, quote or backslash), with no
-key pin, next to a separate tier-C on/off switch whose exact shape is settled in code. Rule 7
-below would be relaxed from "non-empty fails" to that shape rule, and rules 10 and 11 would add
+key pin, next to a separate tier-C on/off switch. Rule 7
+below is relaxed from "non-empty fails" to that shape rule, and rules 10 and 11 add
 the two consistency failures. Membership statements no longer exist in the design. `strings`: `app_name` only, in every
 schema version — **not deferred to v2, permanently scoped this way (D84 point 3)**: the
 question-line template (`SessionDisplay.kt:202`) stays computed in code because D74 rule 3 makes
@@ -804,12 +804,12 @@ empty, or containing a value outside `{15,16,18,21,60,65}` (D74). 4. `verifiers`
 a wildcard, a scheme, or a port. 5. `multi_threshold_verifiers` containing a wildcard, a scheme,
 or a port (same shape rule as `verifiers`; empty is valid, the default). 6. `evidence_plug` not
 `"none"` or a plug id that actually exists in `chiproof`'s registry at build time. 7.
-`tier_c_verifiers` non-empty. 8. Any unknown top-level or nested key, including any key under
+`tier_c_verifiers` non-empty (as first written; relaxed in chunk 1 to the shape rule, see below). 8. Any unknown top-level or nested key, including any key under
 `strings` other than `app_name` (typo/scope-creep protection — never silently ignored). 9. File
 missing entirely, and the build is not explicitly the reference build's own committed default.
 
-**Designed additions, NOT built (D109(g)7, approved 2026-10-25 by D109(h), in build; rules 1-9 are not renumbered):**
-rule 7 would be relaxed to the shape rule above (it forces `tier_c_verifiers` empty today);
+**Built in chunk 1 (D109(g)7, approved 2026-10-25 by D109(h); rules 1-9 are not renumbered):**
+rule 7 is relaxed to the shape rule above (it used to force `tier_c_verifiers` empty);
 10. the tier-C switch is on and `tier_c_verifiers` is empty; 11. `tier_c_verifiers` is non-empty
 and the tier-C switch is off. Both are build failures, so the two knobs can never disagree
 silently.
@@ -1509,8 +1509,9 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     code: a separate `BuildConfig` boolean `OPERATOR_VERIFIERS_ANY`, with the hostname field `OPERATOR_VERIFIERS`
     empty under `"any"`, so the open form can never be a hostname-list entry (D86). The array gate for tier C and
     for `multi_threshold_verifiers` calls the unchanged two-argument `isVerifierAllowed` with its own set, which has
-    no "open" input; only `admitsAgeVerifier` reads the flag. Pass criteria (c) and (d) are device and VPS runs, NOT
-    yet run: this item is not closed until they are.
+    no "open" input; only `admitsAgeVerifier` reads the flag. **Pass criteria (c) and (d) PASSED on the Pixel 6a:
+    (d) 2026-10-26 (release-config build, real TLS on an owner VPS), (c) 2026-10-27 (loopback); evidence
+    `docs/logs/M3B-CHUNK3-EVIDENCE-2026-10-27.md`.** Findings #37 to #42.
     **Tests (pass criteria).** (a) Unit: a truth table on the existing pure allowlist decision
     (`"any"`: unlisted, listed and never-seen hostnames all admitted; array form: listed admitted,
     unlisted refused loudly with no mint; `multi_threshold_verifiers` orthogonal), with a negative

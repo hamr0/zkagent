@@ -1332,3 +1332,39 @@ JUnit XML, not from a device run.
 - **Anchor**: `apps/demo`; PRD scope gate (NO-GO #10)
 - **Finding**: the owner said the demo page should be kept as a test page for anyone using chiproof. This is a request pending a scope decision, not a ruling, and it is not yet in the PRD; under the scope gate it cannot enter a milestone until it is written there.
 - **Status**: RULED by D111 (2026-10-26, owner): `apps/demo` is the official LOCAL test and showcase page, every scenario triggerable from it; scope in milestones.md §6.9.2 item 24 (chunk 4). History kept: it was first recorded as an owner REQUEST pending a scope decision.
+
+### 2026-10-26 — #37: handoff-refusal dialogs are too technical
+- **Source**: owner (device run, 23(d)); recorded by agent
+- **Anchor**: scanner handoff refusal dialogs; `docs/logs/M3B-CHUNK3-EVIDENCE-2026-10-27.md` 23(d)
+- **Finding**: The dialogs "Handoff refused: JWS verification failed: signature_invalid" and "Handoff refused: no trusted request-signer key resolvable for origin https://…:443" need plain wording. The owner will word it. Orchestrator proposal: "This website's request could not be verified, so it was not answered. Nothing was read and nothing was sent." Severity guess: MEDIUM (user-facing honesty).
+- **Status**: OPEN (build input for chunk 4 polish; the owner words it; nothing here is a ruling).
+
+### 2026-10-27 — #38: the tier-C pin check runs after the document-fields check
+- **Source**: orchestrator (device run, 23(c) check 2); recorded by agent
+- **Anchor**: scanner Verify path; `docs/logs/M3B-CHUNK3-EVIDENCE-2026-10-27.md` 23(c) check 2
+- **Finding**: For a tier-C request from an unpinned site, the app first demanded the document fields ("Enter the document number, date of birth and expiry date, then tap again.") and only then ran the pin check. The owner typed them (card not held) and was then refused. Nothing was read or sent, but in chunk 1 the holder-off and age refusals fired on Verify without the fields. The order is inconsistent, and an unpinned site makes the holder type document data before being refused. Severity guess: LOW to MEDIUM.
+- **Status**: OPEN (nothing here is a ruling).
+
+### 2026-10-27 — #39: the well-known key fetch has no unit coverage
+- **Source**: agent (chunk 3 coder); recorded by agent
+- **Anchor**: scanner `RequestTrust` `fetchWellKnownKey` / `parseEcJwk` (private, inline I/O)
+- **Finding**: Both are private with inline I/O, so 23(d) on a device is the only real exercise of the fetch and parse. Severity guess: LOW to MEDIUM.
+- **Status**: OPEN (nothing here is a ruling).
+
+### 2026-10-27 — #40: JWKS handling reads keys[0] only
+- **Source**: agent (chunk 3 coder); recorded by agent
+- **Anchor**: scanner `RequestTrust` well-known key parse
+- **Finding**: The code reads `keys[0]` only; the class doc says the first EC/P-256 entry plus a `kid` match. Code and doc disagree. Severity guess: LOW.
+- **Status**: OPEN (nothing here is a ruling).
+
+### 2026-10-27 — #41: cross-host https redirects are followed on the well-known fetch
+- **Source**: agent (chunk 3 coder); recorded by agent
+- **Anchor**: scanner `RequestTrust` `fetchWellKnownKey` (`HttpURLConnection` default)
+- **Finding**: `HttpURLConnection` follows cross-host https redirects by default, so the signing key could come from a host other than the origin. Needs an owner decision (refuse cross-host redirects or accept and disclose). Severity guess: MEDIUM.
+- **Status**: OPEN (needs an owner decision).
+
+### 2026-10-27 — #42: under "any", an unpinned host's tier-C request still gets a request_uri GET
+- **Source**: agent (chunk 3 coder); recorded by agent
+- **Anchor**: scanner open-verifier path; milestones.md §6.9.7 item 17 (customer guide tier-C limits)
+- **Finding**: The tier is not known until the request is fetched, so under `"verifiers": "any"` a tier-C request from an unpinned host still causes a `request_uri` GET (link-open and device IP reach that host). Any host can now reach this. Disclose it in the guide's tier-C limits (item 17). Severity guess: LOW to MEDIUM (disclosure).
+- **Status**: OPEN (build input for chunk 4, item 17; nothing here is a ruling).
