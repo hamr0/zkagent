@@ -1343,7 +1343,7 @@ JUnit XML, not from a device run.
 - **Source**: orchestrator (device run, 23(c) check 2); recorded by agent
 - **Anchor**: scanner Verify path; `docs/logs/M3B-CHUNK3-EVIDENCE-2026-10-27.md` 23(c) check 2
 - **Finding**: For a tier-C request from an unpinned site, the app first demanded the document fields ("Enter the document number, date of birth and expiry date, then tap again.") and only then ran the pin check. The owner typed them (card not held) and was then refused. Nothing was read or sent, but in chunk 1 the holder-off and age refusals fired on Verify without the fields. The order is inconsistent, and an unpinned site makes the holder type document data before being refused. Severity guess: LOW to MEDIUM.
-- **Status**: RULED (2026-10-27, owner, D112: tier-C refusals the app can decide without the chip are shown on arrival, in red; recorded in docs/wiki/decisions.md D112 and milestones.md §6.9.2 item 16(e)/(f)). Fix in progress.
+- **Status**: CLOSED (fixed by D112, device-checked 2026-10-27; evidence docs/logs/M3B-D112-EVIDENCE-2026-10-27.md). History: RULED 2026-10-27 by the owner (D112: tier-C refusals the app can decide without the chip are shown on arrival, in red; recorded in docs/wiki/decisions.md D112 and milestones.md §6.9.2 item 16(e)/(f)); fix landed in 3e3ea62.
 
 ### 2026-10-27 — #39: the well-known key fetch has no unit coverage
 - **Source**: agent (chunk 3 coder); recorded by agent
@@ -1368,3 +1368,39 @@ JUnit XML, not from a device run.
 - **Anchor**: scanner open-verifier path; milestones.md §6.9.7 item 17 (customer guide tier-C limits)
 - **Finding**: The tier is not known until the request is fetched, so under `"verifiers": "any"` a tier-C request from an unpinned host still causes a `request_uri` GET (link-open and device IP reach that host). Any host can now reach this. Disclose it in the guide's tier-C limits (item 17). Severity guess: LOW to MEDIUM (disclosure).
 - **Status**: OPEN (build input for chunk 4, item 17; nothing here is a ruling).
+
+### 2026-10-27 — #43: the document-fields check still runs before the defensive Verify-tap tier-C check
+- **Source**: orchestrator (D112 review); recorded by agent
+- **Anchor**: scanner Verify path; `docs/logs/M3B-D112-EVIDENCE-2026-10-27.md`
+- **Finding**: The original #38 order survives at the Verify tap: the document-fields check runs before the defensive tier-C check. After D112 it is reachable only if the holder switch or the age lock changes between arrival and the tap. Severity guess: LOW.
+- **Status**: OPEN (nothing here is a ruling).
+
+### 2026-10-27 — #44: the honest-under-threshold and "site refused the response" popups are not red
+- **Source**: orchestrator (D112 device run); recorded by agent
+- **Anchor**: scanner outcome dialogs; D112 ruling 2 (all refusal popups red)
+- **Finding**: These two popups read as refusals but are not coloured red. The owner decides whether they should be.
+- **Status**: OPEN (needs an owner decision).
+
+### 2026-10-27 — #45: the night-mode colours are unexercised
+- **Source**: orchestrator (D112 device run); recorded by agent
+- **Anchor**: scanner colour resources (#FF8A80 refusal, #90CAF9 ask)
+- **Finding**: The night-mode values were never shown on a device: the app theme is `Theme.AppCompat.Light`, so night mode does not apply. Severity guess: LOW.
+- **Status**: OPEN (nothing here is a ruling).
+
+### 2026-10-27 — #46: `scripts/tierc-poc-request.mjs` has no tier-A threshold flag
+- **Source**: orchestrator (D112 device run); recorded by agent
+- **Anchor**: `scripts/tierc-poc-request.mjs`; the demo's test-only `?threshold=` override
+- **Finding**: The demo supports a test-only `?threshold=`, the helper cannot send it, so a mismatched-threshold test needs a hand-built request (cost a mistaken request in check 5). Add a flag; it fits item 24's showcase work. Severity guess: LOW.
+- **Status**: OPEN (build input for item 24; nothing here is a ruling).
+
+### 2026-10-27 — #47: the D112 wiring unit test is weak
+- **Source**: coder (D112 sabotage run), flagged by orchestrator; recorded by agent
+- **Anchor**: scanner D112 arrival wiring test
+- **Finding**: A never-firing condition would still pass it, and it depends on the working directory. Sabotage (a1) turned it red only because the block was deleted outright. Severity guess: LOW to MEDIUM (a guard needs a real-process proof; the device run supplied it once).
+- **Status**: OPEN (nothing here is a ruling).
+
+### 2026-10-27 — #48: an already-handled av:// intent is re-processed when the activity is recreated from its launch intent
+- **Source**: orchestrator (D112 device run, check 5; traced from logcat and the demo log); recorded by agent
+- **Anchor**: scanner `RegularActivity` launch-intent handling; milestones.md §6.9.2 item 18 (link-once after forced recreation, chunk 4); `docs/logs/M3B-D112-EVIDENCE-2026-10-27.md` check 5
+- **Finding**: At 15:42:10 `adb install -r` killed the app ("killDueToPackageUpdate"); at 15:42:11 Android restarted `RegularActivity` as top activity with its last launch intent, the already-handled `av://` link for tx `aMK_OhgO1DnYSW80`. The app captured it again as a pendingHandoff, re-fetched the request (a second `request_uri GET`), refused it again (15:42:12) and wrote a second Log-tab entry. A process death would plausibly do the same. On an ACCEPT path it could re-arm a handled request; item 18 must cover this. Severity guess: MEDIUM (item 18's known gap, now observed on device).
+- **Status**: OPEN (build input for chunk 4, item 18; nothing here is a ruling).
