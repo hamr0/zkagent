@@ -1471,6 +1471,16 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     script's existing `trap`); a negative control confirms a case would FAIL if `isBareHostname`
     stopped rejecting that character. Recorded in the ledger as an `idea`. Touches: **scanner**
     (script only). Tag: ENHANCEMENT.
+    **Extension (owner-approved 2026-10-27):** the same three cases also for a `tier_c_verifiers`
+    entry (`build.gradle.kts` about line 273), each expecting non-zero AND `rule 7 — tier_c_verifiers entry`.
+    **As built (working tree):** cases 21-23 in `operator-json-negative.sh` (comma, double quote,
+    backslash in one `multi_threshold_verifiers` entry; `rule 5`) and cases 24-26 (same three for a
+    `tier_c_verifiers` entry; body has `tier_c.enabled` true with a non-empty list so rules 10/11 cannot
+    fire first; the match is the entry message, not "must be an array"). Script now 39 PASS, exit 0.
+    Negative control (by hand, not committed): disabling each of the three `isBareHostname` checks in
+    turn turned the matching `verifiers` case (13/14/15), the matching `multi_threshold` case and the
+    matching tier-C case red (build exited 0, no rule found); the file was restored clean.
+
 20. **README full rewrite (D109(e), ENHANCEMENT, documentation).** The owner approved a draft; it
     is provided at build time, so this item only names it. Constraints that apply to whatever
     arrives: it MUST describe tier C as built only once tier C is built (until then the README

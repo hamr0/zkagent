@@ -390,6 +390,93 @@ run_case_ok "tier-c-on-with-pin-builds" '{
   "strings": {"app_name": "x"}
 }'
 
+# 21. Comma-embedded multi_threshold_verifiers entry (rule 5) — item 19 (D109(e)): the sibling-list twin of
+# cases 13-15 (which cover `verifiers` only, rule 4). Same isBareHostname, but this list reports "rule 5".
+run_case "comma-embedded-multi-threshold-verifier" "rule 5" '{
+  "schema_version": 1,
+  "operator": {"name": "x", "contact_url": "https://x.example"},
+  "tiers": "A+B",
+  "thresholds": [18],
+  "verifiers": ["127.0.0.1"],
+  "multi_threshold_verifiers": ["evil.example,good.example"],
+  "evidence_plug": "none",
+  "tier_c_verifiers": [],
+  "strings": {"app_name": "x"}
+}'
+
+# 22. Quote-embedded multi_threshold_verifiers entry (rule 5) — item 19 (D109(e)): the sibling-list twin of
+# cases 13-15 (which cover `verifiers` only, rule 4). Same isBareHostname, but this list reports "rule 5".
+run_case "quote-embedded-multi-threshold-verifier" "rule 5" '{
+  "schema_version": 1,
+  "operator": {"name": "x", "contact_url": "https://x.example"},
+  "tiers": "A+B",
+  "thresholds": [18],
+  "verifiers": ["127.0.0.1"],
+  "multi_threshold_verifiers": ["evil\"example"],
+  "evidence_plug": "none",
+  "tier_c_verifiers": [],
+  "strings": {"app_name": "x"}
+}'
+
+# 23. Backslash-embedded multi_threshold_verifiers entry (rule 5) — item 19 (D109(e)): the sibling-list twin of
+# cases 13-15 (which cover `verifiers` only, rule 4). Same isBareHostname, but this list reports "rule 5".
+run_case "backslash-embedded-multi-threshold-verifier" "rule 5" '{
+  "schema_version": 1,
+  "operator": {"name": "x", "contact_url": "https://x.example"},
+  "tiers": "A+B",
+  "thresholds": [18],
+  "verifiers": ["127.0.0.1"],
+  "multi_threshold_verifiers": ["evil\\example"],
+  "evidence_plug": "none",
+  "tier_c_verifiers": [],
+  "strings": {"app_name": "x"}
+}'
+
+# 24. Comma-embedded tier_c_verifiers entry (rule 7, entry error) — item 19 extension (owner, 2026-10-27). Switch on with a
+# non-empty list so rules 10/11 cannot fire first; the expected text is the entry message, not "must be an array".
+run_case "comma-embedded-tier-c-verifier" "rule 7 — tier_c_verifiers entry" '{
+  "schema_version": 1,
+  "operator": {"name": "x", "contact_url": "https://x.example"},
+  "tiers": "A+B",
+  "thresholds": [18],
+  "verifiers": ["127.0.0.1"],
+  "multi_threshold_verifiers": [],
+  "evidence_plug": "none",
+  "tier_c": {"enabled": true},
+  "tier_c_verifiers": ["evil.example,good.example"],
+  "strings": {"app_name": "x"}
+}'
+
+# 25. Quote-embedded tier_c_verifiers entry (rule 7, entry error) — item 19 extension (owner, 2026-10-27). Switch on with a
+# non-empty list so rules 10/11 cannot fire first; the expected text is the entry message, not "must be an array".
+run_case "quote-embedded-tier-c-verifier" "rule 7 — tier_c_verifiers entry" '{
+  "schema_version": 1,
+  "operator": {"name": "x", "contact_url": "https://x.example"},
+  "tiers": "A+B",
+  "thresholds": [18],
+  "verifiers": ["127.0.0.1"],
+  "multi_threshold_verifiers": [],
+  "evidence_plug": "none",
+  "tier_c": {"enabled": true},
+  "tier_c_verifiers": ["evil\"example"],
+  "strings": {"app_name": "x"}
+}'
+
+# 26. Backslash-embedded tier_c_verifiers entry (rule 7, entry error) — item 19 extension (owner, 2026-10-27). Switch on with a
+# non-empty list so rules 10/11 cannot fire first; the expected text is the entry message, not "must be an array".
+run_case "backslash-embedded-tier-c-verifier" "rule 7 — tier_c_verifiers entry" '{
+  "schema_version": 1,
+  "operator": {"name": "x", "contact_url": "https://x.example"},
+  "tiers": "A+B",
+  "thresholds": [18],
+  "verifiers": ["127.0.0.1"],
+  "multi_threshold_verifiers": [],
+  "evidence_plug": "none",
+  "tier_c": {"enabled": true},
+  "tier_c_verifiers": ["evil\\example"],
+  "strings": {"app_name": "x"}
+}'
+
 # Item 23 (D109(i)1, rule 12): `verifiers` is EITHER a non-empty array of bare hostnames OR exactly the string "any".
 # Same file but for the one `verifiers` value, so the only variable is that value. Each bad value MUST exit non-zero
 # AND name "rule 12"; "any" MUST build clean. A wildcard ARRAY entry is still rule 4 (case 4 above); an empty array too.
