@@ -1,8 +1,9 @@
 # zkagent M2 reference scanner
 
 The Android reference-scanner app for zkagent (PRD `docs/product/zkagent-prd.md`
-§6.2). **Status: complete and released as v0.7.1 (signed APK on GitHub Releases); the project
-is closed as a complete experiment (D108) and no further scanner work is planned.** Tiers A and B
+§6.2). **Status: the latest release is v0.8.0 (2026-10-24, signed APK on GitHub Releases). The project was
+closed as a complete experiment (D108) and then revived for tier C (D109), which is built and
+device-checked and ships in 0.9.0.** Tiers A and B
 are built. Tier C is built and device-checked and ships in 0.9.0 (D116): it is off by default, and the app answers it only when `operator.json` turns it on (`tier_c.enabled`), the site's exact hostname is in `tier_c_verifiers`, and the holder turns on "Allow additional verifications". The item table
 below covers §6.2 items 1-11; items 12-25 are in the PRD and the CHANGELOG. This is a **rewrite**, not a graduated spike — code was
 drawn from `spikes/m2-scan` (masterlist/passive-auth read path) and

@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D116
+title: zkagent — owner decisions D1–D117
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D116
+# Owner decisions D1–D117
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -597,3 +597,5 @@ Device-checked 2026-10-27 (seven checks PASSED; gaps stated): docs/logs/M3B-D115
 **D116 (2026-10-27, owner) — the docs may call tier C built, worded "built and device-checked; ships in 0.9.0", never "shipped" or "released".** Context: M3b chunks 1-3 and the chunk 4 items so far are built and device-checked, and 0.9.0 is not out. Item 20 (README rewrite) and D109(e) allowed tier C to be called built only once it is. Ruling: the README, the customer guide and the other live docs may now describe tier C as "built and device-checked; ships in 0.9.0". The words "shipped" and "released" wait for the 0.9.0 release. Applied in milestones.md §6.9.2 item 20 (README rewritten) and the customer guide's tier-C wording. Other live docs that still say "not yet built" are listed for the owner and are not edited here. Nothing here calls any of this zero-knowledge. See D109(e), D109(h).
 
 *Applied in (2026-10-27):* `README.md`; `docs/product/customer-guide.md` (including §13, retitled "Not built (backlog)", with the M3b row replaced by a pointer to §4); `docs/product/zkagent-prd.md` (status block, "Not delivered"); `docs/wiki/backlog.md` item 1; `docs/wiki/milestones.md` (§6 M3b row, §6.4 status paragraph, §6.9 heading and banner, item 20, item 23 docs note); `docs/wiki/questions.md` (the M3b later note); `apps/scanner/README.md`. The M3b milestone itself stays in build; it is not marked done or released.
+
+**D117 (2026-10-27, owner) — release the branch now as 0.9.0 (tier C and chunk 4 so far); item 24 (the D111 showcase page) moves to a later release, 0.10.0.** Owner, on the version mentions item 24 will add: "we land 0.10 and grep/change where it is mentioned when we get there". Ruling: 0.9.0 carries tier C and the chunk 4 work already built (items 17, 18, 19, 20, 21, 25 and the D112-D115 changes). Item 24 is NOT part of 0.9.0; it lands in a later release, called 0.10.0 here, and the owner does not mind the exact number. Its version mentions are found by grep and fixed when that release comes. All item 24 MUSTs stand, for example that rows 21-22 and 25-26 appear on the page. Other places that say tier C "ships in 0.9.0" stay true. Applied in milestones.md §6.9.2 item 24 and §6.9.7 (chunk 4 list and the item 24 note). Nothing here calls any of this zero-knowledge. See D109(l), D111, D116.
