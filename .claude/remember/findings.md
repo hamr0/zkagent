@@ -1337,7 +1337,7 @@ JUnit XML, not from a device run.
 - **Source**: owner (device run, 23(d)); recorded by agent
 - **Anchor**: scanner handoff refusal dialogs; `docs/logs/M3B-CHUNK3-EVIDENCE-2026-10-27.md` 23(d)
 - **Finding**: The dialogs "Handoff refused: JWS verification failed: signature_invalid" and "Handoff refused: no trusted request-signer key resolvable for origin https://…:443" need plain wording. The owner will word it. Orchestrator proposal: "This website's request could not be verified, so it was not answered. Nothing was read and nothing was sent." Severity guess: MEDIUM (user-facing honesty).
-- **Status**: OPEN (build input for chunk 4 polish; the owner words it; nothing here is a ruling).
+- **Status**: CLOSED (fixed by D113, device-checked 2026-10-27, checks 1-3 of the evidence; evidence docs/logs/M3B-D113-EVIDENCE-2026-10-27.md). History: RULED 2026-10-27 by the owner (D113: one shared plain popup for every refused site request, technical reason to the Log tab and logcat only; recorded in docs/wiki/decisions.md D113 and milestones.md §6.9.2 item 16(g)).
 
 ### 2026-10-27 — #38: the tier-C pin check runs after the document-fields check
 - **Source**: orchestrator (device run, 23(c) check 2); recorded by agent
@@ -1349,7 +1349,7 @@ JUnit XML, not from a device run.
 - **Source**: agent (chunk 3 coder); recorded by agent
 - **Anchor**: scanner `RequestTrust` `fetchWellKnownKey` / `parseEcJwk` (private, inline I/O)
 - **Finding**: Both are private with inline I/O, so 23(d) on a device is the only real exercise of the fetch and parse. Severity guess: LOW to MEDIUM.
-- **Status**: OPEN (nothing here is a ruling).
+- **Status**: CLOSED (covered by the new `WellKnownKeyTest`; evidence docs/logs/M3B-D113-EVIDENCE-2026-10-27.md). History: D113 gave `fetchWellKnownKey` an injected fetch seam; `WellKnownKeyTest` covers 200, 3xx, non-200 and bad bodies, plus real-socket no-redirect proofs.
 
 ### 2026-10-27 — #40: JWKS handling reads keys[0] only
 - **Source**: agent (chunk 3 coder); recorded by agent
@@ -1361,7 +1361,7 @@ JUnit XML, not from a device run.
 - **Source**: agent (chunk 3 coder); recorded by agent
 - **Anchor**: scanner `RequestTrust` `fetchWellKnownKey` (`HttpURLConnection` default)
 - **Finding**: `HttpURLConnection` follows cross-host https redirects by default, so the signing key could come from a host other than the origin. Needs an owner decision (refuse cross-host redirects or accept and disclose). Severity guess: MEDIUM.
-- **Status**: OPEN (needs an owner decision).
+- **Status**: CLOSED as unit-proven with real loopback sockets (`WellKnownKeyTest`), NOT device-run: loopback uses the built-in dev key and never fetches, so a real-TLS device run would need a hosted https site; evidence docs/logs/M3B-D113-EVIDENCE-2026-10-27.md. History: RULED 2026-10-27 by the owner (D113: the key fetch follows no redirects at all; recorded in docs/wiki/decisions.md D113 and milestones.md §6.9.2 item 16(h)).
 
 ### 2026-10-27 — #42: under "any", an unpinned host's tier-C request still gets a request_uri GET
 - **Source**: agent (chunk 3 coder); recorded by agent
@@ -1379,7 +1379,7 @@ JUnit XML, not from a device run.
 - **Source**: orchestrator (D112 device run); recorded by agent
 - **Anchor**: scanner outcome dialogs; D112 ruling 2 (all refusal popups red)
 - **Finding**: These two popups read as refusals but are not coloured red. The owner decides whether they should be.
-- **Status**: OPEN (needs an owner decision).
+- **Status**: CLOSED (fixed by D113, device-checked 2026-10-27, checks 5-6 of the evidence; the under-threshold popup is code-inspected only; evidence docs/logs/M3B-D113-EVIDENCE-2026-10-27.md). History: RULED 2026-10-27 by the owner (D113: every non-success popup is red, all call sites; recorded in docs/wiki/decisions.md D113 and milestones.md §6.9.2 item 16(i)).
 
 ### 2026-10-27 — #45: the night-mode colours are unexercised
 - **Source**: orchestrator (D112 device run); recorded by agent
@@ -1404,3 +1404,9 @@ JUnit XML, not from a device run.
 - **Anchor**: scanner `RegularActivity` launch-intent handling; milestones.md §6.9.2 item 18 (link-once after forced recreation, chunk 4); `docs/logs/M3B-D112-EVIDENCE-2026-10-27.md` check 5
 - **Finding**: At 15:42:10 `adb install -r` killed the app ("killDueToPackageUpdate"); at 15:42:11 Android restarted `RegularActivity` as top activity with its last launch intent, the already-handled `av://` link for tx `aMK_OhgO1DnYSW80`. The app captured it again as a pendingHandoff, re-fetched the request (a second `request_uri GET`), refused it again (15:42:12) and wrote a second Log-tab entry. A process death would plausibly do the same. On an ACCEPT path it could re-arm a handled request; item 18 must cover this. Severity guess: MEDIUM (item 18's known gap, now observed on device).
 - **Status**: OPEN (build input for chunk 4, item 18; nothing here is a ruling).
+
+### 2026-10-27 — #49: the pane status text still shows the technical refusal reason
+- **Source**: agent (D113 fix); recorded by agent
+- **Anchor**: scanner `SessionDisplay.render` `HandoffState.Refused` (`handoffStatusText = "Handoff refused (${handoff.reason}) — you may still scan manually."`)
+- **Finding**: D113 made the refusal popup plain, but the pane status line under the dialog still shows "Handoff refused (reason)" with the technical text (e.g. signature_invalid). The owner decides whether to neutralise it. Severity guess: LOW.
+- **Status**: OPEN (needs an owner decision).

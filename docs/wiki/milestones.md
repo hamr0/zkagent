@@ -1351,7 +1351,16 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     stay after the read. (f) **D112:** refusal popup text (age-check and tier-C alike) is shown in red and the question area in a blue accent, both from
     colour resources with light and dark variants; Log-tab entries and the last-scan line stay uncoloured (they keep their ✗). Touches: **scanner**, **demo**. Tag:
     carried standing rule, not new scope (e)/(f): FIX for finding #38 plus an owner-ruled UI change.
-    Implements: §6.2 items 5/15/16; D43, D79(b), D112; findings #22, #38.
+    (g) **D113 (2026-10-27):** EVERY refused site request (bad signature, no resolvable signer key,
+    origin mismatch, request_uri fetch failed, verification threw, any other) shows ONE plain popup
+    ("This website's request could not be verified, so it was not answered. Nothing was read and nothing
+    was sent."); the technical reason goes to the Log tab and logcat only; operator-policy and tier-C
+    admission refusals keep their own text. (h) **D113:** the well-known signer-key fetch follows no
+    redirects (any 3xx = key not resolvable). (i) **D113:** every popup whose outcome is not a success
+    is red (including not-delivered, lock-fields-incomplete, not-met,
+    read failures and the key, biometric and date-of-birth errors); red means it did not work: success popups
+    (mint confirmed, "Read OK — nothing was sent.") and normal asks stay as they are. Tag: FIX for findings #37, #41, #44 (owner-ruled), no new scope. Device run PASSED 2026-10-27 (#37, #44; #41 unit-proven only): docs/logs/M3B-D113-EVIDENCE-2026-10-27.md. Implements: D113;
+    findings #37, #39, #41, #44.
 17. **Disclosed limitations (MUST be stated in customer-guide.md and/or in-app, not silently
     carried). Adjusted by D109(d).** (a) **Per-install reset** — the holder setting (item 7) is
     per-install state and returns to OFF on an uninstall/reinstall, the same disclosed-not-mitigated
@@ -1676,6 +1685,7 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
 | D72 (lockstep versioning) | 21 |
 | D111 (demo page as the local test and showcase page; finding #32 folded) | 24 |
 | D112 (tier-C refusals decided on arrival; refusals in red; finding #38) | 16(e), 16(f) |
+| D113 (unverifiable-request popup; no redirects on key fetch; all non-success popups red; findings #37/#41/#44) | 16(g), 16(h), 16(i) |
 
 Every ruled decision D89-D107 still lands in at least one row above, either as an item or as an
 explicit SUPERSEDED entry; none is orphaned.

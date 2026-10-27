@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D112
+title: zkagent — owner decisions D1–D113
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D112
+# Owner decisions D1–D113
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -571,3 +571,9 @@ Relation to earlier text: M3 item 6 and item 9 (milestones.md §6.3) ban a thres
 3. **Post-read refusals stay after the read.** A refusal that needs the chip (the document could not answer) and the re-decision after the read stay where they are, in red text.
 4. **Unchanged.** The decision itself stays the one pure `TierCAdmission.decide`, and its second run after the read stays; only WHEN it first runs moves. Deciding on arrival never writes the D74 age lock (the lock is still written only after every predicate is answered). The check at the Verify tap stays as a defensive second check, because the holder setting or the age map can change between arrival and the tap.
 Applied in milestones.md §6.9.2 item 16 (new standing rule (e)). Closes finding #38 (fixed by D112, device-checked 2026-10-27, see docs/logs/M3B-D112-EVIDENCE-2026-10-27.md). See D74, D109(g), D110; findings #38.
+
+**D113 (2026-10-27, owner) — every refused site request gets ONE plain popup, the well-known key fetch follows no redirects, and every non-success popup is red.** Context: findings #37, #41, #44 (all from the chunk 3 and D112 device runs). Ruling:
+1. **One plain popup for every refused site request (finding #37).** The popups "Handoff refused: JWS verification failed: signature_invalid" and "Handoff refused: no trusted request-signer key resolvable for origin https://…:443" are replaced by one shared message: "This website's request could not be verified, so it was not answered. Nothing was read and nothing was sent." The owner extended it to EVERY refused site request (origin mismatch, request_uri fetch failed, verification threw, and any other), so the popup never shows technical text. The technical reason goes to the Log tab and logcat only. None of these paths posts anything to the site. Unchanged: the operator-policy refusals and the tier-C admission refusals keep their own owner-worded text.
+2. **No redirects on the key fetch (finding #41).** The fetch of `/.well-known/zkagent-verifier` follows NO redirect at all, not even to the same host. Any 3xx counts as "key not resolvable" and shows the popup from rule 1. This closes finding #41 (a signing key could come from a host other than the origin) and gives the fetch the unit coverage finding #39 asked for.
+3. **Red for every non-success popup (finding #44).** Every popup whose outcome is not a success is shown in the same red refusal colour as D112 rule 2 (day and night): the under-threshold popup, the "website refused the response" popup, the tier-C not-delivered popup, the lock-fields-incomplete popup, the not-met result, read failures and the key, biometric and date-of-birth error popups. Red means it did not work. Success popups, including the mint-confirmed popup and "Read OK — nothing was sent." (a clean read that logs as PASS), and normal asks stay as they are (blue asks).
+Applied in milestones.md §6.9.2 item 16 (standing rules (g)-(i)). Closes findings #37 and #44 (device-checked 2026-10-27), #41 (unit-proven with real loopback sockets, not device-run) and #39 (new unit tests); evidence docs/logs/M3B-D113-EVIDENCE-2026-10-27.md. See D112, D34, D37; findings #37, #39, #41, #44.
