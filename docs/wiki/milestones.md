@@ -1647,6 +1647,44 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     **demo** (`server.mjs` page and controls, test mode), **docs** (two READMEs), no `chiproof`
     change expected. Tag: ENHANCEMENT. Implements: D111; folds finding #32; closes finding #36.
 
+25. **Scanner main screen without the tab strip, "Variant F" (D115, ENHANCEMENT, scanner).**
+    Owner-approved 2026-10-27 (live-canvas review, then D115). MUST: (a) the four-tab strip is gone;
+    the app has three swipeable pages in the order Scan, Log, Settings, and the selected page is owned by
+    `PaneState` (a pure class); (b) Diagnostics is a collapsed section at the bottom of Settings, and the
+    tier-C-off build still renders Settings (switch hidden, unavailable text) with Diagnostics below it;
+    (c) a top bar shows a centred title ("Scan", "Log" or "Settings") and tappable prev and next arrows
+    naming the neighbour ("‹ Log", "Settings ›"), each hidden at its end page; page dots at the bottom
+    (decorative); no in-page headings; (d) on Scan, top to bottom: the site's question in a navy box
+    (#0D2A4A, white text), the hint line, the three document fields always visible, outlined with floating
+    labels, empty for each scan and never saved (item 6), a large VERIFY, and directly under it an
+    always-visible last-scan status line, a pure projection of the newest persisted log entry (item 22's
+    state plus its existing text): teal with a check mark when the scan worked (a delivery, or a clean local read where nothing was
+    sent), red with a cross when it did not (refused, not sent, read failed, chip check failed), grey with a
+    dash and "No scans yet." ONLY when there is none (owner rule: green worked, red didn't, grey only for
+    none); a website request refused before any scan (unverifiable request, operator policy, threshold policy,
+    tier-C refusal on arrival, session expired, invalid tier) reads exactly "Last: website request refused ✗"
+    (red) and never names the unverified site; every terminal scan call passes the line explicitly, a missing
+    value leaves the line unchanged (no implicit default); colour is never the only signal; (e) an admitted `av://`
+    intent selects Scan from any page (item 17), an old saved page value (including the old Diagnostics
+    tab) restores safely (Diagnostics maps to Settings), item 18's in-flight restore keeps working, the
+    version stamp stays visible on Scan (item 24), and the single pane-visibility writer rule stands
+    (item 16); (f) accessibility: touch targets of at least 48dp, content descriptions on the arrows,
+    the title announced on a page change, the last-scan line a polite live region, text contrast of at
+    least 4.5:1 on the navy box, the top bar and every tint (light values only); (g) no new third-party dependency; (h) the app is ALWAYS LIGHT (D115 rule 5): no night colour variants (`values-night` removed), `android:forceDarkAllowed=false` on the theme, all text contrast at least 4.5:1 on the light values (white on the navy box 14.5:1, white on the top bar #00796B 5.3:1, delivered 5.6:1, refused 5.2:1, none 5.3:1, refusal red on white 6.5:1, ask blue on white 5.7:1). Pass criteria:
+    (1) unit: page mapping, an old saved Diagnostics value restores to Settings, an out-of-range value
+    restores to Scan, an admitted intent selects Scan from every page and a refused one leaves the page,
+    swipe and arrow neighbours (none past either end), and the last-scan status mapping with literal
+    expectations and a negative control (a broken mapping turns the test red); (2) the build and the full
+    scanner suite are green with the baseline counts plus the new tests; (3) device, the human reading the
+    screen: no tab strip; swipe and arrows reach Log and Settings; Diagnostics is at the bottom of
+    Settings; a site link lands on Scan from the Settings page; a dark-mode toggle keeps the page and the colours stay the light ones (the refusal red is the dark red #B3261E, not the pale #FF8A80); the
+    last-scan line is teal after a delivery and red after a refusal; the question shows in the navy box;
+    the version stamp is visible on Scan. Touches: **scanner** (`activity_main.xml`, `MainActivity`,
+    `PaneState`, new pure last-scan status class, colours, strings, tests), **docs**. Tag: ENHANCEMENT.
+    Implements: D115. Owner-approved note: the owner approved the design and placed it in chunk 4 before
+    items 20 and 24.
+    Device-checked 2026-10-27 (seven checks PASSED; not checked: a refusal after a read, the tier-C-off Settings, a delivered green line on the final build, TalkBack, swipe feel on other devices): docs/logs/M3B-D115-EVIDENCE-2026-10-27.md.
+
 ### 6.9.3 Traceability — decision → item
 
 | Decision | Item(s) |
@@ -1710,6 +1748,7 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
 | D111 (demo page as the local test and showcase page; finding #32 folded) | 24 |
 | D112 (tier-C refusals decided on arrival; refusals in red; finding #38) | 16(e), 16(f) |
 | D113 (unverifiable-request popup; no redirects on key fetch; all non-success popups red; findings #37/#41/#44) | 16(g), 16(h), 16(i) |
+| D115 (scanner main screen: three swipeable pages, title bar, dots, restyled Scan page) | 25 |
 
 Every ruled decision D89-D107 still lands in at least one row above, either as an item or as an
 explicit SUPERSEDED entry; none is orphaned.
@@ -1855,7 +1894,7 @@ Owner-approved 2026-10-25 ("agreed, update prd with the order"). Items 3-6 are d
 1. **Chunk 1, tier C in the app.** Items 1 (operator switch) and 2 (hostname pin), both partly built in the POC at `2720daa`; 7 (the real "Allow additional verifications" switch in a Settings location, replacing the POC's Diagnostics-tab placement); 8 (all five predicates, two-field name match, ICAO transliteration including the German umlaut forms per ICAO 9303 Part 3); 9 (fixed boundaries plus the shared one-age-per-site lock, with the multi-threshold exemption); 13 (all-or-nothing); 16 (standing rules); and finding #27's UX gaps (plain wording, no separate test controls in the real flow, a completion message). *Device check:* one tier-C request carrying several predicates, answered from one scan.
 2. **Chunk 2, the site side.** Item 14 (chiproof verifies tier-C answers; replaces the POC-local `zkagent-poc-tierc/0` wire and `apps/demo/tierc-poc.mjs`) and item 15 (the demo page's tier-C section: two name fields, one generic refusal, loopback only). **D110 (2026-10-26) adds the app's one generic `access_denied` refusal to the site for a gated tier-C refusal** (scanner, small; see decisions.md D110); the page shows it as the one "refused" outcome. *Device check:* end to end through the demo page.
 3. **Chunk 3, open age verification.** Item 23 (`verifiers: "any"`, rule 12, reference build switched), including 23(d), the real-TLS test on the owner's VPS. *Device check:* an unlisted site gets an age answer but no tier-C answer.
-4. **Chunk 4, leftovers and release.** Items 18 (link-once, device check), 19 (negative cases, rule 5), 17 (disclosed limitations in the guide and in-app), 20 (README rewrite; an approved draft exists), 21 (version lines), 24 (the demo page as the local test and showcase page, D111; built after chunk 3 and item 18 so their scenarios are on it; its README sections sit beside item 20). Then /self-review, /branch-review, /release as **0.9.0** (lockstep, D72: chiproof, demo, scanner versionName 0.9.0 / versionCode 8).
+4. **Chunk 4, leftovers and release.** Items 18 (link-once, device check), 19 (negative cases, rule 5), 17 (disclosed limitations in the guide and in-app), 25 (the scanner's three-page main screen without the tab strip, D115; owner-approved 2026-10-27; built before the README and the showcase page so the screenshots and the guide show the final screen), 20 (README rewrite; an approved draft exists), 21 (version lines), 24 (the demo page as the local test and showcase page, D111; built after chunk 3 and item 18 so their scenarios are on it; its README sections sit beside item 20). Then /self-review, /branch-review, /release as **0.9.0** (lockstep, D72: chiproof, demo, scanner versionName 0.9.0 / versionCode 8).
 
 **Owner supplies:** the phone and both documents at the chunk 1-3 checks; the VPS for chunk 3 (hostname given at test time, never written in docs); the `pass` unlock plus a go for merge, tag and publish at release.
 

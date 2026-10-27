@@ -90,3 +90,5 @@ None of the runs touched PII; the owner typed the document details on the phone 
 ## 8 — Open items
 
 Findings #47 and #49 stay open. Nothing here is a ruling.
+
+Correction 2026-10-27 (D115 rule 5): the blue ask colour read in check 3 was the night shade (#90CAF9) on a light background, which has poor contrast (finding #50). The night colour variants were removed under D115; the app is now always light (ask blue #1565C0).

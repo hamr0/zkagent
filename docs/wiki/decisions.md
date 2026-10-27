@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D114
+title: zkagent — owner decisions D1–D115
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D114
+# Owner decisions D1–D115
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -583,3 +583,13 @@ Applied in milestones.md §6.9.2 item 16 (standing rules (g)-(i)). Closes findin
 2. **Pane status line (finding #49).** For a refused site request (`RequestTrust.Outcome.Refused`, the only user of `HandoffState.Refused`) the scan-pane status line reads exactly: "This website's request could not be verified. You can still scan your document for yourself." The technical reason stays only in the Log tab and logcat. Operator-policy and tier-C refusals have their own text and are unchanged.
 3. **Same-day owner follow-up (formatting).** The Settings help is shown as three paragraphs separated by a blank line ("\n\n" in a plain TextView): "Off: ..." first, then "On: ..." with its sentences, then the two D114 rule 1 sentences. Every word is unchanged.
 Applied in milestones.md §6.9.2 item 16 (standing rule (j)) and item 17. Finding #49: wording fixed and unit-tested, but the status line is never visible to the user (the blocking popup covers the pane and dismissing it resets the screen), so it was closed at the 2026-10-27 glance. See D113; findings #49.
+
+**D115 (2026-10-27, owner) — the scanner's four-tab strip becomes three swipeable pages with a title bar, page dots and a restyled Scan page ("Variant F").** Context: the owner reviewed redesigns of the main screen in the live-canvas and approved Variant F. Ruling:
+1. **Three pages, no tab strip.** The strip (Scan, Log, Diagnostics, Settings) is removed. There are three swipeable pages in this order: Scan, Log, Settings. Diagnostics (the masterlist probe and the device-key probe) becomes a collapsed section at the bottom of Settings.
+2. **Top bar and dots.** A top bar shows a centred page title (just "Scan", "Log" or "Settings") and tappable prev and next arrows that name the neighbour ("‹ Log", "Settings ›"); each arrow is hidden at its end page. Page dots sit at the bottom. There are no in-page headings, because the title already names the page.
+3. **Scan page.** From top to bottom: the site's question in a dark navy box (#0D2A4A) with white text (no light fill, no left bar); the hint line; the three document fields, always visible, outlined with floating labels, empty for each scan and never saved (item 6 stands); a large VERIFY button; directly under it an always-visible last-scan status line, bold on a tinted strip: teal with a check mark when the scan worked, red with a cross when it did not, grey with a dash and "No scans yet." only when there is none. Colour is never the only signal. Same-day owner rule: green means it worked, red means it didn't, grey only for "No scans yet." — so a clean local read ("Read OK — nothing was sent.", shown as "chip check passed ✓") is the same teal as a delivery. Second same-day owner rule: when a website's request is refused BEFORE any scan (unverifiable request, operator policy, threshold policy, tier-C refusal on arrival, session expired, invalid tier), the line reads exactly "Last: website request refused ✗" (red); the unverified site is never named. Refusals after a read (tier-C post-read, mint failures, delivery refusals) keep their wording. The last-scan line is now written only where a call passes it explicitly: a missing value leaves the line alone (there is no implicit REFUSED default).
+4. **Unchanged.** The standing rules stay: an admitted `av://` intent switches to Scan from any page (item 17), one writer of pane visibility (item 16), the outcome glyph (item 22), the persisted log with Clear log (item 23), the version stamp visible on Scan (item 24), and document details never persisted (item 6).
+5. **Always light (same-day owner fix).** The app is ALWAYS LIGHT, in both phone modes. All night colour variants are removed (`values-night/colors.xml` deleted) and the theme sets `android:forceDarkAllowed=false`, so the light values apply on a phone in dark mode. Reason: resource qualifiers follow the phone's night mode whatever the theme, so since D112 the owner's dark-mode phone showed the night shades (#FF8A80 refusal red, #90CAF9 ask blue) on light backgrounds; #FF8A80 on white is only 2.3:1 (finding #50). Light values: #B3261E on white 6.5:1, #1565C0 on white 5.7:1. The D112 and D113 mentions of "day and night" colours are superseded by this rule.
+6. **Scope and release.** New M3b chunk 4 item 25; ships in 0.9.0. No new third-party dependency.
+Applied in milestones.md §6.9.2 item 25 and §6.9.7 (chunk 4). See D70, D75, D112, D113, D114.
+Device-checked 2026-10-27 (seven checks PASSED; gaps stated): docs/logs/M3B-D115-EVIDENCE-2026-10-27.md.
