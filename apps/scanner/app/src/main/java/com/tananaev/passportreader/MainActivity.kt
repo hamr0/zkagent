@@ -892,7 +892,7 @@ abstract class MainActivity : AppCompatActivity() {
                 // may legitimately still be pending underneath this tap
                 // (finding #12's rule: a dismissal must never destroy a
                 // legitimate in-flight session as a side effect).
-                showBlockingOutcomeDialog(LOCK_FIELDS_INCOMPLETE_MESSAGE, isAccessEstablishmentFailure = true)
+                showBlockingOutcomeDialog(LOCK_FIELDS_INCOMPLETE_MESSAGE, isAccessEstablishmentFailure = true, refusal = true)
                 return
             }
             LockPrecondition.Result.Verifying -> {
@@ -1196,9 +1196,9 @@ abstract class MainActivity : AppCompatActivity() {
                 showBlockingOutcomeDialog(TierCText.completionMessage(answers.size), isAccessEstablishmentFailure = false)
             } else if (deliveryResult is DeliveryResult.Rejected) {
                 val outcome = VerifierRefusal.classify(deliveryResult.httpStatus, deliveryResult.body)
-                showBlockingOutcomeDialog(VerifierRefusal.dialogMessage(outcome) ?: "Verifier refused: HTTP ${deliveryResult.httpStatus}", isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog(VerifierRefusal.dialogMessage(outcome) ?: "Verifier refused: HTTP ${deliveryResult.httpStatus}", isAccessEstablishmentFailure = false, refusal = true) // D113 c: red
             } else {
-                showBlockingOutcomeDialog(TierCText.NOT_DELIVERED_DIALOG, isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog(TierCText.NOT_DELIVERED_DIALOG, isAccessEstablishmentFailure = false, refusal = true)
             }
         }
     }
@@ -1736,7 +1736,7 @@ abstract class MainActivity : AppCompatActivity() {
                 // pendingHandoff/verifiedRequest, reverting the derived mode
                 // display via wipeSession) happens on dialog dismissal, not
                 // immediately — see showBlockingOutcomeDialog's doc.
-                showBlockingOutcomeDialog("Handoff refused: ${outcome.reason}", isAccessEstablishmentFailure = false, refusal = true)
+                showBlockingOutcomeDialog(RequestTrust.UNVERIFIABLE_REQUEST_MESSAGE, isAccessEstablishmentFailure = false, refusal = true)
             }
             is RequestTrust.Outcome.PolicyRefused -> {
                 // G1 fix (2026-09-06) — the pre-fetch hostname-allowlist
@@ -2565,6 +2565,7 @@ abstract class MainActivity : AppCompatActivity() {
                     reason,
                     isAccessEstablishmentFailure = accessFailure,
                     isTransientChipCommunicationFailure = transientChipFailure,
+                    refusal = true, // D113 rule 3: a failed read is not a success
                 )
                 return
             }
@@ -2678,7 +2679,7 @@ abstract class MainActivity : AppCompatActivity() {
                 // failure) is UNCHANGED — it never showed a dialog here and
                 // none is added now; only mode A was in scope for #21.
                 if (mode == PresentationMode.A) {
-                    showBlockingOutcomeDialog(notMetResult, isAccessEstablishmentFailure = false)
+                    showBlockingOutcomeDialog(notMetResult, isAccessEstablishmentFailure = false, refusal = true)
                 }
                 return
             }
@@ -2832,7 +2833,7 @@ abstract class MainActivity : AppCompatActivity() {
                         // item 22: a failure — see ReportLog.Outcome's doc.
                         outcome = ReportLog.Outcome.FAIL,
                     )
-                    showBlockingOutcomeDialog("The verified handoff request's origin has no parseable host.", isAccessEstablishmentFailure = false)
+                    showBlockingOutcomeDialog("The verified handoff request's origin has no parseable host.", isAccessEstablishmentFailure = false, refusal = true)
                 }
                 return@Thread
             }
@@ -2866,7 +2867,7 @@ abstract class MainActivity : AppCompatActivity() {
                         // item 22: a failure — see ReportLog.Outcome's doc.
                         outcome = ReportLog.Outcome.FAIL,
                     )
-                    showBlockingOutcomeDialog("This document has no document-number field to derive a zktag from.", isAccessEstablishmentFailure = false)
+                    showBlockingOutcomeDialog("This document has no document-number field to derive a zktag from.", isAccessEstablishmentFailure = false, refusal = true)
                 }
                 return@Thread
             }
@@ -2895,7 +2896,7 @@ abstract class MainActivity : AppCompatActivity() {
                         // item 22: a failure — see ReportLog.Outcome's doc.
                         outcome = ReportLog.Outcome.FAIL,
                     )
-                    showBlockingOutcomeDialog("Device key generation failed: ${e.javaClass.simpleName}: ${e.message}", isAccessEstablishmentFailure = false)
+                    showBlockingOutcomeDialog("Device key generation failed: ${e.javaClass.simpleName}: ${e.message}", isAccessEstablishmentFailure = false, refusal = true)
                 }
                 return@Thread
             }
@@ -3019,7 +3020,7 @@ abstract class MainActivity : AppCompatActivity() {
                     // item 22: a failure — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
                 )
-                showBlockingOutcomeDialog("The site's request did not specify a valid age threshold to check.", isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog("The site's request did not specify a valid age threshold to check.", isAccessEstablishmentFailure = false, refusal = true)
             }
             return
         }
@@ -3045,7 +3046,7 @@ abstract class MainActivity : AppCompatActivity() {
                     // item 22: a failure — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
                 )
-                showBlockingOutcomeDialog("This document's date of birth could not be read.", isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog("This document's date of birth could not be read.", isAccessEstablishmentFailure = false, refusal = true)
             }
             return
         }
@@ -3200,7 +3201,7 @@ abstract class MainActivity : AppCompatActivity() {
             if (MintConfirmation.confirmsSuccess(deliveryAccepted = deliveryResult is DeliveryResult.Accepted)) {
                 showBlockingOutcomeDialog(MINT_CONFIRMED_MESSAGE, isAccessEstablishmentFailure = false)
             } else if (deliveryResult is DeliveryResult.RefusedHonestUnderThreshold) {
-                showBlockingOutcomeDialog(MintOutcome.UNDER_THRESHOLD_DIALOG_MESSAGE, isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog(MintOutcome.UNDER_THRESHOLD_DIALOG_MESSAGE, isAccessEstablishmentFailure = false, refusal = true) // D113 c: red
             } else if (deliveryResult is DeliveryResult.Rejected) {
                 // Device fix (2026-09-05, VerifierRefusal) — previously NO
                 // dialog fired for a non-2xx direct_post response at all
@@ -3210,6 +3211,7 @@ abstract class MainActivity : AppCompatActivity() {
                 showBlockingOutcomeDialog(
                     VerifierRefusal.dialogMessage(outcome) ?: "Verifier refused: HTTP ${deliveryResult.httpStatus}",
                     isAccessEstablishmentFailure = false,
+                    refusal = true, // D113 c: red
                 )
             }
         }
@@ -3232,7 +3234,7 @@ abstract class MainActivity : AppCompatActivity() {
                 // item 22: a failure — see ReportLog.Outcome's doc.
                 outcome = ReportLog.Outcome.FAIL,
             )
-            showBlockingOutcomeDialog("No usable device key or signature is available on this device.", isAccessEstablishmentFailure = false)
+            showBlockingOutcomeDialog("No usable device key or signature is available on this device.", isAccessEstablishmentFailure = false, refusal = true)
             return
         }
         // Finding #11 (.claude/remember/findings.md) FIX, provisional pending
@@ -3310,7 +3312,7 @@ abstract class MainActivity : AppCompatActivity() {
                         // doc — owner-overturnable.
                         outcome = ReportLog.Outcome.FAIL,
                     )
-                    showBlockingOutcomeDialog("Biometric/device-credential authorization error $errorCode: $errString", isAccessEstablishmentFailure = false)
+                    showBlockingOutcomeDialog("Biometric/device-credential authorization error $errorCode: $errString", isAccessEstablishmentFailure = false, refusal = true)
                 }
 
                 override fun onAuthenticationFailed() {
@@ -3415,7 +3417,7 @@ abstract class MainActivity : AppCompatActivity() {
                     // item 22: a failure — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
                 )
-                showBlockingOutcomeDialog("The site's request did not specify a valid age threshold to check.", isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog("The site's request did not specify a valid age threshold to check.", isAccessEstablishmentFailure = false, refusal = true)
             }
             return
         }
@@ -3449,7 +3451,7 @@ abstract class MainActivity : AppCompatActivity() {
                     // item 22: a failure — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
                 )
-                showBlockingOutcomeDialog("This document's date of birth could not be read.", isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog("This document's date of birth could not be read.", isAccessEstablishmentFailure = false, refusal = true)
             }
             return
         }
@@ -3495,7 +3497,7 @@ abstract class MainActivity : AppCompatActivity() {
                     // item 22: a failure — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
                 )
-                showBlockingOutcomeDialog("Could not read the device key's public key bytes.", isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog("Could not read the device key's public key bytes.", isAccessEstablishmentFailure = false, refusal = true)
             }
             return
         }
@@ -3823,7 +3825,7 @@ abstract class MainActivity : AppCompatActivity() {
                 // answer from the site — the same "tell the user to go back
                 // to the browser" reasoning as MINT_CONFIRMED_MESSAGE, just
                 // the other outcome of the same real check.
-                showBlockingOutcomeDialog(MintOutcome.UNDER_THRESHOLD_DIALOG_MESSAGE, isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog(MintOutcome.UNDER_THRESHOLD_DIALOG_MESSAGE, isAccessEstablishmentFailure = false, refusal = true) // D113 c: red
             } else if (deliveryResult is DeliveryResult.Rejected) {
                 // Device fix (2026-09-05, VerifierRefusal) — previously NO
                 // dialog fired for a non-2xx direct_post response at all
@@ -3834,6 +3836,7 @@ abstract class MainActivity : AppCompatActivity() {
                 showBlockingOutcomeDialog(
                     VerifierRefusal.dialogMessage(outcome) ?: "Verifier refused: HTTP ${deliveryResult.httpStatus}",
                     isAccessEstablishmentFailure = false,
+                    refusal = true, // D113 c: red
                 )
             }
         }

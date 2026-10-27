@@ -61,6 +61,57 @@ class RequestTrustTest {
             "eyJyZXNwb25zZV90eXBlIjoidnBfdG9rZW4iLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJjbGllbnRfaWQiOiJodHRwOi8vMTI3LjAuMC4xOjQxNzMvd2FsbGV0L2RpcmVjdF9wb3N0IiwiY2xpZW50X2lkX3NjaGVtZSI6InJlZGlyZWN0X3VyaSIsInJlc3BvbnNlX3VyaSI6Imh0dHA6Ly8xMjcuMC4wLjE6NDE3My93YWxsZXQvZGlyZWN0X3Bvc3QiLCJzdGF0ZSI6InJlcS1hYmMxMjMiLCJ6a2FnZW50Ijp7InNwZWMiOiJ6a2FnZW50LzEiLCJ0aWVyIjoiQiIsImV2aWRlbmNlX3JlcXVpcmVkIjpbInNpZy1wMjU2LzEiXSwiZXZpZGVuY2UiOltdLCJjaGFsbGVuZ2UiOnsibm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3In19fQ." +
             "9a8YiFKlvZYyo3ZFfUEnoYM_RpDYFakPhmIGX4LY_XnQ6P9t64xYyt32uj7OuGkwpDy9XNU5uohM-t6D3I5lZQ"
 
+    // ------------------------------- D113 (a): every Refused shows one plain popup
+
+    private val unverifiablePopup =
+        "This website's request could not be verified, so it was not answered. Nothing was read and nothing was sent."
+
+    private fun refusedFor(
+        requestUri: String,
+        clientId: String? = null,
+        resolveKey: (String) -> RequestTrust.ResolvedKey? = { origin -> RequestTrust.resolveVerifierKey(origin) },
+        fetchRaw: (String) -> HandoffClient.RawFetch = { HandoffClient.RawFetch(GOOD_JWS, 200) },
+    ): RequestTrust.Outcome.Refused {
+        val outcome = RequestTrust.verifyHandoff(HandoffClient.PendingHandoff(clientId = clientId, requestUri = requestUri), resolveKey, fetchRaw, gate = { null })
+        assertTrue("expected Refused, got $outcome", outcome is RequestTrust.Outcome.Refused)
+        return outcome as RequestTrust.Outcome.Refused
+    }
+
+    @Test
+    fun `D113 a - every Refused variant carries the technical reason, and the popup is the one plain message`() {
+        val cases = listOf(
+            "request_uri has no parseable origin:" to refusedFor("not a url"),
+            "client_id has no parseable origin:" to refusedFor("http://127.0.0.1:4173/r", clientId = "not a url"),
+            "origin mismatch: client_id=" to refusedFor("http://127.0.0.1:4173/r", clientId = "http://127.0.0.1:9999/x"),
+            "no trusted request-signer key resolvable for origin https://site.example:443" to
+                refusedFor("https://site.example/r", resolveKey = { null }, fetchRaw = refusingFetchRaw),
+            "request_uri fetch failed: HTTP 500:" to
+                refusedFor("http://127.0.0.1:4173/r", fetchRaw = { throw HandoffClient.HandoffHttpException(500, "boom") }),
+            "request_uri fetch failed: IOException:" to
+                refusedFor("http://127.0.0.1:4173/r", fetchRaw = { throw java.io.IOException("down") }),
+            "JWS verification failed: signature_invalid" to
+                refusedFor("http://127.0.0.1:4173/r", fetchRaw = { HandoffClient.RawFetch(TAMPERED_JWS, 200) }),
+            "origin mismatch: response_uri=" to refusedFor("http://127.0.0.1:9999/r"),
+        )
+        assertTrue(cases.size > 0)
+        for ((prefix, refused) in cases) {
+            assertTrue("reason '${refused.reason}' should start with '$prefix'", refused.reason.startsWith(prefix))
+            assertEquals(unverifiablePopup, RequestTrust.UNVERIFIABLE_REQUEST_MESSAGE)
+            assertFalse("the technical reason must not be the popup", refused.reason == unverifiablePopup)
+        }
+    }
+
+    @Test
+    fun `D113 a - negative control, PolicyRefused is not a Refused (keeps its own owner-worded text)`() {
+        val outcome = RequestTrust.verifyHandoff(
+            HandoffClient.PendingHandoff(clientId = null, requestUri = "http://evil.example/r"),
+            refusingResolveKey, refusingFetchRaw,
+            gate = { "gate says no" },
+        )
+        assertTrue(outcome is RequestTrust.Outcome.PolicyRefused)
+        assertFalse(outcome is RequestTrust.Outcome.Refused)
+    }
+
     // ------------------------------------------------------- JWS verify
 
     @Test

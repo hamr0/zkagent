@@ -142,20 +142,39 @@ object RequestTrust {
         }
     }
 
-    private fun fetchWellKnownKey(origin: String): ResolvedKey? {
+    /** One HTTP GET result for the well-known key fetch: [status] and, for a 2xx, the [body]. */
+    data class WellKnownResponse(val status: Int, val body: String?)
+
+    /** D113 (b), finding #41: the production GET follows NO redirects at all (not even same-host), so a 3xx
+     * surfaces as its own status and is refused by [fetchWellKnownKey]. */
+    internal fun httpGetNoRedirect(url: String): WellKnownResponse {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            instanceFollowRedirects = false
+            connectTimeout = 10_000
+            readTimeout = 10_000
+        }
+        try {
+            val status = conn.responseCode
+            if (status !in 200..299) return WellKnownResponse(status, null)
+            val body = conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+            return WellKnownResponse(status, body)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    /** Fetches and parses the origin's well-known request-signer key. [http] is the seam (tests inject a fake or
+     * point the default at a real loopback server). Anything but a 2xx (so every 3xx too) is "not resolvable". */
+    internal fun fetchWellKnownKey(origin: String, http: (String) -> WellKnownResponse = ::httpGetNoRedirect): ResolvedKey? {
         val url = "$origin/.well-known/zkagent-verifier"
         return try {
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 10_000
-                readTimeout = 10_000
-            }
-            val status = conn.responseCode
-            if (status !in 200..299) {
-                Log.w(TAG, "fetchWellKnownKey: GET $url -> HTTP $status")
+            val resp = http(url)
+            if (resp.status !in 200..299) {
+                Log.w(TAG, "fetchWellKnownKey: GET $url -> HTTP ${resp.status} (redirects are never followed)")
                 return null
             }
-            val body = (conn.inputStream ?: return null).bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+            val body = resp.body ?: return null
             val root = JSONObject(body)
             val jwk = if (root.has("keys")) {
                 val keys = root.optJSONArray("keys")
@@ -402,8 +421,14 @@ object RequestTrust {
 
     data class VerifiedRequest(val json: JSONObject, val origin: String)
 
+    /** D113 (a), finding #37: the one plain popup text for every refused site request (anything that is not PolicyRefused). */
+    const val UNVERIFIABLE_REQUEST_MESSAGE =
+        "This website's request could not be verified, so it was not answered. Nothing was read and nothing was sent."
+
     sealed class Outcome {
         data class Verified(val request: VerifiedRequest) : Outcome()
+        /** [reason] is the technical text: Log tab and logcat only. The popup for EVERY Refused is
+         * [UNVERIFIABLE_REQUEST_MESSAGE] (D113). */
         data class Refused(val reason: String) : Outcome()
 
         /** G1 fix (2026-09-06) — [OperatorPolicy.gateMessageFor] refused
