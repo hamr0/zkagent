@@ -63,14 +63,18 @@ package com.tananaev.passportreader
  * its own copy can never resurface later. */
 object DroppedOutcomeRelay {
 
+    /** D112: a relayed message plus whether it is a refusal (shown in the refusal colour by the instance that
+     * picks it up, exactly as a directly shown refusal would be). */
+    data class Relayed(val message: String, val refusal: Boolean)
+
     @Volatile
-    private var pendingMessage: String? = null
+    private var pending: Relayed? = null
 
     /** Called from a fenced UI landing that would otherwise silently drop
      * a user-facing refusal message because its owning instance is already
      * destroyed. */
-    fun stash(message: String) {
-        pendingMessage = message
+    fun stash(message: String, refusal: Boolean = false) {
+        pending = Relayed(message, refusal)
     }
 
     /** Called by a live instance (this pass: `MainActivity.onResume`)
@@ -79,10 +83,13 @@ object DroppedOutcomeRelay {
      * re-shown on a later resume. Returns null when there is nothing
      * pending, which is the overwhelmingly common case (no dual-instance
      * race occurred). */
-    fun consume(): String? {
-        val message = pendingMessage
-        pendingMessage = null
-        return message
+    fun consume(): String? = consumeRelayed()?.message
+
+    /** [consume] with the refusal flag (D112); the same exactly-once contract. */
+    fun consumeRelayed(): Relayed? {
+        val relayed = pending
+        pending = null
+        return relayed
     }
 
     /** Called by a live instance right before it shows its own outcome
@@ -93,6 +100,6 @@ object DroppedOutcomeRelay {
      * it again as a duplicate on some later, unrelated `onResume`. A no-op
      * in the overwhelmingly common case (nothing pending). */
     fun clear() {
-        pendingMessage = null
+        pending = null
     }
 }

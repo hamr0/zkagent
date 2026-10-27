@@ -85,4 +85,13 @@ class DroppedOutcomeRelayTest {
         DroppedOutcomeRelay.stash("Handoff refused: origin mismatch")
         assertEquals("Handoff refused: origin mismatch", DroppedOutcomeRelay.consume())
     }
+
+    @Test
+    fun `the refusal flag travels with the message and defaults to false`() {
+        DroppedOutcomeRelay.stash("a refusal", refusal = true)
+        assertEquals(DroppedOutcomeRelay.Relayed("a refusal", true), DroppedOutcomeRelay.consumeRelayed())
+        DroppedOutcomeRelay.stash("a success notice")
+        assertEquals(DroppedOutcomeRelay.Relayed("a success notice", false), DroppedOutcomeRelay.consumeRelayed())
+        assertNull(DroppedOutcomeRelay.consumeRelayed())
+    }
 }

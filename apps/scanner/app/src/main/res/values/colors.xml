@@ -3,4 +3,9 @@
     <color name="colorPrimary">#009688</color>
     <color name="colorPrimaryDark">#00796B</color>
     <color name="colorAccent">#536DFE</color>
+
+    <!-- D112 (2026-10-27): refusal popup text is red, normal asks blue. Light values: contrast on white is about
+         6.5:1 (#B3261E) and 6.0:1 (#1565C0), both above the 4.5:1 text minimum. -->
+    <color name="refusal_text">#B3261E</color>
+    <color name="ask_accent">#1565C0</color>
 </resources>

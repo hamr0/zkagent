@@ -700,19 +700,28 @@ abstract class MainActivity : AppCompatActivity() {
      * about to show its own dialog for the same conclusion, the sibling's
      * stash is now stale and must not resurface as a duplicate on some
      * later, unrelated resume. */
-    private fun showBlockingNotice(message: String) {
+    private fun showBlockingNotice(message: String, refusal: Boolean = true) {
         Log.i(TAG, "M2 stage: blocking notice shown: $message")
         if (!fence.passes()) {
             Log.i(TAG, "M2 lifecycle: fence closed — relaying blocking notice to next live instance")
-            DroppedOutcomeRelay.stash(message)
+            DroppedOutcomeRelay.stash(message, refusal)
             return
         }
         DroppedOutcomeRelay.clear()
         AlertDialog.Builder(this)
-            .setMessage(message)
+            .setMessage(dialogText(message, refusal))
             .setCancelable(false)
             .setPositiveButton(R.string.dialog_ok, null)
             .show()
+    }
+
+    /** D112: the dialog body — refusal text in the red refusal colour (resource [R.color.refusal_text]), everything
+     * else plain. Every blocking notice is a refusal today, so [showBlockingNotice] defaults [refusal] to true. */
+    private fun dialogText(message: String, refusal: Boolean): CharSequence {
+        if (!refusal) return message
+        return android.text.SpannableString(message).apply {
+            setSpan(android.text.style.ForegroundColorSpan(ContextCompat.getColor(this@MainActivity, R.color.refusal_text)), 0, length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
     }
 
     /** [SessionDisplay]'s `LockedMode` is its own type (that object cannot
@@ -929,7 +938,7 @@ abstract class MainActivity : AppCompatActivity() {
                     // item 22: a refusal — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
                 )
-                showBlockingOutcomeDialog(SESSION_EXPIRED_MESSAGE, isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog(SESSION_EXPIRED_MESSAGE, isAccessEstablishmentFailure = false, refusal = true)
                 return
             }
             when (val outcome = tierOutcomeFor(verified)) {
@@ -976,7 +985,7 @@ abstract class MainActivity : AppCompatActivity() {
                         // item 22: a refusal — see ReportLog.Outcome's doc.
                         outcome = ReportLog.Outcome.FAIL,
                     )
-                    showBlockingOutcomeDialog(reason, isAccessEstablishmentFailure = false)
+                    showBlockingOutcomeDialog(reason, isAccessEstablishmentFailure = false, refusal = true)
                     return
                 }
             }
@@ -1024,9 +1033,9 @@ abstract class MainActivity : AppCompatActivity() {
     /** One tier-C refusal BEFORE any chip read or mint, in plain words ([TierCText]). Logged and reported (item 16,
      * never silent). This runs at the lock tap on a request the user chose to verify, not on a foreign intent, so the
      * outcome dialog (which clears the pending request) is the right surface (findings #12/#13 are about foreign intents). */
-    private fun refuseTierC(verified: RequestTrust.VerifiedRequest, refusal: TierCAdmission.Decision.Refuse, afterRead: Boolean = false) {
+    private fun refuseTierC(verified: RequestTrust.VerifiedRequest, refusal: TierCAdmission.Decision.Refuse, afterRead: Boolean = false, onArrival: Boolean = false) {
         val reason = TierCText.refusalResult(refusal.refusal)
-        Log.e(TAG, "M3b tier-C: REFUSED ${if (afterRead) "after the read (answer-time re-decision)" else "before any read or mint"} — cause=${refusal.refusal.name.lowercase(Locale.ROOT)} reason=${refusal.reason} chip_read=$afterRead mint=false")
+        Log.e(TAG, "M3b tier-C: REFUSED ${if (afterRead) "after the read (answer-time re-decision)" else if (onArrival) "on arrival (D112), before any read or mint" else "before any read or mint"} — cause=${refusal.refusal.name.lowercase(Locale.ROOT)} reason=${refusal.reason} chip_read=$afterRead mint=false")
         // D110: a request that passed the gates (verified, operator on, host pinned) is told one generic "refused".
         val notice = TierCRefusalReply.plan(verified, OperatorPolicy.TIER_C_ENABLED, OperatorPolicy.TIER_C_VERIFIERS)
         deliverGenericTierCRefusal(notice, refusal.refusal.name.lowercase(Locale.ROOT)) { delivery ->
@@ -1041,7 +1050,11 @@ abstract class MainActivity : AppCompatActivity() {
                 ),
                 outcome = ReportLog.Outcome.FAIL,
             )
-            showBlockingOutcomeDialog(TierCText.refusalDialog(refusal.refusal, afterRead, delivery), isAccessEstablishmentFailure = false)
+            val dialog = TierCText.refusalDialog(refusal.refusal, afterRead, delivery)
+            // D112: on arrival the request was already cleared, so the blocking NOTICE is used (like the age-check
+            // refusals): it mutates no session state and relays through DroppedOutcomeRelay. The Verify-tap and
+            // post-read refusals keep the outcome dialog, which resets the session on OK. Both are red.
+            if (onArrival) showBlockingNotice(dialog) else showBlockingOutcomeDialog(dialog, isAccessEstablishmentFailure = false, refusal = true)
         }
     }
 
@@ -1102,7 +1115,7 @@ abstract class MainActivity : AppCompatActivity() {
                     ),
                     outcome = ReportLog.Outcome.FAIL,
                 )
-                showBlockingOutcomeDialog(TierCText.couldNotAnswerDialog(delivery), isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog(TierCText.couldNotAnswerDialog(delivery), isAccessEstablishmentFailure = false, refusal = true)
             }
             return
         }
@@ -1206,7 +1219,7 @@ abstract class MainActivity : AppCompatActivity() {
         // was already gone) gets shown, on whichever instance is next to
         // resume — see that object's class doc. `consume()` clears it, so
         // a message is shown exactly once even across several resumes.
-        DroppedOutcomeRelay.consume()?.let { showBlockingNotice(it) }
+        DroppedOutcomeRelay.consumeRelayed()?.let { showBlockingNotice(it.message, it.refusal) }
     }
 
     override fun onPause() {
@@ -1651,6 +1664,26 @@ abstract class MainActivity : AppCompatActivity() {
                     return
                 }
 
+                // D112 (finding #38): a tier-C request the app can refuse without the chip is refused NOW, right after
+                // its JWS check, like the refusals above: no Verify tap, no document fields, no question area first.
+                // Read-only on the age map (the D74 lock is written only after the read). The Verify-tap check in
+                // lockModeAndArm stays as a defensive second check (the holder setting or the age map may change).
+                val arrival = TierCArrival.plan(
+                    requestJson = outcome.request.json,
+                    operatorEnabled = OperatorPolicy.TIER_C_ENABLED,
+                    hostname = ThresholdPolicy.hostnameOf(outcome.request.origin),
+                    pinned = OperatorPolicy.TIER_C_VERIFIERS,
+                    holderAllowsAdditional = holderSettings.allowAdditionalVerifications(),
+                    locks = originThresholdLocks,
+                )
+                if (arrival is TierCArrival.Plan.Refuse) {
+                    pendingHandoff = null
+                    verifiedRequest = null
+                    refreshSessionDisplay()
+                    refuseTierC(outcome.request, arrival.refusal, onArrival = true)
+                    return
+                }
+
                 verifiedRequest = outcome.request
                 // §6.2 item 13 (D33): SHOW the mode the request set the instant
                 // verification succeeds (2026-09: via refreshSessionDisplay —
@@ -1703,7 +1736,7 @@ abstract class MainActivity : AppCompatActivity() {
                 // pendingHandoff/verifiedRequest, reverting the derived mode
                 // display via wipeSession) happens on dialog dismissal, not
                 // immediately — see showBlockingOutcomeDialog's doc.
-                showBlockingOutcomeDialog("Handoff refused: ${outcome.reason}", isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog("Handoff refused: ${outcome.reason}", isAccessEstablishmentFailure = false, refusal = true)
             }
             is RequestTrust.Outcome.PolicyRefused -> {
                 // G1 fix (2026-09-06) — the pre-fetch hostname-allowlist
@@ -2197,10 +2230,10 @@ abstract class MainActivity : AppCompatActivity() {
      * S67-POC FIX round 2 (2026-09-06, duplicate-notice hazard) — same
      * [DroppedOutcomeRelay.clear] before showing as [showBlockingNotice],
      * same reason: see that function's doc. */
-    private fun showBlockingOutcomeDialog(message: String, isAccessEstablishmentFailure: Boolean, isTransientChipCommunicationFailure: Boolean = false) {
+    private fun showBlockingOutcomeDialog(message: String, isAccessEstablishmentFailure: Boolean, isTransientChipCommunicationFailure: Boolean = false, refusal: Boolean = false) {
         if (!fence.passes()) {
             Log.i(TAG, "M2 lifecycle: fence closed — relaying terminal outcome dialog to next live instance")
-            DroppedOutcomeRelay.stash(OutcomeText.withModeSentence(message, lockedModeForDisplay()))
+            DroppedOutcomeRelay.stash(OutcomeText.withModeSentence(message, lockedModeForDisplay()), refusal)
             return
         }
         DroppedOutcomeRelay.clear()
@@ -2219,7 +2252,7 @@ abstract class MainActivity : AppCompatActivity() {
         val displayedMessage = OutcomeText.withModeSentence(message, lockedModeForDisplay())
         Log.i(TAG, "M2 stage: terminal outcome dialog shown: $displayedMessage")
         AlertDialog.Builder(this)
-            .setMessage(displayedMessage)
+            .setMessage(dialogText(displayedMessage, refusal))
             .setCancelable(false)
             .setPositiveButton(R.string.dialog_ok) { dialog, _ ->
                 dialog.dismiss()
@@ -2681,6 +2714,7 @@ abstract class MainActivity : AppCompatActivity() {
             showBlockingOutcomeDialog(
                 "Mode B requires a verified handoff request to scope the device key to — no handoff is pending.",
                 isAccessEstablishmentFailure = false,
+                refusal = true,
             )
             return
         }
@@ -2712,7 +2746,7 @@ abstract class MainActivity : AppCompatActivity() {
                     // item 22: a refusal — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
                 )
-                showBlockingOutcomeDialog(SESSION_EXPIRED_MESSAGE, isAccessEstablishmentFailure = false)
+                showBlockingOutcomeDialog(SESSION_EXPIRED_MESSAGE, isAccessEstablishmentFailure = false, refusal = true)
                 return
             }
         }

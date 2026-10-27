@@ -1348,9 +1348,8 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     soon as the request arrives (after the request object's JWS check), with no Verify tap and no
     document fields first, logged through `emitReport` and answered by the D110 generic refusal under
     the same gates; the Verify-tap check stays as a defensive second check and the post-read refusals
-    stay after the read. (f) **D112:** refusals (popup text, Log-tab entries, the "refused" last-scan
-    line; age-check and tier-C alike) are shown in red, normal asks in a blue or green accent, both from
-    colour resources with light and dark variants. Touches: **scanner**, **demo**. Tag:
+    stay after the read. (f) **D112:** refusal popup text (age-check and tier-C alike) is shown in red and the question area in a blue accent, both from
+    colour resources with light and dark variants; Log-tab entries and the last-scan line stay uncoloured (they keep their ✗). Touches: **scanner**, **demo**. Tag:
     carried standing rule, not new scope (e)/(f): FIX for finding #38 plus an owner-ruled UI change.
     Implements: §6.2 items 5/15/16; D43, D79(b), D112; findings #22, #38.
 17. **Disclosed limitations (MUST be stated in customer-guide.md and/or in-app, not silently

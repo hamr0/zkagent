@@ -244,6 +244,7 @@
                         android:layout_marginTop="@dimen/activity_vertical_margin"
                         android:textSize="16sp"
                         android:textStyle="bold"
+                        android:textColor="@color/ask_accent"
                         android:gravity="center"
                         android:minLines="1"
                         tools:text="This website asks if you are over 18" />
