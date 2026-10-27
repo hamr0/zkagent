@@ -1448,6 +1448,18 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     flight, per the existing recreation-test method) still resumes the flow. Recorded as a `change`
     in the fix ledger. Touches: **scanner** (`MainActivity` intent handling, one new pure class and
     test). Tag: FIX. Implements: D87 (guard completeness).
+    **As built (working tree):** pure class `LinkOnce` keeps a persisted
+    (SharedPreferences `zkagent_link_once`), capped (50, oldest dropped) record of SHA-256 hashes
+    of the whole link string, each TERMINAL or IN_FLIGHT, plus an in-memory seen-this-process set.
+    Only an `onCreate` replay is deduplicated; `onNewIntent` is a fresh tap and always handled.
+    TERMINAL replays are ignored; an IN_FLIGHT replay in the same process (recreation, criterion 3,
+    owner ruling) RESTORES the question area and Verify verb from the in-memory `InFlightHandoff`
+    holder (handoff/request data only, no MRZ or chip state; one `request_uri` GET; a recreation
+    during VERIFYING re-runs the verification once and drops the dead instance's late result);
+    after process death it is handled again and resumes (criterion 4). The holder is cleared at
+    every terminal end. Also closes finding #48. An
+    ignored replay does no fetch, shows no popup, writes no Log entry, and logs one `Log.i` line.
+    Device-checked 2026-10-27 (criteria 2, 3, 4 and #48 PASSED; the recreation-while-VERIFYING path is unit-proven only): docs/logs/M3B-ITEM18-EVIDENCE-2026-10-27.md.
 19. **Operator-config negative cases for comma/quote/backslash in `multi_threshold_verifiers`
     (D109(e), ENHANCEMENT, test only).** Add 1-3 cases to `apps/scanner/scripts/operator-json-negative.sh`
     that put a comma, a double quote and a backslash in a `multi_threshold_verifiers` entry (the

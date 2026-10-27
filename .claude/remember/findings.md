@@ -1385,7 +1385,7 @@ JUnit XML, not from a device run.
 - **Source**: orchestrator (D112 device run); recorded by agent
 - **Anchor**: scanner colour resources (#FF8A80 refusal, #90CAF9 ask)
 - **Finding**: The night-mode values were never shown on a device: the app theme is `Theme.AppCompat.Light`, so night mode does not apply. Severity guess: LOW.
-- **Status**: OPEN (nothing here is a ruling).
+- **Status**: CLOSED (2026-10-27). The phone runs in dark mode, so the D113 red refusal popups the owner read were the night colour (#FF8A80; docs/logs/M3B-D113-EVIDENCE-2026-10-27.md addendum), and the blue ask was read at night in the item 18 run (docs/logs/M3B-ITEM18-EVIDENCE-2026-10-27.md, question area "in blue"). Both colour roles the finding names were therefore shown on a device in night configuration. Not measured: the exact hex values (read by eye by the owner, not sampled), so this is a by-eye closure. The finding's premise that night mode does not apply under `Theme.AppCompat.Light` was not separately checked, but the night colours were observed. Nothing here is a ruling.
 
 ### 2026-10-27 — #46: `scripts/tierc-poc-request.mjs` has no tier-A threshold flag
 - **Source**: orchestrator (D112 device run); recorded by agent
@@ -1403,7 +1403,7 @@ JUnit XML, not from a device run.
 - **Source**: orchestrator (D112 device run, check 5; traced from logcat and the demo log); recorded by agent
 - **Anchor**: scanner `RegularActivity` launch-intent handling; milestones.md §6.9.2 item 18 (link-once after forced recreation, chunk 4); `docs/logs/M3B-D112-EVIDENCE-2026-10-27.md` check 5
 - **Finding**: At 15:42:10 `adb install -r` killed the app ("killDueToPackageUpdate"); at 15:42:11 Android restarted `RegularActivity` as top activity with its last launch intent, the already-handled `av://` link for tx `aMK_OhgO1DnYSW80`. The app captured it again as a pendingHandoff, re-fetched the request (a second `request_uri GET`), refused it again (15:42:12) and wrote a second Log-tab entry. A process death would plausibly do the same. On an ACCEPT path it could re-arm a handled request; item 18 must cover this. Severity guess: MEDIUM (item 18's known gap, now observed on device).
-- **Status**: OPEN (build input for chunk 4, item 18; nothing here is a ruling).
+- **Status**: CLOSED (fixed by item 18 `LinkOnce`, device-checked 2026-10-27: after `adb install -r` the replayed handled link was ignored, no second GET, no popup, no new Log entry; evidence docs/logs/M3B-ITEM18-EVIDENCE-2026-10-27.md). Fix not yet committed.
 
 ### 2026-10-27 — #49: the pane status text still shows the technical refusal reason
 - **Source**: agent (D113 fix); recorded by agent
