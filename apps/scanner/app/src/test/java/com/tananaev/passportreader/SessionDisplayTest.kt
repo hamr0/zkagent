@@ -73,8 +73,13 @@ class SessionDisplayTest {
     fun `refused reverts the mode line to default and disables the lock button`() {
         val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Refused("origin mismatch"))
         assertEquals("Mode: A — anonymous (no site request pending)", p.modeStatusText)
-        assertTrue(p.handoffStatusText.contains("origin mismatch"))
-        assertTrue(p.handoffStatusText.startsWith("Handoff refused"))
+        // D114 / finding #49: literal expected string (not read from the constant), reason never shown
+        assertEquals(
+            "This website's request could not be verified. You can still scan your document for yourself.",
+            p.handoffStatusText,
+        )
+        assertFalse(p.handoffStatusText.contains("origin mismatch"))
+        assertFalse(p.handoffStatusText.contains("Handoff refused"))
         assertFalse(p.lockButtonEnabled)
     }
 
@@ -116,6 +121,18 @@ class SessionDisplayTest {
         assertEquals("", p.handoffStatusText)
         assertFalse(p.lockButtonEnabled)
         assertEquals(SessionDisplay.LockButtonLabel.TAP_AND_SCAN, p.lockButtonLabel)
+    }
+
+    @Test
+    fun `refused status line never carries the technical reason, whatever it is (negative control)`() {
+        for (reason in listOf("JWS verification failed: signature_invalid", "no trusted request-signer key resolvable for origin https://x:443", "request_uri fetch failed: HTTP 500: boom")) {
+            val p = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Refused(reason))
+            assertEquals("This website's request could not be verified. You can still scan your document for yourself.", p.handoffStatusText)
+            assertFalse(p.handoffStatusText.contains(reason))
+        }
+        // a non-refused state must NOT show the refusal text
+        val ok = SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("example.com", "A"))
+        assertFalse(ok.handoffStatusText.contains("could not be verified"))
     }
 
     @Test

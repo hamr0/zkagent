@@ -121,8 +121,11 @@ object TierCText {
     // ---- Settings tab ----
     const val SETTING_LABEL = "Allow additional verifications"
     const val SETTING_HELP =
-        "Off: the app only answers age checks. On: websites approved in this app may also ask specific questions about " +
+        "Off: the app only answers age checks.\n\n" +
+            "On: websites approved in this app may also ask specific questions about " +
             "your document, such as whether it expires soon, your nationality, or whether a name matches. You see every " +
-            "question before you scan, and only yes or no answers are sent."
+            "question before you scan, and only yes or no answers are sent.\n\n" +
+            "An approved website can ask the same questions again on later scans. This setting turns off again if you " +
+            "reinstall the app."
     const val SETTING_UNAVAILABLE = "Additional verifications are not available in this version of the app."
 }

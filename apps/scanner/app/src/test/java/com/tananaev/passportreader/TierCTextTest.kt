@@ -130,4 +130,18 @@ class TierCTextTest {
             TierCText.couldNotAnswerDialog(TierCText.Delivery.Unreachable(false)),
         )
     }
+
+    @Test
+    fun `the settings help is three paragraphs, literal, words unchanged`() {
+        assertEquals(
+            "Off: the app only answers age checks.\n\n" +
+                "On: websites approved in this app may also ask specific questions about your document, such as whether it expires soon, your nationality, or whether a name matches. You see every question before you scan, and only yes or no answers are sent.\n\n" +
+                "An approved website can ask the same questions again on later scans. This setting turns off again if you reinstall the app.",
+            TierCText.SETTING_HELP,
+        )
+        assertEquals(3, TierCText.SETTING_HELP.split("\n\n").size)
+        // negative control: the unavailable text is a single paragraph and does not carry the reinstall sentence
+        assertEquals(1, TierCText.SETTING_UNAVAILABLE.split("\n\n").size)
+        assertFalse(TierCText.SETTING_UNAVAILABLE.contains("reinstall"))
+    }
 }

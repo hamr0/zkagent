@@ -159,6 +159,11 @@ object SessionDisplay {
 
     /** Matches the pre-refactor `refreshModeStatus`'s own "no handoff
      * pending" branch text verbatim — not a new string. */
+    /** D114 (finding #49): the scan-pane status line for a refused site request. Plain words only; the technical
+     * reason stays in the Log tab and logcat. */
+    const val REFUSED_STATUS_TEXT =
+        "This website's request could not be verified. You can still scan your document for yourself."
+
     private val MODE_DEFAULT_TEXT = "Mode: A — ${modeLabel(LockedMode.A)} (no site request pending)"
 
     /**
@@ -336,7 +341,7 @@ object SessionDisplay {
                 // real change. Verb reverts to SCAN — the handoff that
                 // would have justified VERIFY is exactly what was refused.
                 modeStatusText = MODE_DEFAULT_TEXT,
-                handoffStatusText = "Handoff refused (${handoff.reason}) — you may still scan manually.",
+                handoffStatusText = REFUSED_STATUS_TEXT,
                 lockButtonEnabled = false,
                 lockButtonLabel = LockButtonLabel.SCAN,
                 questionText = questionTextFor(handoff),
