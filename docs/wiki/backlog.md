@@ -20,7 +20,7 @@ Pointers: decisions in `decisions.md`, scope text in `milestones.md`, open-quest
 
 ## Parked items
 
-### 1. M3b / tier C (attributed disclosure) — REVIVED, IN BUILD (approved 2026-10-25, D109(h)); no longer parked
+### 1. M3b / tier C (attributed disclosure) — REVIVED, IN BUILD (approved 2026-10-25, D109(h)); no longer parked. Tier C itself is built and device-checked and ships in 0.9.0 (D116); the milestone is not done or released
 
 Was parked by D108 (2026-10-24). Kept at this number so older references resolve. The owner
 revived it (D109(a)) and approved the scope as amended on 2026-10-25 (D109(h)), which satisfies
@@ -29,8 +29,7 @@ date-of-birth range, nationality in two modes, document-number match) as boolean
 whose exact hostname is pinned in the app build, and only when the holder has turned on one app
 setting, "Allow additional verifications" (OFF by default). All five questions are allowed to
 every pinned site, with no per-site question permissions and no caps in this build. Scope text:
-`milestones.md` §6.9 (an opening POC plus 15 scope items, including item 23, open age verification, D109(i)). Not built yet: the scanner still
-refuses tier C (§6.2 item 13) until the build lands. Pointers: D19, D20, D74, D89–D109;
+`milestones.md` §6.9 (an opening POC plus 15 scope items, including item 23, open age verification, D109(i)). Tier C is now built and device-checked and ships in 0.9.0 (D116): the scanner answers it only when the `operator.json` switch is on, the site's exact hostname is pinned and the holder's setting is on; otherwise it refuses (§6.2 item 13). Pointers: D19, D20, D74, D89–D109;
 `milestones.md` §6.4, §6.9; Q22, Q34, Q49; Q11 (tier-C residual). The deferred pieces are items 8
 and 9 below.
 

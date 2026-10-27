@@ -163,7 +163,7 @@ in-range citation is given for them.
   Remaining OPEN: MRZ truncation behavior and any further normalization beyond D101's rule.
   See decisions.md D90, D101, D102. (zkagent-prd.md:1839-1844)
   **Final status (D108, 2026-10-24): CLOSED for the vocabulary (D90, D101, D102). The remaining edge cases (MRZ truncation, normalisation beyond accent-stripping) are BACKLOG with M3b.**
-  **Later note (D109, 2026-10-25): M3b is revived and §6.9 as amended was approved by the owner on 2026-10-25 (D109(h)); it is IN BUILD. The whole vocabulary is in scope (item 8), and the remaining edge cases are observed, not ruled, by the retargeted opening POC (§6.9.1). Nationality code namespace and expiry-bucket month arithmetic are ruled (D109(g)3, 4); the approval is recorded in D109(h).**
+  **Later note (D109, 2026-10-25): M3b is revived and §6.9 as amended was approved by the owner on 2026-10-25 (D109(h)); it is IN BUILD (tier C itself is built and device-checked and ships in 0.9.0, D116; the milestone is not done). The whole vocabulary is in scope (item 8), and the remaining edge cases are observed, not ruled, by the retargeted opening POC (§6.9.1). Nationality code namespace and expiry-bucket month arithmetic are ruled (D109(g)3, 4); the approval is recorded in D109(h).**
 - **Q23 (resolved by D23)** — Whether tier A's attestation requirement is compatible
   with the "nothing stable across sites" unlinkability bar. Status: CLOSED by D23 —
   Play Integrity measured with no device-unique field; owner's call could still be

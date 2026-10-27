@@ -3,7 +3,7 @@
 The Android reference-scanner app for zkagent (PRD `docs/product/zkagent-prd.md`
 §6.2). **Status: complete and released as v0.7.1 (signed APK on GitHub Releases); the project
 is closed as a complete experiment (D108) and no further scanner work is planned.** Tiers A and B
-are built; tier C is refused by the app and is parked (`docs/wiki/backlog.md`). The item table
+are built. Tier C is built and device-checked and ships in 0.9.0 (D116): it is off by default, and the app answers it only when `operator.json` turns it on (`tier_c.enabled`), the site's exact hostname is in `tier_c_verifiers`, and the holder turns on "Allow additional verifications". The item table
 below covers §6.2 items 1-11; items 12-25 are in the PRD and the CHANGELOG. This is a **rewrite**, not a graduated spike — code was
 drawn from `spikes/m2-scan` (masterlist/passive-auth read path) and
 `spikes/m2-session-poc` (StrongBox key + biometric composition, item 12's
@@ -44,7 +44,7 @@ file ships inside the APK, and a bad file fails the build rather than
 shipping a silent default. It sets the per-deployment verifier hostname
 allowlist (or `"verifiers": "any"`, which opens age verification to any
 site while tier C stays behind its own pin list and switch; the committed
-reference file uses `"any"`), the D74 threshold subset, tier mode (A+B vs
+reference file uses `"any"`), the tier-C switch (`tier_c.enabled`) and exact-hostname pin list (`tier_c_verifiers`, both off/empty in the reference file), the D74 threshold subset, tier mode (A+B vs
 B-only), and the `app_name` string. See `docs/wiki/milestones.md` §6.7 for
 the schema and the twelve build-time validation rules;
 `apps/scanner/scripts/operator-json-negative.sh` exercises deliberately-bad

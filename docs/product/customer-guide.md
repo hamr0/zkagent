@@ -47,7 +47,7 @@ cannot tell you the site's decision. Read the page.**
 |---|---|
 | Tier A | Anonymous mode. One yes/no answer, no way to recognise you again. Default. |
 | Tier B | Pseudonymous mode. Same yes/no answer, plus a per-site tag so that site (only) can tell if it's seen this document before. Opt-in, requires a tap-to-approve action on the phone. |
-| Tier C | Attributed mode (name/expiry/other fields): approved 2026-10-25 (D109(h)), in build, not yet built. See §4 and `docs/wiki/backlog.md`. |
+| Tier C | Attributed mode (yes/no answers about expiry, name, date of birth, nationality, document number): built and device-checked; ships in 0.9.0 (D109, D116). Off by default. See §4. |
 | zktag | The per-site tag tier B adds. Computed on the phone from the document and the site's address; the same document at the same site always makes the same zktag; the same document at a different site makes a different, unrelated zktag. |
 | Verifier | The website's own server that checks what the phone sends and decides allow/refuse. Every operator runs their own; zkagent runs none. |
 | Handoff link | The `av://` link the page hands to the phone (tap on the same device, or scan a QR code from a second device) to start a scan tied to that specific request. The scanner app only handles `av://` links today — it has no `https` App Link intent filter — so the demo must be run with the `av` link scheme for the same-device tap to work; the demo's `https` default is only a placeholder for a possible future app-link path, not something the scanner can open yet. |
@@ -63,19 +63,19 @@ cannot tell you the site's decision. Read the page.**
 
 | | Tier A (anonymous) | Tier B (pseudonymous) | Tier C (attributed) |
 |---|---|---|---|
-| What the site learns | One yes/no bit | Same bit, plus "have I seen this document at my site before" | Not built |
-| What the phone sends | Bare answer, no signature, no key | Signed answer + zktag, from a device key | Not built |
-| PIN/biometric prompt | None | Yes, before every mint | Not built |
-| Scanner popup | Yes, every scan — confirmed, including two tier-A scans in a row | Yes, expected every scan — **unconfirmed observation: may not appear on a repeat tier-B scan** (an earlier report of a missing popup was traced to tier-B taps, not tier A; corrected 2026-09-04) | Not built |
-| Page outcome text | "ALLOWED (over threshold)" or refusal reason | First visit: allowed/refused as normal. Repeat visit, same document: "Already registered at this site" | Not built |
-| Where the verdict shows | Page, never the app (see "Two answers, two places" above) | Page, never the app (see "Two answers, two places" above) | Not built |
-| Stored on the phone | Nothing persists beyond a value-free log entry | Same, plus a device key bound to (this site, this zktag) | Not built |
-| Stored by the site | Nothing durable (a spent one-time nonce) | zktag + attester-key binding, kept until the operator clears it | Not built |
-| Can the site recognise you again | No | Yes, at that one site only | Not built |
-| Can two sites link you | No | No — zktags differ per site by design | Not built |
-| Works with a cloned chip | N/A (no chip check in tier A) | Yes, if `chip_auth` is false — a clone mints the identical zktag as the real holder | Not built |
-| Threshold | 18 (fixed) | 18 (fixed) | Not built |
-| Status | Built and device-confirmed (M3, shipped v0.6.0). The client trust list (FR10) is not built: it needs an attestation plug (§6.5 S4, D78; backlog) | Built and device-confirmed (M3, shipped v0.6.0). The client trust list (FR10) is not built: it needs an attestation plug (§6.5 S4, D78; backlog) | M3b — approved 2026-10-25 (D109(h)), in build, not yet built |
+| What the site learns | One yes/no bit | Same bit, plus "have I seen this document at my site before" | A yes/no answer per question it asked, from the five kinds in §4; never the field itself |
+| What the phone sends | Bare answer, no signature, no key | Signed answer + zktag, from a device key | The yes/no answers for exactly the questions asked, echoing only the question's name and fixed boundary; no zktag, no device key |
+| PIN/biometric prompt | None | Yes, before every mint | Your confirmation on the phone before each scan, which shows the questions |
+| Scanner popup | Yes, every scan — confirmed, including two tier-A scans in a row | Yes, expected every scan — **unconfirmed observation: may not appear on a repeat tier-B scan** (an earlier report of a missing popup was traced to tier-B taps, not tier A; corrected 2026-09-04) | Yes: an outcome popup, or a red refusal popup |
+| Page outcome text | "ALLOWED (over threshold)" or refusal reason | First visit: allowed/refused as normal. Repeat visit, same document: "Already registered at this site" | The site's own page shows the answers it received, or a generic "refused" |
+| Where the verdict shows | Page, never the app (see "Two answers, two places" above) | Page, never the app (see "Two answers, two places" above) | Page, never the app (see "Two answers, two places" above) |
+| Stored on the phone | Nothing persists beyond a value-free log entry | Same, plus a device key bound to (this site, this zktag) | Nothing persists beyond a value-free log entry |
+| Stored by the site | Nothing durable (a spent one-time nonce) | zktag + attester-key binding, kept until the operator clears it | Whatever the site chooses to keep of the answers; nothing is held by zkagent |
+| Can the site recognise you again | No | Yes, at that one site only | No tag is sent, but a "yes" to a document-number question links you to a number the site already had (§4.1) |
+| Can two sites link you | No | No — zktags differ per site by design | Not by anything the phone sends; a shared name or document number is the sites' own matter (§4.1) |
+| Works with a cloned chip | N/A (no chip check in tier A) | Yes, if `chip_auth` is false — a clone mints the identical zktag as the real holder | Yes, if `chip_auth` is false — a cloned chip answers as the real one would (§10) |
+| Threshold | 18 (fixed) | 18 (fixed) | Date-of-birth question uses the site's one locked age (§5) |
+| Status | Built and device-confirmed (M3, shipped v0.6.0). The client trust list (FR10) is not built: it needs an attestation plug (§6.5 S4, D78; backlog) | Built and device-confirmed (M3, shipped v0.6.0). The client trust list (FR10) is not built: it needs an attestation plug (§6.5 S4, D78; backlog) | M3b — built and device-checked; ships in 0.9.0 (D109, D116) |
 
 ## 4. Tier rules — what each may and may never ask
 
@@ -83,10 +83,10 @@ cannot tell you the site's decision. Read the page.**
 |---|---|---|---|
 | A | One yes/no threshold bit | Any identifying field; anything that could stably identify you | None — always available, the default |
 | B | Tier A's bit, plus "have I seen this document at my site before" (the zktag) | Your name, birthdate, or any document field; anything that links you across two different sites | Must be explicitly requested by the site — never inferred or defaulted |
-| C | Booleans over identifying fields, from a published verb list (the vocabulary was ruled in D90: expiry buckets, name-match, date-of-birth range, nationality, document-number match — but none of it is built) | Similarity scores, ever; any predicate off the published list | Refused outright unless the requesting site's exact hostname is pinned in advance (approved, D109(h); in build, not yet built); the scanner refuses any tier-C request today; requires M3b, which is designed (D89–D107, `docs/wiki/milestones.md` §6.9) approved on 2026-10-25 (D109(h)) and in build, not yet built |
+| C | Booleans over identifying fields, from a published verb list (the vocabulary was ruled in D90: expiry buckets, name-match, date-of-birth range, nationality, document-number match — all five are built) | Similarity scores, ever; any predicate off the published list | Refused outright unless the operator turned tier C on, the requesting site's exact hostname is on the build's pin list, and you turned on "Allow additional verifications" (D109(h)); this is M3b (`docs/wiki/milestones.md` §6.9), built and device-checked; ships in 0.9.0 |
 
-**Tier C, as approved and in build (not yet built; the scanner refuses every tier-C request today).**
-Under the approved design (D109(h), `docs/wiki/milestones.md` §6.9) a tier-C request is answered
+**Tier C (built and device-checked; ships in 0.9.0; D109, D116).**
+Under the design (D109(h), `docs/wiki/milestones.md` §6.9) a tier-C request is answered
 only if three things are all true: the operator turned tier C on in the build, the site's exact
 hostname is on that build's pin list (an unlisted site is refused before anything is read from your
 document), and you turned on the app setting **"Allow additional verifications"**, which is OFF by
@@ -191,7 +191,7 @@ The published policy for which ages a site may ask about, and how it's locked on
 | Two thresholds, two hostnames | A site that legitimately needs two different thresholds must use two separate hostnames — one threshold per hostname is the rule, with no exception by default |
 | Named exceptions | A small, app-side allowlist of exact website addresses (no wildcards) permitted to ask more than one threshold at a single hostname — membership is the app's own decision, never the site's; ships empty today |
 | Pre-tap question | Before you tap the scan/verify button, the app shows the exact question being asked (e.g. "This website asks if you are over 18"), read from the site's signed request, never a generic string |
-| Shared with tier C (approved 2026-10-25, D109(i)3; in build, not yet built) | The lock is ONE age per site across tiers: if a site first asks about 18 through an age check, its tier-C date-of-birth question can only ever use 18, and the other way round; a different age is refused (for tier C, the whole request is refused). A site the operator names in `multi_threshold_verifiers` is exempt (D109(j)2) and may use several ages, which lets it narrow your age down; the reference build names none. Expiry questions are not part of this lock |
+| Shared with tier C (D109(i)3; built and device-checked; ships in 0.9.0) | The lock is ONE age per site across tiers: if a site first asks about 18 through an age check, its tier-C date-of-birth question can only ever use 18, and the other way round; a different age is refused (for tier C, the whole request is refused). A site the operator names in `multi_threshold_verifiers` is exempt (D109(j)2) and may use several ages, which lets it narrow your age down; the reference build names none. Expiry questions are not part of this lock |
 | Reinstalling resets it | Reinstalling the app resets the per-site lock along with everything else in §10 — a fresh install remembers nothing |
 | Today | The current demo requests age 18 by default; a test-only override lets an operator try the other preset values (and one deliberately-unsupported value) for testing, without changing the page's own default |
 
@@ -442,7 +442,7 @@ rebuilding; there is no over-the-air knob update.
 | `verifiers` | Either a non-empty array of bare hostnames (no scheme, no port, no wildcard), or exactly the single lower-case string `"any"`, which opens age verification to any site (built, D109(i)). The two forms are mutually exclusive | Build fails, names the bad value. A bad array entry (e.g. a wildcard or a `host:port` string), or an empty array, fails as rule 4. Any other value fails as rule 12: `"*"`, `"ANY"`, `"any "`, an empty string, a number, an object, `null`, or an array that contains the entry `"any"` (`["any"]` is not the open form) |
 | `multi_threshold_verifiers` | Array of bare hostnames, same shape rule as `verifiers`; default `[]` | Build fails on the same shape violations as `verifiers` |
 | `evidence_plug` | `"none"` only, today | Build fails if it names anything else — no attestation plug ships in this repo yet |
-| `tier_c_verifiers` | Must stay `[]` today | Build fails if non-empty. (Approved 2026-10-25, D109(h), in build, not yet built: this becomes the exact-hostname pin list for tier C, together with a separate on/off switch; the two must agree or the build fails. Nothing of this exists in the code today.) |
+| `tier_c_verifiers` | Array of bare hostnames, same shape rule as `verifiers` (no scheme, no port, no wildcard); default `[]`. It is the exact-hostname pin list for tier C (built and device-checked; ships in 0.9.0, D109), and works together with the switch `"tier_c": { "enabled": true }` (default off) | Build fails on a bad entry (rule 7). Build fails if the switch is on and the list is empty (rule 10), or the list is non-empty and the switch is off or absent (rule 11). An unknown key under `tier_c` fails as rule 8. The showcase build leaves both off |
 | `strings.app_name` | Any string | N/A — this is the only free-text display-name knob (`operator.name`/`operator.contact_url` are also unrestricted strings, but identify the operator rather than the app) |
 | any unknown key, at the top level or under `strings` | — | Build fails (typo/scope-creep protection; nothing is silently ignored) |
 | the file itself | Must exist | Build fails if missing, unless you're building the repo's own committed reference config |
@@ -472,17 +472,16 @@ refused if it later asks a different one (D74 rule 1); listing a hostname here i
 grants that one site permission to ask more than one threshold. It is not a general escape hatch —
 membership is the operator's call, never the site's own.
 
-**`tier_c_verifiers`.** Reserved for a future milestone (M3b) and must stay `[]` today. A
-non-empty list fails the build — tier C isn't built yet (D73), so there is nothing for this field
-to enable. *Approved 2026-10-25 (D109(h)), in build, not yet built:* under the approved
-design this field will hold the exact hostnames of the sites allowed to ask tier C (a pin by
-hostname only, no key pin), checked offline and baked into the build; a site not on the list would
-be refused before anything is read from the document. It will need an explicit tier-C on/off
-switch, and a build with the switch on and an empty list, or a non-empty list and the switch off,
-will fail. Limits that will apply: a pin is only as strong as the hostname's DNS and TLS;
-the list changes only when you rebuild and a holder installs the new build (no remote revocation);
-and there is no authority behind the list. With no per-site caps, a pinned site can also repeat
-requests and narrow facts down over time (see §4.1). None of this is built.
+**`tier_c_verifiers` and `tier_c`.** Tier C is built and device-checked; ships in 0.9.0 (D109). It is off in the showcase build.
+To turn it on, set `"tier_c": { "enabled": true }` and list the exact hostnames of the sites allowed to ask
+tier C in `tier_c_verifiers` (a pin by hostname only, no key pin, checked offline and baked into the build).
+The two must agree: the switch on with an empty list, or a list with the switch off, fails the build
+(rules 10 and 11). A site not on the list is refused before anything is read from the document, and
+even a listed site is answered only if the holder has turned on "Allow additional verifications".
+`"verifiers": "any"` never widens this list. Limits: a pin is only as strong as the hostname's DNS and
+TLS; the list changes only when you rebuild and a holder installs the new build (no remote revocation);
+there is no authority behind the list; and with no per-site caps, a pinned site can repeat requests
+and narrow facts down over time (see §4.1).
 
 **`operator`.** Two required strings, `name` and `contact_url`, identifying who operates this
 build. Gradle validates that `operator` is an object, that both fields are strings, and that no
@@ -536,7 +535,7 @@ What's actually checked, and what isn't yet:
 | Decision | Choice | Consequence for you | D# |
 |---|---|---|---|
 | Trust root | Government chip signature + phone hardware attestation, no ZK circuits of ours | No account, no issuer — the chip does the proving | D1 |
-| Two tiers shipped, third not yet | Tier A and B only; tier C approved and in build, not yet built | A site can ask "are you over 18" or "have I seen you before," never your name or birthdate today | D19, D73 |
+| Third tier gated | Tiers A and B are open to any site in a `"verifiers": "any"` build; tier C is built and device-checked; ships in 0.9.0 and stays off unless the operator pins the site and you allow it | Without tier C, a site can ask "are you over 18" or "have I seen you before," never your name or birthdate | D19, D73, D109 |
 | Key/zktag isolation | Scoped per (site, document), not per site alone | Two different documents at one site, or one document at two sites, are never linkable to each other | D38, D39 |
 | Mode A ships bare | No signature, no key, no PIN | Fastest, most private flow, but nothing to recognise you with next time | D27 |
 | Mode B evidence | Signed device key, phone picks its strongest algorithm | PIN/biometric required every mint; real hardware-backed key | D30, D31, D36 |
@@ -556,7 +555,7 @@ What's actually checked, and what isn't yet:
 |---|---|
 | Clone replay on non-chip-authenticated documents | Disclosed, not mitigated — a cloned chip mints the same zktag as the real one when `chip_auth` is false |
 | Not zero-knowledge | Never marketed as such — third-party ZK only enters as a validation-grade, tier-A-only evidence option |
-| Tier C (name/expiry/other fields) | Not built — approved 2026-10-25 (D109(h)) and in build as M3b; see §4.1 for the limits it will carry, including no per-site caps |
+| Tier C (name/expiry/other fields) | Built and device-checked; ships in 0.9.0 (M3b, D109, D116); see §4.1 for the limits it carries, including no per-site caps |
 | Play Store / HTTPS reachability | Moot — the Play track is parked (D83); distribution is GitHub Releases + sideload, and the demo is reached over `adb reverse` (D76) |
 | Online hosting | Out of scope for the current demo — operator runs it locally, USB only |
 | Per-install state | Keys, zktag bindings' local record, threshold locks, the "Allow additional verifications" setting (back to OFF), and the log all reset on reinstall (see §6.10, §4.1) |
@@ -605,17 +604,15 @@ again on the next scan, exactly like a genuine first-time visit.
 | The site (verifier/demo) | Spent one-time nonces, attester-key bindings, and zktags-seen — never document data, because none is ever sent to it |
 | Never in logs or screenshots | Any MRZ field, name, date of birth, document number, raw zktag, nonce, public key, or signature value — records use field names, boolean outcomes, and truncated identifiers only |
 
-## 13. Planned, not built
+## 13. Not built (backlog)
 
-zkagent is closed as a complete experiment (D108, 2026-10-24); nothing below is scheduled. Every
-parked or unbuilt item (M3b tier C is now approved and in build, D109(h)) — the client trust list via an attestation plug (§6.5 S4), the
-Play Store track, rung 2, Track Z, and the others — is listed with its reason and its decision
-pointers in [`docs/wiki/backlog.md`](../wiki/backlog.md), which also says how to revive any of them.
-Anything revived goes into the PRD first (NO-GO #10).
+The rows below are designed or noted but not built. Nothing here is scheduled. Each one, with its
+reason and its decision pointers, is in [`docs/wiki/backlog.md`](../wiki/backlog.md), which also says how
+to revive it. Anything revived goes into the PRD first (NO-GO #10). Tier C is not in this list: it is
+described in §4 as built and device-checked, and ships in 0.9.0 (D116).
 
 | Item | What it would do | Status |
 |---|---|---|
-| M3b | Tier C: attributed disclosure (e.g. name match, expiry-bucket booleans), pinned to an operator-chosen list of exact site hostnames | Approved, in build, not yet built (revived by D109 and approved 2026-10-25, D109(h)): off by default, needs the operator switch, a pinned hostname and the holder's "Allow additional verifications" setting |
 | Client trust list (§6.5 S4) | Pin the scanner's package and signing certificate via an attestation plug | Not built — needs an attestation plug |
 | Play Store track | Closed-testing upload of the scanner app | Parked (D83) |
 

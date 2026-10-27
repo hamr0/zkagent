@@ -16,7 +16,7 @@ sources: [docs/archive/zkagent-prd.md, docs/wiki/decisions.md D108]
 > §15 Close-out. NO-GO #10 (the scope gate) applies to any revival. The owner's agent-delegation work
 > now lives in the individual Internet-Draft `draft-hamr-oauth-agent-delegation` (no IETF endorsement).
 > **Update 2026-10-25 (D109, D109(h)): M3b / tier C was revived by the owner and is IN BUILD (approved
-> 2026-10-25, scope in `../wiki/milestones.md` §6.9); it is not built yet. D109(i) (2026-10-25) also
+> 2026-10-25, scope in `../wiki/milestones.md` §6.9); tier C itself is now built and device-checked and ships in 0.9.0 (D116, 2026-10-27), while the M3b milestone stays in build until its remaining items, the reviews and the 0.9.0 release are done. D109(i) (2026-10-25) also
 > opens age verification (tiers A and B) to any site in the build's `operator.json` and shares one age
 > lock per site across tiers (§6.9.2 items 9 and 23); tier C stays gated behind the operator's list
 > and the holder's setting.**
@@ -195,4 +195,4 @@ the wiki pages it points to.
 
 **Known limits, stated with the criteria.** Captcha-grade, not bank-grade (NO-GO #5). Chip-cloning is an accepted, disclosed limitation: "one human, one zktag" holds only where `chip_auth` is true (FR11, D29). Tier A is unsigned by design; the tier-B key comes from no configured trust source and is bound on first sight (D38, D78). v1 is not zero-knowledge (NO-GO #7). The reference scanner ships with no device-attestation plug (D27), so client identity is only the attester key (S4 in `backlog.md`).
 
-**Not delivered.** Everything in `backlog.md`: M3b/tier C is no longer parked (revived 2026-10-25, IN BUILD, D109(h); not delivered yet), and the rest: §6.5 S4, the Play track, rung 2 (M4/M5), Track Z, the demo's own operator config, multi-threshold origins.
+**Not delivered.** Everything in `backlog.md`: M3b/tier C is no longer parked (revived 2026-10-25, D109(h); tier C is built and device-checked and ships in 0.9.0, D116; the M3b milestone is still in build and 0.9.0 is not released), and the rest: §6.5 S4, the Play track, rung 2 (M4/M5), Track Z, the demo's own operator config, multi-threshold origins.

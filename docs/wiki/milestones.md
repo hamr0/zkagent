@@ -25,7 +25,7 @@ next integrates. (zkagent-prd.md:855-865)
 | **M1b** — Mode-A unlinkability probe | Black-box byte comparison of N mode-A presentations, same device/holder/service, including a planted positive control (zkagent-prd.md:857) | No field differs across presentations except those proven independent of holder/device; a planted stable field must fail the check. Blocks M3. Answers a linkability question. Evidence: `docs/logs/M1B-EVIDENCE.md` (zkagent-prd.md:857) | Ran 2026-08-30; passes with one disclosed leak bucket; block on M3 lifted (zkagent-prd.md:857) |
 | **M2** — Scanner app (rewrite, not graduate) | Real app: Keystore/StrongBox, biometric gate, QR/app-link handoff; ships BARE (`evidence: []`) as its fixed evidence set — no on-device ZK prover; `zk-passport/1` stays verifier-side; mode-B roundtrip exercises the attester-key evidence plug end to end against the M1 core. Opens with a riskiest-assumption POC: capture real-world age-verification request flows, build a test verifier to the observed shape, and run the web→app→web handoff over the mechanism the captures show is real (zkagent-prd.md:858) | End-to-end on real device against local verifier; zktag stability across reinstall+re-scan; mode A emits no zktag even after a mode-B presentation. Half-loaded masterlist ⇒ read refused (`ok:false`), never a pass. Two-bucket rule for the masterlist checkpoint (integrity failure ⇒ `ok:false`; well-formed list lacking the issuing CSCA ⇒ `ok:true, allowed:false`). Build scope for the rewrite itself: §6.2 below (zkagent-prd.md:858) | **Closed/complete, 2026-09-03, v0.5.0.** §6.2 items 1–25 all built and device-confirmed (item 19 WITHDRAWN by D71a, number reserved); findings #18–#21 closed; every row in the Exit criteria table below is device-confirmed or FIXED-IN-<sha> device-confirmed. D66–D71 recorded. First release under D72's lockstep versioning rule. |
 | **M3** — Demo (tier A/B only, vanilla) | Web page: "prove you're over 18" (tier A) and "prove you're a unique adult human" (tier B); responsive (mandatory); no tier C (zkagent-prd.md:859) | Live flow. Tier B: second scan from same document rejected as duplicate zktag. Tier A: two presentations indistinguishable. Demo site is its own adopter with its own store — the SDK still stores nothing (zkagent-prd.md:859) | COMPLETE — released as v0.6.0 (2026-09-05), exit rows all confirmed on that build (see docs/logs/M3-EXIT-ROWS-v0.6.0-2026-09-05.md); owner signed off 2026-09-05. M3b PARKED (D108); §6.6 Play track PARKED (D83). |
-| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), gated by a pin list (D20, amended: exact-hostname pin list, D109); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points and §6.9's complete (parked) design | **IN BUILD (approved 2026-10-25, D109(h)).** Was PARKED by D108 (2026-10-24). The owner revived M3b (D109(a)) and approved §6.9 as amended on 2026-10-25 (D109(h)), which satisfies NO-GO #10 for that amended scope: tier C is gated by the `operator.json` switch plus an exact-hostname pin list, all five item-8 predicates are allowed to every pinned site (no per-site question permissions, no caps in this build), and the holder has one app setting, "Allow additional verifications", OFF by default. Q34 CLOSED; Q11's tier-C residual stays open. Not built yet: the scanner still refuses every tier-C request until the build lands.
+| **M3b** — Mode C / tier-C KYC demo | Tier-C attributed disclosure (booleans over identifying fields from a published verb list, D19), gated by a pin list (D20, amended: exact-hostname pin list, D109); scanner tier-C support (lifts §6.2 item 13's refusal); demo page extension over M3 | TBD — see §6.4 decision points and §6.9's complete (parked) design | **IN BUILD (approved 2026-10-25, D109(h)); tier C itself is built and device-checked and ships in 0.9.0 (D116).** Was PARKED by D108 (2026-10-24). The owner revived M3b (D109(a)) and approved §6.9 as amended on 2026-10-25 (D109(h)), which satisfies NO-GO #10 for that amended scope: tier C is gated by the `operator.json` switch plus an exact-hostname pin list, all five item-8 predicates are allowed to every pinned site (no per-site question permissions, no caps in this build), and the holder has one app setting, "Allow additional verifications", OFF by default. Q34 CLOSED; Q11's tier-C residual stays open. Tier C is built and device-checked (D116): the scanner answers it only with the switch on, the site's exact hostname pinned and the holder's setting on, else it refuses. The milestone stays in build (items 21, 24, the reviews and the 0.9.0 release remain).
 | **M4** — Agent layer (rung 2) | Delegation certs, RFC 9421 middleware (FR8), per-serial revocation, phone→agent cert handoff (zkagent-prd.md:860) | Agent request accepted with valid chain; killed by zktag-block; single-use serial burns once; signature verifies against an off-the-shelf RFC 9421 verifier with no zkagent patches; cert reaches a headless agent host with no zkagent-run server in the path (zkagent-prd.md:860) | **Backlog, not planned (D108).** Not designed here; the owner's agent-delegation work now lives in the IETF individual Internet-Draft `draft-hamr-oauth-agent-delegation` (see `backlog.md`). Previously "Frozen until rung 1 ships"; rung 1 has shipped (v0.7.1) but nothing is scheduled.
 | **M5** — Blocklist/appeal (rung 2) | Signed blocklist format, adopter store interface, prove-control-of-zktag appeal (zkagent-prd.md:861) | Store pattern fails closed, never silently falls back to in-memory (zkagent-prd.md:861) | **Backlog, not planned (D108).** Same as M4.
 
@@ -244,8 +244,7 @@ delegation) — it does not touch the rung-2 agent layer (backlog, D108).
 (2026-10-24). All items below were ruled (D89–D106), with D107 recording a further round of owner
 rulings on points the first §6.9 draft raised. The build-scope design at §6.9 was approved by the
 owner on 2026-10-25 as amended (D109(h)), which satisfies NO-GO #10 for that amended scope and
-nothing wider. Nothing of tier C is built yet; the scanner still refuses every tier-C request
-until the build lands. See `backlog.md`.
+nothing wider. Tier C is now built and device-checked and ships in 0.9.0 (D116); the scanner answers it only with the operator switch on, the site's exact hostname pinned and the holder's setting on, and refuses it otherwise. See `backlog.md`.
 
 **D109 amendment (2026-10-25), approved as amended by D109(h):** the owner revived M3b and reduced
 its scope. Items 3-6 below that rested on operator-signed membership statements (the statement
@@ -910,12 +909,12 @@ used by a third party), fold this into
 LIBRARY_CONVENTIONS as a new section for app packages — a hamr0-repo change, not zkagent's; noted
 here only, not actioned.
 
-## 6.9 M3b scope (IN BUILD — approved 2026-10-25, D109(h))
+## 6.9 M3b scope (IN BUILD — approved 2026-10-25, D109(h); tier C built and device-checked, D116)
 
-> **IN BUILD (approved 2026-10-25, D109(h)).** Was PARKED by D108 (2026-10-24). The owner reviewed a
+> **IN BUILD (approved 2026-10-25, D109(h)); tier C itself is built and device-checked and ships in 0.9.0 (D116, 2026-10-27).** Was PARKED by D108 (2026-10-24). The owner reviewed a
 > plain-language summary of the tier-C plan on 2026-10-25 and APPROVED it with amendments (D109(h)),
 > which satisfies NO-GO #10 for the scope as amended below and nothing wider. Nothing in this
-> section is built yet; the scanner still refuses every tier-C request until the build lands.
+> section was built when this was written. Update (D116): tier C is now built and device-checked; the scanner answers it only with the operator switch on, the site's exact hostname pinned and the holder's setting on. The milestone stays in build.
 
 Written 2026-09-28 now that every §6.4 decision point (D89–D106), plus a further round of owner
 rulings on the items the first draft still left to the owner (D107), is ruled. This section drafts
@@ -1492,6 +1491,11 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     NOT bring the rung-2 agent layer into scope. README line 25 (the stale version line) is
     superseded by this rewrite, but item 21 fixes it first if the rewrite lands later. Touches:
     **docs** (`README.md`). Tag: ENHANCEMENT.
+    **BUILT 2026-10-27 (docs).** The owner-approved draft of 2026-10-25 replaced `README.md`, updated for the
+    build: tier C is described as "built and device-checked; ships in 0.9.0" (D116, owner ruling that day);
+    open age verification and the shared age lock are stated; the tier-C limits from the customer guide
+    §4.1 are summarised; "Reuse it" says the latest release is v0.8.0 and 0.9.0 is in build. The customer
+    guide's remaining "in build, not yet built" tier-C wording was rewritten the same day. No code changed.
 21. **Version-line fixes (D109(e), FIX, documentation).** v0.8.0 shipped 2026-10-24 (chiproof@0.8.0
     on npm, signed APK on GitHub Releases). Correct, in place: `docs/product/reuse-map.md` — both
     rows that say `chiproof@0.7.1` (the verdict-core row and the npm-publish-workflow row, lines 19
@@ -1543,8 +1547,7 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     refuses all of tier C. A device-test build turns tier C on separately.
     **Docs.** `customer-guide.md` (the operator.json knobs table, "Verifier hostnames", "What a
     refused site's users see", §5, and the tier-C limits paragraph) was updated first as designed and not built; it
-    now says built (2026-10-26). The root `README.md` wording rides on
-    item 20 at build time and is not edited here; `apps/scanner/README.md`'s operator.json lines were
+    now says built (2026-10-26). The root `README.md` was rewritten by item 20 (2026-10-27); `apps/scanner/README.md`'s operator.json lines were
     updated when this was built.
     **BUILT 2026-10-26 (code, unit table, negative script, reference file, docs; chunk 3).** Encoding settled in
     code: a separate `BuildConfig` boolean `OPERATOR_VERIFIERS_ANY`, with the hostname field `OPERATOR_VERIFIERS`

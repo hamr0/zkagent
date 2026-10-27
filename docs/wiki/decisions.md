@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D115
+title: zkagent — owner decisions D1–D116
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D115
+# Owner decisions D1–D116
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -593,3 +593,7 @@ Applied in milestones.md §6.9.2 item 16 (standing rule (j)) and item 17. Findin
 6. **Scope and release.** New M3b chunk 4 item 25; ships in 0.9.0. No new third-party dependency.
 Applied in milestones.md §6.9.2 item 25 and §6.9.7 (chunk 4). See D70, D75, D112, D113, D114.
 Device-checked 2026-10-27 (seven checks PASSED; gaps stated): docs/logs/M3B-D115-EVIDENCE-2026-10-27.md.
+
+**D116 (2026-10-27, owner) — the docs may call tier C built, worded "built and device-checked; ships in 0.9.0", never "shipped" or "released".** Context: M3b chunks 1-3 and the chunk 4 items so far are built and device-checked, and 0.9.0 is not out. Item 20 (README rewrite) and D109(e) allowed tier C to be called built only once it is. Ruling: the README, the customer guide and the other live docs may now describe tier C as "built and device-checked; ships in 0.9.0". The words "shipped" and "released" wait for the 0.9.0 release. Applied in milestones.md §6.9.2 item 20 (README rewritten) and the customer guide's tier-C wording. Other live docs that still say "not yet built" are listed for the owner and are not edited here. Nothing here calls any of this zero-knowledge. See D109(e), D109(h).
+
+*Applied in (2026-10-27):* `README.md`; `docs/product/customer-guide.md` (including §13, retitled "Not built (backlog)", with the M3b row replaced by a pointer to §4); `docs/product/zkagent-prd.md` (status block, "Not delivered"); `docs/wiki/backlog.md` item 1; `docs/wiki/milestones.md` (§6 M3b row, §6.4 status paragraph, §6.9 heading and banner, item 20, item 23 docs note); `docs/wiki/questions.md` (the M3b later note); `apps/scanner/README.md`. The M3b milestone itself stays in build; it is not marked done or released.
