@@ -1342,8 +1342,17 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
     be read as PASS/success (the M3/S2-S3 finding #22 lesson, D79(b), carried forward explicitly
     since tier-C adds new response-handling branches). (d) A blocking modal dialog is used only for
     an outcome requiring user action (§6.2 item 15, D43); a transient/no-state-change fact uses a
-    Snackbar; the two are never blended for a tier-C outcome. Touches: **scanner**, **demo**. Tag:
-    carried standing rule, not new scope. Implements: §6.2 items 5/15/16; D43, D79(b); finding #22.
+    Snackbar; the two are never blended for a tier-C outcome. (e) **D112 (2026-10-27):** every
+    tier-C refusal the app can decide without the chip (operator switch off, host not pinned, holder
+    setting off, a question not answered, off-list boundary, parse failure, age conflict) is shown as
+    soon as the request arrives (after the request object's JWS check), with no Verify tap and no
+    document fields first, logged through `emitReport` and answered by the D110 generic refusal under
+    the same gates; the Verify-tap check stays as a defensive second check and the post-read refusals
+    stay after the read. (f) **D112:** refusals (popup text, Log-tab entries, the "refused" last-scan
+    line; age-check and tier-C alike) are shown in red, normal asks in a blue or green accent, both from
+    colour resources with light and dark variants. Touches: **scanner**, **demo**. Tag:
+    carried standing rule, not new scope (e)/(f): FIX for finding #38 plus an owner-ruled UI change.
+    Implements: §6.2 items 5/15/16; D43, D79(b), D112; findings #22, #38.
 17. **Disclosed limitations (MUST be stated in customer-guide.md and/or in-app, not silently
     carried). Adjusted by D109(d).** (a) **Per-install reset** — the holder setting (item 7) is
     per-install state and returns to OFF on an uninstall/reinstall, the same disclosed-not-mitigated
@@ -1667,6 +1676,7 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
 | D84/D86 (`operator.json` validation, comma/quote/backslash) | 2, 19 |
 | D72 (lockstep versioning) | 21 |
 | D111 (demo page as the local test and showcase page; finding #32 folded) | 24 |
+| D112 (tier-C refusals decided on arrival; refusals in red; finding #38) | 16(e), 16(f) |
 
 Every ruled decision D89-D107 still lands in at least one row above, either as an item or as an
 explicit SUPERSEDED entry; none is orphaned.

@@ -1,11 +1,11 @@
 ---
 type: reference
-title: zkagent — owner decisions D1–D110
+title: zkagent — owner decisions D1–D112
 status: stable
 sources: [docs/archive/zkagent-prd.md]
 ---
 
-# Owner decisions D1–D110
+# Owner decisions D1–D112
 
 Condensed from PRD §10 (`docs/archive/zkagent-prd.md:1730-1801`). Each entry keeps the
 decision and, where the row carried one, the owner's verbatim clause and a pointer to
@@ -564,3 +564,10 @@ Disclosed: the notice lets a pinned site know the holder actively refused; a pin
 4. **Placement.** New milestones.md §6.9.2 item 24 (ENHANCEMENT, next free number), in chunk 4 of §6.9.7 beside item 20 (README rewrite). The scenarios that chunk 3 (item 23, open age verification) and item 18 (link-once) add must also appear on the page, so chunk 4 builds the page work after both.
 
 Relation to earlier text: M3 item 6 and item 9 (milestones.md §6.3) ban a threshold picker and a tier-C action on the M3 page. Item 6's default stands (the default page asks threshold 18 only); the age-lock scenarios need a second threshold, which exists only as a test-only control in test mode. Item 9's "no tier C" was overtaken by M3b (item 15). Nothing here calls any of this zero-knowledge. Closes finding #36 (RULED) and folds #32 into item 24. See D73, D76, D109(g)8, D109(l), D110; NO-GO #3, #10.
+
+**D112 (2026-10-27, owner) — a tier-C refusal the app can decide without the chip is shown AS SOON AS THE REQUEST ARRIVES, and every refusal is shown in red.** Context: finding #38. On the "any" build, a tier-C request from a site that is not on the pin list first asked the holder for the three document fields, and only then refused. Nothing was read or sent, but the order was inconsistent with the age-check refusals (the operator allowlist and the D74 threshold lock), which pop a notice the moment the handoff is processed. The owner, verbatim: "then we should fix that refusal to match others, reject straight on app"; "for refusals it should be in red on the app, normal asks in blue/green"; "proposal popup with red text refusal as soon as it arrives yes". Ruling:
+1. **Decide on arrival.** Every tier-C refusal the app can decide WITHOUT the chip is shown as soon as the request arrives: operator switch off, site not on the `tier_c_verifiers` pin list, holder setting off, a question the app does not answer, an off-list boundary or an all-or-nothing parse failure, an age that conflicts with the lock or within the request. "Arrives" means right after the request object is fetched and its JWS is checked (the earliest point the app knows the request is tier C), the same way the age-check refusals behave. No Verify tap, no document fields and no question area come first. The refusal is logged exactly as today (`emitReport`: Log tab entry plus the last-scan line). The D110 generic refusal POST still goes out under exactly the same gates (verified, pinned, operator on), with the delivery-dependent dialog ending.
+2. **Red for refusals, blue or green for normal asks.** The refusal popup text, the refusal entries in the Log tab and the "refused" last-scan line are RED, for ALL refusals (age-check and tier-C alike, for consistency). Normal asks (the "This website asks:" question area) and the normal or success states use a blue or green accent. The colours are theme-appropriate with adequate contrast in light and dark mode, defined as colour resources, never literals.
+3. **Post-read refusals stay after the read.** A refusal that needs the chip (the document could not answer) and the re-decision after the read stay where they are, in red text.
+4. **Unchanged.** The decision itself stays the one pure `TierCAdmission.decide`, and its second run after the read stays; only WHEN it first runs moves. Deciding on arrival never writes the D74 age lock (the lock is still written only after every predicate is answered). The check at the Verify tap stays as a defensive second check, because the holder setting or the age map can change between arrival and the tap.
+Applied in milestones.md §6.9.2 item 16 (new standing rule (e)). Closes finding #38 (RULED). See D74, D109(g), D110; findings #38.

@@ -1343,7 +1343,7 @@ JUnit XML, not from a device run.
 - **Source**: orchestrator (device run, 23(c) check 2); recorded by agent
 - **Anchor**: scanner Verify path; `docs/logs/M3B-CHUNK3-EVIDENCE-2026-10-27.md` 23(c) check 2
 - **Finding**: For a tier-C request from an unpinned site, the app first demanded the document fields ("Enter the document number, date of birth and expiry date, then tap again.") and only then ran the pin check. The owner typed them (card not held) and was then refused. Nothing was read or sent, but in chunk 1 the holder-off and age refusals fired on Verify without the fields. The order is inconsistent, and an unpinned site makes the holder type document data before being refused. Severity guess: LOW to MEDIUM.
-- **Status**: OPEN (nothing here is a ruling).
+- **Status**: RULED (2026-10-27, owner, D112: tier-C refusals the app can decide without the chip are shown on arrival, in red; recorded in docs/wiki/decisions.md D112 and milestones.md §6.9.2 item 16(e)/(f)). Fix in progress.
 
 ### 2026-10-27 — #39: the well-known key fetch has no unit coverage
 - **Source**: agent (chunk 3 coder); recorded by agent
