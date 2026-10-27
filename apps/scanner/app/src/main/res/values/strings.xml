@@ -67,12 +67,13 @@
     <string name="button_about">About</string>
     <string name="handoff_paste_unrecognised_message">Not a recognised av:// link or request_uri</string>
 
-    <!-- §6.2 item 16 (D44) — log tab; §6.5 S3 round 3 (2026-09-05) — a
-         third "Diagnostics" tab for the two no-tap-needed probe buttons. -->
-    <string name="tab_scan">Scan</string>
-    <string name="tab_log">Log</string>
-    <string name="tab_diagnostics">Diagnostics</string>
-    <string name="tab_settings">Settings</string>
+    <!-- D115 (item 25): the tab strip is gone. Page titles live in PaneState (pure, unit-tested); these are the arrows'
+         spoken descriptions and the Diagnostics section header. -->
+    <string name="nav_prev_description">Previous page: %1$s</string>
+    <string name="nav_next_description">Next page: %1$s</string>
+    <string name="diagnostics_section_title">Diagnostics</string>
+    <string name="diagnostics_expanded">Expanded</string>
+    <string name="diagnostics_collapsed">Collapsed</string>
 
     <!-- §6.2 item 15 (D43) — blocking acknowledgment dialogs -->
     <string name="dialog_ok">OK</string>

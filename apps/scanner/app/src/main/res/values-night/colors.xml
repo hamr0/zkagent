@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- D112: lighter tones for a dark background (about 8:1 or better on #121212). The app theme is
-         Theme.AppCompat.Light today, so these apply only if a dark theme is ever adopted. -->
-    <color name="refusal_text">#FF8A80</color>
-    <color name="ask_accent">#90CAF9</color>
-</resources>

@@ -4,8 +4,22 @@
     <color name="colorPrimaryDark">#00796B</color>
     <color name="colorAccent">#536DFE</color>
 
-    <!-- D112 (2026-10-27): refusal popup text is red, normal asks blue. Light values: contrast on white is about
-         6.5:1 (#B3261E) and 6.0:1 (#1565C0), both above the 4.5:1 text minimum. -->
+    <!-- D112 (2026-10-27): refusal popup text is red, normal asks blue. D115: the app is ALWAYS LIGHT, so there are no
+         night variants (values-night was removed). Contrast on white (computed): #B3261E 6.5:1, #1565C0 5.7:1. -->
     <color name="refusal_text">#B3261E</color>
     <color name="ask_accent">#1565C0</color>
+
+    <!-- D115 (item 25) — Variant F. Contrast (WCAG, computed): white on the navy ask box 14.5:1; status text on its own
+         strip: success #00695C on #DBF0EE 5.6:1 (the mock's #009688 on the 14% tint was only 3.1:1, so the text is a
+         darker teal), failure #B3261E on #F4E1DF 5.2:1, none #616161 on #EEEEEE 5.3:1. -->
+    <color name="ask_box_bg">#0D2A4A</color>
+    <color name="ask_box_text">#FFFFFF</color>
+    <color name="status_success_bg">#DBF0EE</color>
+    <color name="status_success_text">#00695C</color>
+    <color name="status_failure_bg">#F4E1DF</color>
+    <color name="status_failure_text">#B3261E</color>
+    <color name="status_none_bg">#EEEEEE</color>
+    <color name="status_none_text">#616161</color>
+    <color name="page_dot_on">#009688</color>
+    <color name="page_dot_off">#BDBDBD</color>
 </resources>

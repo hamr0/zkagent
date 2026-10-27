@@ -367,14 +367,8 @@ class ReportLog {
      *   tab probes are the only callers that pass [Channel.DIAGNOSTICS].
      * @param lastScanInfo (owner FIX, 2026-09-05) the "Last scan" line's
      *   data for THIS entry — see [LastScanLine.Entry]'s doc. Null (the
-     *   default) falls back to a generic [LastScanLine.Reason.REFUSED]
-     *   entry (built from [summary]'s own site, never a second field
-     *   [MainActivity] would have to keep in lockstep) for every
-     *   SCAN-channel call site that has no better data to offer — every one
-     *   of those IS, in fact, some kind of refusal before any read/mint
-     *   could complete; only the handful of call sites that have a more
-     *   specific [LastScanLine.Reason] (a DeliveryResult branch, a mint-gate
-     *   "nothing to mint" outcome, a read failure) pass one explicitly.
+     *   default) LEAVES the line unchanged (D115: no implicit REFUSED
+     *   default any more; MainActivity passes it at every terminal SCAN call).
      *   Ignored entirely for a [Channel.DIAGNOSTICS] append, and for a
      *   [pending] SCAN append (the transient "In progress" entry must never
      *   overwrite the LAST completed scan's own line while it waits on
@@ -385,10 +379,16 @@ class ReportLog {
         lastText = text
         lastChannel = channel
         if (channel == Channel.SCAN && !pending) {
-            this.lastScanInfo = lastScanInfo ?: LastScanLine.Entry(origin = summary.site, reason = LastScanLine.Reason.REFUSED)
-            // Owner refinement (2026-09-05): stamp the generation IN EFFECT
-            // right now — see [lastScanGeneration]/[handoffGeneration]'s doc.
-            this.lastScanGeneration = handoffGeneration
+            // D115 / finding #51: NO implicit default any more. A terminal SCAN call that passes no [lastScanInfo]
+            // leaves the "Last scan" line alone (it used to paint a generic red REFUSED entry, which made a clean
+            // read read "refused"). MainActivity passes it explicitly at every terminal call;
+            // LastScanWiringTest requires that.
+            if (lastScanInfo != null) {
+                this.lastScanInfo = lastScanInfo
+                // Owner refinement (2026-09-05): stamp the generation IN EFFECT
+                // right now — see [lastScanGeneration]/[handoffGeneration]'s doc.
+                this.lastScanGeneration = handoffGeneration
+            }
         }
         val timestamp = TIMESTAMP_FORMAT.format(Date(nowMillis))
         // item 22: PENDING always wins while [pending] is true — see the

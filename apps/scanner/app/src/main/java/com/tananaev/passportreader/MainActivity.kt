@@ -28,15 +28,17 @@ import android.os.AsyncTask
 import android.os.Bundle
 import android.text.method.LinkMovementMethod
 import android.util.Log
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
-import androidx.appcompat.widget.Toolbar
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -44,7 +46,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.doOnTextChanged
 import com.google.android.material.snackbar.Snackbar
-import com.google.android.material.tabs.TabLayout
 import com.wdullaer.materialdatetimepicker.date.DatePickerDialog
 import net.sf.scuba.smartcards.CardService
 import org.apache.commons.io.IOUtils
@@ -283,7 +284,6 @@ abstract class MainActivity : AppCompatActivity() {
     // visible tab in sync with [paneState]) from being misread by the tab
     // listener as a fresh user tap — see the listener's doc below and
     // [showPane]'s doc. ----
-    private var applyingPaneStateToTabLayout = false
 
     // ---- D56: salted hash of the previous read attempt's MRZ fields, held
     // ONLY in memory — never rendered, never logged, never persisted. See
@@ -310,7 +310,14 @@ abstract class MainActivity : AppCompatActivity() {
     // refreshSessionDisplay / lockModeAndArm).
     private lateinit var modeStatusView: TextView
     private lateinit var lockButton: Button
-    private lateinit var tabLayout: TabLayout
+    // D115 (item 25): the top bar's pieces and the page dots. The tab strip is gone; PaneState owns the page.
+    private lateinit var pageTitleView: TextView
+    private lateinit var navPrevView: TextView
+    private lateinit var navNextView: TextView
+    private lateinit var pageDotsView: LinearLayout
+    private lateinit var diagnosticsHeaderView: TextView
+    private var diagnosticsExpanded = false
+    private lateinit var swipeDetector: GestureDetector
     private lateinit var mainLayout: View
     private lateinit var logLayout: View
     // Device fix (2026-09-05) — §6.5 S3 round 3, item 4: the two no-tap-
@@ -357,8 +364,6 @@ abstract class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        setSupportActionBar(findViewById<Toolbar>(R.id.toolbar))
-
         val root = findViewById<View>(android.R.id.content)
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
@@ -371,7 +376,11 @@ abstract class MainActivity : AppCompatActivity() {
         birthDateView = findViewById(R.id.input_date_of_birth)
         modeStatusView = findViewById(R.id.mode_status)
         lockButton = findViewById(R.id.button_lock_and_scan)
-        tabLayout = findViewById(R.id.tab_layout)
+        pageTitleView = findViewById(R.id.page_title)
+        navPrevView = findViewById(R.id.nav_prev)
+        navNextView = findViewById(R.id.nav_next)
+        pageDotsView = findViewById(R.id.page_dots)
+        diagnosticsHeaderView = findViewById(R.id.diagnostics_header)
         mainLayout = findViewById(R.id.main_layout)
         logLayout = findViewById(R.id.log_layout)
         diagnosticsLayout = findViewById(R.id.diagnostics_layout)
@@ -433,18 +442,34 @@ abstract class MainActivity : AppCompatActivity() {
         // line sibling stamp for the log entries).
         findViewById<TextView>(R.id.version_stamp_view).text = VersionStamp.format(BuildConfig.VERSION_NAME, BuildConfig.GIT_SHA)
 
-        // §6.2 item 16 (D44) / D55 / D58 step 2 (finding #1): a real user
-        // tap or reselect WRITES [paneState] first, then applies via
-        // [showPane] — see [onUserTabSelection]'s doc for the
-        // [applyingPaneStateToTabLayout] re-entry guard this pairs with.
-        tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab) { onUserTabSelection(tab.position) }
-            override fun onTabUnselected(tab: TabLayout.Tab) {}
-            // D55: was a no-op — part of why a user stranded on the Log
-            // tab after a failed read had no way back. Now idempotent:
-            // re-tapping the current tab re-applies [showPane]'s decision.
-            override fun onTabReselected(tab: TabLayout.Tab) { onUserTabSelection(tab.position) }
+        // D115 (item 25): a swipe or an arrow tap WRITES [paneState] first, then applies via [showPane] (the single
+        // pane-visibility writer, item 16). Which page an arrow reaches is decided in PaneState (unit-tested).
+        navPrevView.setOnClickListener { PaneState.previousPage(paneState.selectedPage)?.let { onUserPageSelection(it) } }
+        navNextView.setOnClickListener { PaneState.nextPage(paneState.selectedPage)?.let { onUserPageSelection(it) } }
+        // Swipe: a horizontal fling observed from dispatchTouchEvent (never consumed), so scrolling and taps inside a
+        // page are unaffected. Plain Views, no ViewPager2: see [dispatchTouchEvent].
+        val density = resources.displayMetrics.density
+        swipeDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
+                if (e1 == null) return false
+                val target = SwipeRules.targetPage(
+                    currentPage = paneState.selectedPage,
+                    readInProgress = paneState.readInProgress,
+                    dxDp = (e2.x - e1.x) / density,
+                    dyDp = (e2.y - e1.y) / density,
+                    velocityXDpPerSec = velocityX / density,
+                )
+                if (target != null) onUserPageSelection(target)
+                return false
+            }
         })
+        // Diagnostics: a collapsed section at the bottom of Settings (D115). Expansion is saved across recreation.
+        diagnosticsExpanded = savedInstanceState?.getBoolean(STATE_DIAGNOSTICS_EXPANDED, false) ?: false
+        diagnosticsHeaderView.setOnClickListener {
+            diagnosticsExpanded = !diagnosticsExpanded
+            applyDiagnosticsSection()
+        }
+        applyDiagnosticsSection()
 
         // No SharedPreferences/DataStore read or write anywhere in this
         // activity — MRZ fields start empty every launch (NO-GO #9).
@@ -481,7 +506,7 @@ abstract class MainActivity : AppCompatActivity() {
         // still does not override — there is nothing there to make a
         // no-op) can land whenever it lands; the pane decision no longer
         // depends on it having landed yet.
-        paneState.restoreTabIndex(savedInstanceState?.getInt(STATE_TAB_INDEX, PaneState.TAB_SCAN))
+        paneState.restorePageIndex(savedInstanceState?.getInt(STATE_TAB_INDEX, PaneState.PAGE_SCAN))
 
         // D55: tab state and the restored log are both in place above —
         // one call so a recreated Activity is never left in a stale
@@ -940,6 +965,7 @@ abstract class MainActivity : AppCompatActivity() {
                     ),
                     // item 22: a refusal — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
+                    lastScan = LastScanLine.requestRefused(),
                 )
                 showBlockingOutcomeDialog(SESSION_EXPIRED_MESSAGE, isAccessEstablishmentFailure = false, refusal = true)
                 return
@@ -987,6 +1013,7 @@ abstract class MainActivity : AppCompatActivity() {
                         ),
                         // item 22: a refusal — see ReportLog.Outcome's doc.
                         outcome = ReportLog.Outcome.FAIL,
+                        lastScan = LastScanLine.requestRefused(),
                     )
                     showBlockingOutcomeDialog(reason, isAccessEstablishmentFailure = false, refusal = true)
                     return
@@ -1052,6 +1079,7 @@ abstract class MainActivity : AppCompatActivity() {
                     shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                 ),
                 outcome = ReportLog.Outcome.FAIL,
+                lastScan = if (afterRead) LastScanLine.Entry(origin = siteTitleFor(verified.origin), reason = LastScanLine.Reason.REFUSED) else LastScanLine.requestRefused(),
             )
             val dialog = TierCText.refusalDialog(refusal.refusal, afterRead, delivery)
             // D112: on arrival the request was already cleared, so the blocking NOTICE is used (like the age-check
@@ -1117,6 +1145,7 @@ abstract class MainActivity : AppCompatActivity() {
                         shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                     ),
                     outcome = ReportLog.Outcome.FAIL,
+                    lastScan = LastScanLine.Entry(origin = snapshot.site, reason = LastScanLine.Reason.REFUSED),
                 )
                 showBlockingOutcomeDialog(TierCText.couldNotAnswerDialog(delivery), isAccessEstablishmentFailure = false, refusal = true)
             }
@@ -1261,7 +1290,8 @@ abstract class MainActivity : AppCompatActivity() {
         outState.putInt(STATE_LAST_SCAN_GENERATION, reportLog.lastScanGeneration)
         // D58 step 2 (finding #1): reads FROM the owner (paneState), the
         // app's own tab index — see [PaneState]'s class doc.
-        outState.putInt(STATE_TAB_INDEX, paneState.tabIndexToSave())
+        outState.putInt(STATE_TAB_INDEX, paneState.pageIndexToSave())
+        outState.putBoolean(STATE_DIAGNOSTICS_EXPANDED, diagnosticsExpanded)
     }
 
     /** Every end of a handoff funnels here (replaces the bare `pendingHandoff = null`
@@ -1736,11 +1766,9 @@ abstract class MainActivity : AppCompatActivity() {
                             shared = ReportLog.DisclosureSummary.Shared.NotDisclosed("nothing"),
                         ),
                         // item 22: a refusal — see ReportLog.Outcome's doc.
-                        // lastScan omitted: ReportLog.append's own default
-                        // (Entry(origin = summary.site, reason = REFUSED))
-                        // already renders exactly "Last scan: <host:port>,
-                        // refused ✗", the D79 shape this refusal needs.
+                        // D115: a website request refused before any scan; the strip never names the unverified site.
                         outcome = ReportLog.Outcome.FAIL,
+                        lastScan = LastScanLine.requestRefused(),
                     )
                     refreshSessionDisplay()
                     showBlockingNotice(policyMessage)
@@ -1802,6 +1830,7 @@ abstract class MainActivity : AppCompatActivity() {
                     ),
                     // item 22: a refusal — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
+                    lastScan = LastScanLine.requestRefused(),
                 )
                 // D58 step 4: [SessionDisplay.HandoffState.Refused] is
                 // supplied directly, not derived via [currentHandoffState] —
@@ -1864,6 +1893,7 @@ abstract class MainActivity : AppCompatActivity() {
             ),
             // item 22: a refusal — see ReportLog.Outcome's doc.
             outcome = ReportLog.Outcome.FAIL,
+            lastScan = LastScanLine.requestRefused(),
         )
         refreshSessionDisplay()
         showBlockingNotice(gateMessage)
@@ -1999,7 +2029,15 @@ abstract class MainActivity : AppCompatActivity() {
      * [restoreReport], [loadPersistedLog], [clearLog]) so the two stay in
      * lockstep, same discipline as that function's own doc. */
     private fun applyLastScanLine() {
-        lastScanLineView.text = LastScanLine.render(reportLog.lastScanInfo, reportLog.lastScanGeneration, reportLog.handoffGeneration)
+        val status = LastScanStatus.of(reportLog.lastScanInfo, reportLog.lastScanGeneration, reportLog.handoffGeneration)
+        lastScanLineView.text = status.text
+        val (bg, fg) = when (status.kind) {
+            LastScanStatus.Kind.SUCCESS -> R.color.status_success_bg to R.color.status_success_text
+            LastScanStatus.Kind.FAILURE -> R.color.status_failure_bg to R.color.status_failure_text
+            LastScanStatus.Kind.NONE -> R.color.status_none_bg to R.color.status_none_text
+        }
+        lastScanLineView.background.mutate().setTint(ContextCompat.getColor(this, bg))
+        lastScanLineView.setTextColor(ContextCompat.getColor(this, fg))
     }
 
     /** @param lastScan (owner FIX, 2026-09-05) the "Last scan" line's data
@@ -2385,30 +2423,74 @@ abstract class MainActivity : AppCompatActivity() {
      * is never misread by the tab listener as a fresh user tap.
      */
     private fun showPane() {
-        if (tabLayout.selectedTabPosition != paneState.selectedTab) {
-            applyingPaneStateToTabLayout = true
-            tabLayout.getTabAt(paneState.selectedTab)?.select()
-            applyingPaneStateToTabLayout = false
-        }
-        val pane = PaneVisibility.choosePane(paneState.readInProgress, paneState.selectedTab)
+        val pane = PaneVisibility.choosePane(paneState.readInProgress, paneState.selectedPage)
         mainLayout.visibility = if (pane == PaneVisibility.Pane.SCAN) View.VISIBLE else View.GONE
         logLayout.visibility = if (pane == PaneVisibility.Pane.LOG) View.VISIBLE else View.GONE
-        diagnosticsLayout.visibility = if (pane == PaneVisibility.Pane.DIAGNOSTICS) View.VISIBLE else View.GONE
         settingsLayout.visibility = if (pane == PaneVisibility.Pane.SETTINGS) View.VISIBLE else View.GONE
         loadingLayout.visibility = if (pane == PaneVisibility.Pane.LOADING) View.VISIBLE else View.GONE
+        applyPageChrome()
     }
 
-    /** D58 step 2 (finding #1): the tab listener's own entry point — see
-     * the listener registration's doc. A real user tap or reselect writes
-     * [paneState] then applies via [showPane]; a re-entrant call caused by
-     * [showPane] itself moving the TabLayout (guarded by
-     * [applyingPaneStateToTabLayout]) is a no-op here, so that
-     * programmatic move can never write [paneState] back from what was
-     * just applied FROM it. */
-    private fun onUserTabSelection(position: Int) {
-        if (applyingPaneStateToTabLayout) return
-        paneState.userSelectedTab(position)
+    /** D115: draws the top bar and the dots for [paneState]'s page. A pure function of that one owner's state, so it
+     * is safe to call from [showPane] on every path (restore, read start/finish). The title is only rewritten when it
+     * changes, so the polite live region announces a real page change and not a repeat. */
+    private fun applyPageChrome() {
+        val page = paneState.selectedPage
+        val title = PaneState.pageTitle(page)
+        if (pageTitleView.text.toString() != title) pageTitleView.text = title
+        val prev = PaneState.previousArrowText(page)
+        navPrevView.visibility = if (prev == null) View.INVISIBLE else View.VISIBLE
+        navPrevView.isEnabled = prev != null
+        if (prev != null) {
+            navPrevView.text = prev
+            navPrevView.contentDescription = getString(R.string.nav_prev_description, PaneState.pageTitle(PaneState.previousPage(page)!!))
+        }
+        val next = PaneState.nextArrowText(page)
+        navNextView.visibility = if (next == null) View.INVISIBLE else View.VISIBLE
+        navNextView.isEnabled = next != null
+        if (next != null) {
+            navNextView.text = next
+            navNextView.contentDescription = getString(R.string.nav_next_description, PaneState.pageTitle(PaneState.nextPage(page)!!))
+        }
+        if (pageDotsView.childCount != PaneState.PAGE_COUNT) {
+            pageDotsView.removeAllViews()
+            val size = (8 * resources.displayMetrics.density).toInt()
+            val gap = (4 * resources.displayMetrics.density).toInt()
+            repeat(PaneState.PAGE_COUNT) {
+                pageDotsView.addView(View(this).apply {
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(gap, 0, gap, 0) }
+                })
+            }
+        }
+        for (i in 0 until PaneState.PAGE_COUNT) {
+            pageDotsView.getChildAt(i).setBackgroundResource(if (i == page) R.drawable.page_dot_on else R.drawable.page_dot_off)
+        }
+    }
+
+    /** D115: the Diagnostics section at the bottom of Settings — collapsed by default. */
+    private fun applyDiagnosticsSection() {
+        diagnosticsLayout.visibility = if (diagnosticsExpanded) View.VISIBLE else View.GONE
+        diagnosticsHeaderView.text = (if (diagnosticsExpanded) "\u25BE " else "\u25B8 ") + getString(R.string.diagnostics_section_title)
+        androidx.core.view.ViewCompat.setStateDescription(
+            diagnosticsHeaderView,
+            getString(if (diagnosticsExpanded) R.string.diagnostics_expanded else R.string.diagnostics_collapsed),
+        )
+    }
+
+    /** D115: a swipe or an arrow tap — the only user writer of the page. */
+    private fun onUserPageSelection(page: Int) {
+        paneState.userSelectedPage(page)
         showPane()
+    }
+
+    /** D115: feeds every touch to [swipeDetector] WITHOUT consuming it. Plain Views were chosen over ViewPager2: the
+     * pages are the existing overlapping siblings with the single visibility writer (item 16, [showPane]), and a
+     * pager would replace that with adapter-owned pages plus a second selection state to keep in sync with
+     * [PaneState]. The decision of whether a fling is a page change is [SwipeRules] (pure, tested). */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (::swipeDetector.isInitialized) swipeDetector.onTouchEvent(ev)
+        return super.dispatchTouchEvent(ev)
     }
 
     // ------------------------------------------------------------- session
@@ -2798,6 +2880,7 @@ abstract class MainActivity : AppCompatActivity() {
                 ),
                 // item 22: a refusal — see ReportLog.Outcome's doc.
                 outcome = ReportLog.Outcome.FAIL,
+                lastScan = LastScanLine.Entry(origin = SITE_NO_HANDOFF, reason = LastScanLine.Reason.REFUSED),
             )
             showBlockingOutcomeDialog(
                 "Mode B requires a verified handoff request to scope the device key to — no handoff is pending.",
@@ -2833,6 +2916,7 @@ abstract class MainActivity : AppCompatActivity() {
                     ),
                     // item 22: a refusal — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
+                    lastScan = LastScanLine.Entry(origin = site, reason = LastScanLine.Reason.REFUSED),
                 )
                 showBlockingOutcomeDialog(SESSION_EXPIRED_MESSAGE, isAccessEstablishmentFailure = false, refusal = true)
                 return
@@ -2919,6 +3003,7 @@ abstract class MainActivity : AppCompatActivity() {
                         attemptId = attemptId,
                         // item 22: a failure — see ReportLog.Outcome's doc.
                         outcome = ReportLog.Outcome.FAIL,
+                        lastScan = LastScanLine.Entry(origin = site, reason = LastScanLine.Reason.REFUSED),
                     )
                     showBlockingOutcomeDialog("The verified handoff request's origin has no parseable host.", isAccessEstablishmentFailure = false, refusal = true)
                 }
@@ -2953,6 +3038,7 @@ abstract class MainActivity : AppCompatActivity() {
                         attemptId = attemptId,
                         // item 22: a failure — see ReportLog.Outcome's doc.
                         outcome = ReportLog.Outcome.FAIL,
+                        lastScan = LastScanLine.Entry(origin = site, reason = LastScanLine.Reason.REFUSED),
                     )
                     showBlockingOutcomeDialog("This document has no document-number field to derive a zktag from.", isAccessEstablishmentFailure = false, refusal = true)
                 }
@@ -2982,6 +3068,7 @@ abstract class MainActivity : AppCompatActivity() {
                         attemptId = attemptId,
                         // item 22: a failure — see ReportLog.Outcome's doc.
                         outcome = ReportLog.Outcome.FAIL,
+                        lastScan = LastScanLine.Entry(origin = site, reason = LastScanLine.Reason.REFUSED),
                     )
                     showBlockingOutcomeDialog("Device key generation failed: ${e.javaClass.simpleName}: ${e.message}", isAccessEstablishmentFailure = false, refusal = true)
                 }
@@ -3046,6 +3133,9 @@ abstract class MainActivity : AppCompatActivity() {
                 // read with nothing pending to answer is PASS, same rule as
                 // continueAfterRead's own mode-A "nothing to mint" branch.
                 outcome = ReportLog.Outcome.PASS,
+                // Finding #51: without this, ReportLog.append's generic default (REFUSED, red) overwrote the
+                // last-scan line on a clean local read. Same shape as the mint-gate "nothing to mint" branch.
+                lastScan = LastScanLine.Entry(origin = SITE_NO_HANDOFF, reason = LastScanLine.Reason.CHIP_CHECK_PASSED),
             )
             showBlockingOutcomeDialog("Read OK — nothing was sent.", isAccessEstablishmentFailure = false)
             return
@@ -3106,6 +3196,7 @@ abstract class MainActivity : AppCompatActivity() {
                     attemptId = attemptId,
                     // item 22: a failure — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
+                    lastScan = LastScanLine.Entry(origin = site, reason = LastScanLine.Reason.REFUSED),
                 )
                 showBlockingOutcomeDialog("The site's request did not specify a valid age threshold to check.", isAccessEstablishmentFailure = false, refusal = true)
             }
@@ -3132,6 +3223,7 @@ abstract class MainActivity : AppCompatActivity() {
                     attemptId = attemptId,
                     // item 22: a failure — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
+                    lastScan = LastScanLine.Entry(origin = site, reason = LastScanLine.Reason.REFUSED),
                 )
                 showBlockingOutcomeDialog("This document's date of birth could not be read.", isAccessEstablishmentFailure = false, refusal = true)
             }
@@ -3320,6 +3412,7 @@ abstract class MainActivity : AppCompatActivity() {
                 attemptId = attemptId,
                 // item 22: a failure — see ReportLog.Outcome's doc.
                 outcome = ReportLog.Outcome.FAIL,
+                lastScan = LastScanLine.Entry(origin = site, reason = LastScanLine.Reason.REFUSED),
             )
             showBlockingOutcomeDialog("No usable device key or signature is available on this device.", isAccessEstablishmentFailure = false, refusal = true)
             return
@@ -3398,6 +3491,7 @@ abstract class MainActivity : AppCompatActivity() {
                         // get you in" question). See ReportLog.Outcome's
                         // doc — owner-overturnable.
                         outcome = ReportLog.Outcome.FAIL,
+                        lastScan = LastScanLine.Entry(origin = site, reason = LastScanLine.Reason.REFUSED),
                     )
                     showBlockingOutcomeDialog("Biometric/device-credential authorization error $errorCode: $errString", isAccessEstablishmentFailure = false, refusal = true)
                 }
@@ -3503,6 +3597,7 @@ abstract class MainActivity : AppCompatActivity() {
                     attemptId = attemptId,
                     // item 22: a failure — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
+                    lastScan = LastScanLine.Entry(origin = site, reason = LastScanLine.Reason.REFUSED),
                 )
                 showBlockingOutcomeDialog("The site's request did not specify a valid age threshold to check.", isAccessEstablishmentFailure = false, refusal = true)
             }
@@ -3537,6 +3632,7 @@ abstract class MainActivity : AppCompatActivity() {
                     attemptId = attemptId,
                     // item 22: a failure — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
+                    lastScan = LastScanLine.Entry(origin = site, reason = LastScanLine.Reason.REFUSED),
                 )
                 showBlockingOutcomeDialog("This document's date of birth could not be read.", isAccessEstablishmentFailure = false, refusal = true)
             }
@@ -3583,6 +3679,7 @@ abstract class MainActivity : AppCompatActivity() {
                     attemptId = attemptId,
                     // item 22: a failure — see ReportLog.Outcome's doc.
                     outcome = ReportLog.Outcome.FAIL,
+                    lastScan = LastScanLine.Entry(origin = site, reason = LastScanLine.Reason.REFUSED),
                 )
                 showBlockingOutcomeDialog("Could not read the device key's public key bytes.", isAccessEstablishmentFailure = false, refusal = true)
             }
@@ -4151,6 +4248,7 @@ abstract class MainActivity : AppCompatActivity() {
         // D58 step 2 (finding #1): the app's own tab index — see
         // [PaneState]'s class doc for why this is the fix.
         private const val STATE_TAB_INDEX = "m2_tab_index"
+        private const val STATE_DIAGNOSTICS_EXPANDED = "m3b_diagnostics_expanded"
         // §6.2 item 16 (D46): the exact, owner-specified fixed label for a
         // log entry with no verified handoff — never a blank field or a
         // fabricated origin.

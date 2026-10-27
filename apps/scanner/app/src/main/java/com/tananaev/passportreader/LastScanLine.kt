@@ -86,6 +86,11 @@ object LastScanLine {
         /** Same shape as [CHIP_CHECK_PASSED], but the read's own integrity
          * check came back negative. */
         CHIP_CHECK_FAILED,
+
+        /** D115 (owner, 2026-10-27): a website's request was refused BEFORE any scan (unverifiable, operator or
+         * threshold policy, tier-C on arrival, session expired, invalid tier). The unverified site is never
+         * named: [render] gives exactly [REQUEST_REFUSED_TEXT]. */
+        REQUEST_REFUSED,
     }
 
     private fun Reason.word(): String = when (this) {
@@ -95,6 +100,7 @@ object LastScanLine {
         Reason.READ_FAILED -> "read failed"
         Reason.CHIP_CHECK_PASSED -> "chip check passed"
         Reason.CHIP_CHECK_FAILED -> "chip check failed"
+        Reason.REQUEST_REFUSED -> "request refused"
     }
 
     private fun Reason.glyph(): String = if (this == Reason.DELIVERED || this == Reason.CHIP_CHECK_PASSED) "✓" else "✗"
@@ -116,6 +122,12 @@ object LastScanLine {
         val threshold: Int? = null,
         val overThreshold: Boolean? = null,
     )
+
+    /** D115: the exact line for [Reason.REQUEST_REFUSED]. */
+    const val REQUEST_REFUSED_TEXT = "Last: website request refused \u2717"
+
+    /** The entry for a website request refused before any scan. The origin is deliberately empty and never shown. */
+    fun requestRefused(): Entry = Entry(origin = "", reason = Reason.REQUEST_REFUSED)
 
     /** No scan has completed yet this session (or since "Clear log"), or
      * the last one is [isStale] against a newer handoff — [render]'s output
@@ -144,6 +156,7 @@ object LastScanLine {
      * the origin and <reason>. */
     fun render(entry: Entry?, entryGeneration: Int = 0, currentHandoffGeneration: Int = 0): String {
         if (entry == null || isStale(entryGeneration, currentHandoffGeneration)) return NONE_TEXT
+        if (entry.reason == Reason.REQUEST_REFUSED) return REQUEST_REFUSED_TEXT
         val reasonPart = "${entry.reason.word()} ${entry.reason.glyph()}"
         return if (entry.threshold != null && entry.overThreshold != null) {
             "Last scan: ${entry.origin}, over ${entry.threshold}: ${entry.overThreshold}, $reasonPart"

@@ -17,32 +17,32 @@ class PaneStateTest {
     @Test
     fun `starts on the Scan tab, no read in progress`() {
         val state = PaneState()
-        assertEquals(PaneState.TAB_SCAN, state.selectedTab)
+        assertEquals(PaneState.PAGE_SCAN, state.selectedPage)
         assertFalse(state.readInProgress)
     }
 
     @Test
-    fun `userSelectedTab moves to the Log tab`() {
+    fun `userSelectedPage moves to the Log tab`() {
         val state = PaneState()
-        state.userSelectedTab(PaneState.TAB_LOG)
-        assertEquals(PaneState.TAB_LOG, state.selectedTab)
+        state.userSelectedPage(PaneState.PAGE_LOG)
+        assertEquals(PaneState.PAGE_LOG, state.selectedPage)
     }
 
     @Test
-    fun `userSelectedTab back to the Scan tab`() {
+    fun `userSelectedPage back to the Scan tab`() {
         val state = PaneState()
-        state.userSelectedTab(PaneState.TAB_LOG)
-        state.userSelectedTab(PaneState.TAB_SCAN)
-        assertEquals(PaneState.TAB_SCAN, state.selectedTab)
+        state.userSelectedPage(PaneState.PAGE_LOG)
+        state.userSelectedPage(PaneState.PAGE_SCAN)
+        assertEquals(PaneState.PAGE_SCAN, state.selectedPage)
     }
 
     @Test
     fun `an out-of-range tab index normalizes to Scan, never Log`() {
-        // Mirrors PaneVisibilityTest's own -1 case: TabLayout.
-        // selectedTabPosition returns -1 when nothing is selected.
+        // Mirrors PaneVisibilityTest's own -1 case: the old TabLayout.
+        // selectedTabPosition returned -1 when nothing is selected.
         val state = PaneState()
-        state.userSelectedTab(-1)
-        assertEquals(PaneState.TAB_SCAN, state.selectedTab)
+        state.userSelectedPage(-1)
+        assertEquals(PaneState.PAGE_SCAN, state.selectedPage)
     }
 
     @Test
@@ -57,41 +57,41 @@ class PaneStateTest {
     @Test
     fun `readStarted does not change the selected tab`() {
         val state = PaneState()
-        state.userSelectedTab(PaneState.TAB_LOG)
+        state.userSelectedPage(PaneState.PAGE_LOG)
         state.readStarted()
-        assertEquals(PaneState.TAB_LOG, state.selectedTab)
+        assertEquals(PaneState.PAGE_LOG, state.selectedPage)
         assertTrue(state.readInProgress)
     }
 
     @Test
     fun `save then restore round-trips the selected tab`() {
         val state = PaneState()
-        state.userSelectedTab(PaneState.TAB_LOG)
-        val saved = state.tabIndexToSave()
+        state.userSelectedPage(PaneState.PAGE_LOG)
+        val saved = state.pageIndexToSave()
 
         val recreated = PaneState()
-        recreated.restoreTabIndex(saved)
-        assertEquals(PaneState.TAB_LOG, recreated.selectedTab)
+        recreated.restorePageIndex(saved)
+        assertEquals(PaneState.PAGE_LOG, recreated.selectedPage)
     }
 
     @Test
     fun `save then restore round-trips the Scan tab too`() {
         val state = PaneState()
         // never touched — starts on Scan
-        val saved = state.tabIndexToSave()
+        val saved = state.pageIndexToSave()
 
         val recreated = PaneState()
-        recreated.userSelectedTab(PaneState.TAB_LOG) // prove restore overwrites, not merges
-        recreated.restoreTabIndex(saved)
-        assertEquals(PaneState.TAB_SCAN, recreated.selectedTab)
+        recreated.userSelectedPage(PaneState.PAGE_LOG) // prove restore overwrites, not merges
+        recreated.restorePageIndex(saved)
+        assertEquals(PaneState.PAGE_SCAN, recreated.selectedPage)
     }
 
     @Test
     fun `restore with no prior selection (null, e_g_ a fresh launch) yields the default tab`() {
         val recreated = PaneState()
-        recreated.userSelectedTab(PaneState.TAB_LOG)
-        recreated.restoreTabIndex(null)
-        assertEquals(PaneState.TAB_SCAN, recreated.selectedTab)
+        recreated.userSelectedPage(PaneState.PAGE_LOG)
+        recreated.restorePageIndex(null)
+        assertEquals(PaneState.PAGE_SCAN, recreated.selectedPage)
     }
 
     @Test
@@ -100,10 +100,10 @@ class PaneStateTest {
         // unchanged by this step — only the tab index's fate changes.
         val state = PaneState()
         state.readStarted()
-        val saved = state.tabIndexToSave()
+        val saved = state.pageIndexToSave()
 
         val recreated = PaneState()
-        recreated.restoreTabIndex(saved)
+        recreated.restorePageIndex(saved)
         assertFalse(recreated.readInProgress)
     }
 
@@ -112,16 +112,16 @@ class PaneStateTest {
     @Test
     fun `onIncomingHandoffIntent admitted switches to the Scan tab from the Log tab`() {
         val state = PaneState()
-        state.userSelectedTab(PaneState.TAB_LOG)
+        state.userSelectedPage(PaneState.PAGE_LOG)
         state.onIncomingHandoffIntent(admitted = true)
-        assertEquals(PaneState.TAB_SCAN, state.selectedTab)
+        assertEquals(PaneState.PAGE_SCAN, state.selectedPage)
     }
 
     @Test
     fun `onIncomingHandoffIntent admitted is a no-op when already on the Scan tab`() {
         val state = PaneState()
         state.onIncomingHandoffIntent(admitted = true)
-        assertEquals(PaneState.TAB_SCAN, state.selectedTab)
+        assertEquals(PaneState.PAGE_SCAN, state.selectedPage)
     }
 
     // The MUST NOT half: a REFUSED intent (HandoffAdmission refusal) must
@@ -129,9 +129,9 @@ class PaneStateTest {
     @Test
     fun `onIncomingHandoffIntent NOT admitted leaves the Log tab alone`() {
         val state = PaneState()
-        state.userSelectedTab(PaneState.TAB_LOG)
+        state.userSelectedPage(PaneState.PAGE_LOG)
         state.onIncomingHandoffIntent(admitted = false)
-        assertEquals("a refused intent must not switch the tab", PaneState.TAB_LOG, state.selectedTab)
+        assertEquals("a refused intent must not switch the tab", PaneState.PAGE_LOG, state.selectedPage)
     }
 
     @Test
@@ -142,107 +142,98 @@ class PaneStateTest {
         assertTrue(state.readInProgress)
     }
 
-    // ---- Device fix (2026-09-05) — §6.5 S3 round 3 item 4: Diagnostics tab
+    // ---- D115 (item 25): three pages; Diagnostics folded into Settings. Literal expectations on purpose.
 
     @Test
-    fun `userSelectedTab moves to the Diagnostics tab`() {
-        val state = PaneState()
-        state.userSelectedTab(PaneState.TAB_DIAGNOSTICS)
-        assertEquals(PaneState.TAB_DIAGNOSTICS, state.selectedTab)
+    fun `the page constants are the literal values the saved state and the pager order rely on`() {
+        assertEquals(0, PaneState.PAGE_SCAN)
+        assertEquals(1, PaneState.PAGE_LOG)
+        assertEquals(2, PaneState.PAGE_SETTINGS)
+        assertEquals(3, PaneState.PAGE_COUNT)
     }
 
     @Test
-    fun `save then restore round-trips the Diagnostics tab`() {
+    fun `userSelectedPage moves to Settings and an unknown value falls back to Scan`() {
         val state = PaneState()
-        state.userSelectedTab(PaneState.TAB_DIAGNOSTICS)
-        val saved = state.tabIndexToSave()
-
-        val recreated = PaneState()
-        recreated.restoreTabIndex(saved)
-        assertEquals(PaneState.TAB_DIAGNOSTICS, recreated.selectedTab)
+        state.userSelectedPage(2)
+        assertEquals(2, state.selectedPage)
+        state.userSelectedPage(7)
+        assertEquals(0, state.selectedPage)
+        state.userSelectedPage(1)
+        state.userSelectedPage(-1)
+        assertEquals(0, state.selectedPage)
     }
 
     @Test
-    fun `an incoming admitted handoff intent switches away from the Diagnostics tab to Scan`() {
-        val state = PaneState()
-        state.userSelectedTab(PaneState.TAB_DIAGNOSTICS)
-        state.onIncomingHandoffIntent(admitted = true)
-        assertEquals(PaneState.TAB_SCAN, state.selectedTab)
+    fun `an old saved Diagnostics tab value (2) restores to Settings, an old Settings value (3) too`() {
+        val a = PaneState()
+        a.restorePageIndex(2) // the old TAB_DIAGNOSTICS
+        assertEquals(2, a.selectedPage) // PAGE_SETTINGS
+        val b = PaneState()
+        b.restorePageIndex(3) // the old TAB_SETTINGS
+        assertEquals(2, b.selectedPage)
+        val c = PaneState()
+        c.restorePageIndex(99)
+        assertEquals(0, c.selectedPage)
     }
 
     @Test
-    fun `a refused handoff intent leaves the Diagnostics tab alone`() {
-        val state = PaneState()
-        state.userSelectedTab(PaneState.TAB_DIAGNOSTICS)
-        state.onIncomingHandoffIntent(admitted = false)
-        assertEquals(PaneState.TAB_DIAGNOSTICS, state.selectedTab)
+    fun `save then restore round-trips each of the three pages`() {
+        for (page in 0..2) {
+            val state = PaneState()
+            state.userSelectedPage(page)
+            val recreated = PaneState()
+            recreated.restorePageIndex(state.pageIndexToSave())
+            assertEquals(page, recreated.selectedPage)
+        }
     }
 
     @Test
-    fun `choosePane over PaneState's own state matches PaneVisibility's existing truth table for Diagnostics too`() {
-        val state = PaneState()
-        state.userSelectedTab(PaneState.TAB_DIAGNOSTICS)
-        assertEquals(
-            PaneVisibility.Pane.DIAGNOSTICS,
-            PaneVisibility.choosePane(state.readInProgress, state.selectedTab),
-        )
+    fun `an admitted handoff intent selects Scan from every page, a refused one leaves every page`() {
+        for (page in 0..2) {
+            val admitted = PaneState()
+            admitted.userSelectedPage(page)
+            admitted.onIncomingHandoffIntent(admitted = true)
+            assertEquals("admitted from page $page", 0, admitted.selectedPage)
 
+            val refused = PaneState()
+            refused.userSelectedPage(page)
+            refused.onIncomingHandoffIntent(admitted = false)
+            assertEquals("refused on page $page", page, refused.selectedPage)
+        }
+    }
+
+    @Test
+    fun `previous and next neighbours, none past either end`() {
+        assertEquals(null, PaneState.previousPage(0))
+        assertEquals(0, PaneState.previousPage(1))
+        assertEquals(1, PaneState.previousPage(2))
+        assertEquals(1, PaneState.nextPage(0))
+        assertEquals(2, PaneState.nextPage(1))
+        assertEquals(null, PaneState.nextPage(2))
+    }
+
+    @Test
+    fun `titles and arrow texts are the owner's literal words`() {
+        assertEquals("Scan", PaneState.pageTitle(0))
+        assertEquals("Log", PaneState.pageTitle(1))
+        assertEquals("Settings", PaneState.pageTitle(2))
+        assertEquals(null, PaneState.previousArrowText(0))
+        assertEquals("\u2039 Scan", PaneState.previousArrowText(1))
+        assertEquals("\u2039 Log", PaneState.previousArrowText(2))
+        assertEquals("Log \u203A", PaneState.nextArrowText(0))
+        assertEquals("Settings \u203A", PaneState.nextArrowText(1))
+        assertEquals(null, PaneState.nextArrowText(2))
+    }
+
+    @Test
+    fun `pane choice over PaneState state - Settings, then a read shows LOADING, then back to Settings`() {
+        val state = PaneState()
+        state.userSelectedPage(PaneState.PAGE_SETTINGS)
+        assertEquals(PaneVisibility.Pane.SETTINGS, PaneVisibility.choosePane(state.readInProgress, state.selectedPage))
         state.readStarted()
-        assertEquals(
-            PaneVisibility.Pane.LOADING,
-            PaneVisibility.choosePane(state.readInProgress, state.selectedTab),
-        )
-
+        assertEquals(PaneVisibility.Pane.LOADING, PaneVisibility.choosePane(state.readInProgress, state.selectedPage))
         state.readFinished()
-        assertEquals(
-            PaneVisibility.Pane.DIAGNOSTICS,
-            PaneVisibility.choosePane(state.readInProgress, state.selectedTab),
-        )
-    }
-
-    @Test
-    fun `choosePane over PaneState's own state matches PaneVisibility's existing truth table`() {
-        val state = PaneState()
-        assertEquals(
-            PaneVisibility.Pane.SCAN,
-            PaneVisibility.choosePane(state.readInProgress, state.selectedTab),
-        )
-
-        state.userSelectedTab(PaneState.TAB_LOG)
-        assertEquals(
-            PaneVisibility.Pane.LOG,
-            PaneVisibility.choosePane(state.readInProgress, state.selectedTab),
-        )
-
-        state.readStarted()
-        assertEquals(
-            PaneVisibility.Pane.LOADING,
-            PaneVisibility.choosePane(state.readInProgress, state.selectedTab),
-        )
-
-        state.readFinished()
-        assertEquals(
-            PaneVisibility.Pane.LOG,
-            PaneVisibility.choosePane(state.readInProgress, state.selectedTab),
-        )
-    }
-
-    // ---- M3b chunk 1: Settings tab
-
-    @Test
-    fun `the Settings tab can be selected, survives a recreate, and an admitted handoff intent returns to Scan`() {
-        val state = PaneState()
-        state.userSelectedTab(PaneState.TAB_SETTINGS)
-        assertEquals(PaneState.TAB_SETTINGS, state.selectedTab)
-        val recreated = PaneState()
-        recreated.restoreTabIndex(state.tabIndexToSave())
-        assertEquals(PaneState.TAB_SETTINGS, recreated.selectedTab)
-        assertEquals(PaneVisibility.Pane.SETTINGS, PaneVisibility.choosePane(recreated.readInProgress, recreated.selectedTab))
-        recreated.onIncomingHandoffIntent(admitted = true)
-        assertEquals(PaneState.TAB_SCAN, recreated.selectedTab)
-        // an unknown saved index still normalises to Scan
-        val other = PaneState()
-        other.restoreTabIndex(99)
-        assertEquals(PaneState.TAB_SCAN, other.selectedTab)
+        assertEquals(PaneVisibility.Pane.SETTINGS, PaneVisibility.choosePane(state.readInProgress, state.selectedPage))
     }
 }

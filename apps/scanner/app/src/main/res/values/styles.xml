@@ -4,6 +4,8 @@
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
+        <!-- D115 (always light): minSdk is 30, so the system could force-dark this Light theme; switch that off. -->
+        <item name="android:forceDarkAllowed">false</item>
     </style>
 
 </resources>

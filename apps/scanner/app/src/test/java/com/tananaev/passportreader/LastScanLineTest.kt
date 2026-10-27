@@ -180,4 +180,20 @@ class LastScanLineTest {
         assertNull(LastScanLine.fromJson(null))
         assertNull(LastScanLine.fromJson(""))
     }
+
+    // --- D115: a website request refused before any scan ---
+
+    @Test
+    fun `REQUEST_REFUSED renders exactly the owner's line and never names a site`() {
+        assertEquals("Last: website request refused \u2717", LastScanLine.render(LastScanLine.requestRefused()))
+        // even if an origin were present, it must not appear
+        val withOrigin = LastScanLine.Entry(origin = "evil.example", reason = LastScanLine.Reason.REQUEST_REFUSED, threshold = 18, overThreshold = true)
+        assertEquals("Last: website request refused \u2717", LastScanLine.render(withOrigin))
+    }
+
+    @Test
+    fun `REQUEST_REFUSED survives the JSON round trip`() {
+        val e = LastScanLine.requestRefused()
+        assertEquals(e, LastScanLine.fromJson(LastScanLine.toJson(e)))
+    }
 }

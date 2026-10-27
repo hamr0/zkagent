@@ -8,67 +8,75 @@
     android:orientation="vertical"
     tools:context=".MainActivity">
 
+    <!-- D115 (item 25) — the top bar (colorPrimaryDark #00796B so the white 15sp arrows reach 5.3:1) replaces the Toolbar and the TabLayout. A centred page title ("Scan", "Log" or
+         "Settings"; MainActivity.showPane sets it from PaneState.pageTitle) with a tappable arrow either side naming
+         the neighbour page (text from PaneState.previousArrowText / nextArrowText, hidden at an end page). The arrows
+         are 48dp-high touch targets with spoken descriptions; the title is a polite live region and a heading so a
+         page change is announced. -->
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:fitsSystemWindows="true">
 
-        <androidx.appcompat.widget.Toolbar
-            android:id="@+id/toolbar"
+        <LinearLayout
+            android:id="@+id/title_bar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="?attr/colorPrimary"
-            app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
-            app:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar" />
+            android:background="@color/colorPrimaryDark"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingLeft="4dp"
+            android:paddingRight="4dp">
+
+            <TextView
+                android:id="@+id/nav_prev"
+                android:layout_width="96dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical|start"
+                android:paddingLeft="12dp"
+                android:paddingRight="8dp"
+                android:textColor="@android:color/white"
+                android:textSize="15sp"
+                tools:text="‹ Log" />
+
+            <TextView
+                android:id="@+id/page_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:accessibilityHeading="true"
+                android:accessibilityLiveRegion="polite"
+                android:gravity="center"
+                android:textColor="@android:color/white"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                tools:text="Scan" />
+
+            <TextView
+                android:id="@+id/nav_next"
+                android:layout_width="96dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical|end"
+                android:paddingLeft="8dp"
+                android:paddingRight="12dp"
+                android:textColor="@android:color/white"
+                android:textSize="15sp"
+                tools:text="Log ›" />
+
+        </LinearLayout>
 
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- §6.2 item 16 (D44) — "Scan" is the form+report screen; "Log" is the
-         per-scan report log view. Device fix (2026-09-05, §6.5 S3 round 3
-         item 4) added "Diagnostics" — the two no-tap-needed probe buttons,
-         moved out of the scan pane. Tab selection only toggles which of
-         [main_layout]/[log_layout]/[diagnostics_layout] is visible — see
-         MainActivity.onTabSelected doc. TabLayout scrolls its own strip
-         horizontally if three tabs don't fit a narrow screen — no separate
-         HorizontalScrollView needed. -->
-    <com.google.android.material.tabs.TabLayout
-        android:id="@+id/tab_layout"
-        app:tabMode="auto"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-
-        <com.google.android.material.tabs.TabItem
-            android:id="@+id/tab_scan"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/tab_scan" />
-
-        <com.google.android.material.tabs.TabItem
-            android:id="@+id/tab_log"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/tab_log" />
-
-        <com.google.android.material.tabs.TabItem
-            android:id="@+id/tab_diagnostics"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/tab_diagnostics" />
-
-        <com.google.android.material.tabs.TabItem
-            android:id="@+id/tab_settings"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/tab_settings" />
-
-    </com.google.android.material.tabs.TabLayout>
-
-    <!-- FIX (§6.2 item 24 device FAIL 2026-09-03): this pane container was
-         match_parent with no weight inside the root vertical LinearLayout,
-         so it consumed all remaining height and laid version_stamp_view out
-         below the screen edge. 0dp + weight="1" makes it take only the
-         space left after the footer, per LinearLayout's weighted-sizing
-         pass — see version_stamp_view below. -->
+    <!-- FIX (§6.2 item 24 device FAIL 2026-09-03): this pane container is 0dp + weight="1" so the footer below it
+         (page dots, version stamp) is never pushed off screen. The pages are overlapping siblings; exactly one is
+         visible, decided by PaneVisibility.choosePane and applied by MainActivity.showPane (the single writer,
+         item 16). Swiping is detected by MainActivity.dispatchTouchEvent and routed to PaneState. -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -95,39 +103,18 @@
 
         </LinearLayout>
 
-        <!-- Device fix (2026-09-05, "screen still busy with bottom
-             unmovable part") — REVERTED to a plain ScrollView (was briefly
-             split into a scrollable top half + a pinned, non-scrolling
-             report_view sibling; that pinning permanently ate screen
-             space). FIX (owner, 2026-09-05): report_view itself is now
-             REMOVED — replaced by the one-line last_scan_view directly
-             under the Scan/Verify button (see last_scan_view below). S3's
-             "fixed position" goal is now met a different way: every element
-             ABOVE the button that could vary in height (question_line,
-             the paste row, handoff_status) is capped/floored, and
-             last_scan_view is itself capped to one line — see each one's
-             own comment — so the button and last_scan_view stay put across
-             ordinary handoff-state changes without a pinned footer. -->
+        <!-- D115 — the Scan page, top to bottom: the site's question in a navy box, the hint line, the three
+             document fields (always visible, outlined, floating labels, empty each scan; item 6), the paste block,
+             a large VERIFY, the always-visible last-scan strip, About. No in-page heading. -->
         <ScrollView
             android:id="@+id/main_layout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:focusableInTouchMode="true">
 
-            <!-- FIX (Q47 / findings.md #17): focusableInTouchMode is required
-                 here, not optional. View.clearFocus() defaults refocus=true,
-                 which calls the root view's requestFocus() to find a new
-                 candidate; a ViewGroup's default descendant-focusability order
-                 (FOCUS_BEFORE_DESCENDANTS) tries the container itself before
-                 descending into children. Without this attribute, this
-                 ScrollView is not a valid candidate, so that search descends
-                 straight to input_passport_number — the only
-                 focusableInTouchMode="true" EditText on the form — and
-                 re-focuses it immediately, silently undoing MainActivity's
-                 clearFocus() call. Setting this here gives the search a
-                 legitimate, harmless landing spot before it ever reaches the
-                 EditText (focusableInTouchMode="true" also implies
-                 android:focusable="true" per View's own XML parsing). -->
+            <!-- FIX (Q47 / findings.md #17): focusableInTouchMode on the ScrollView is required, not optional:
+                 View.clearFocus() re-focuses the first focusableInTouchMode EditText unless this container is a
+                 valid landing spot for the root's focus search. -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -135,36 +122,54 @@
                     android:paddingRight="@dimen/activity_horizontal_margin"
                     android:orientation="vertical">
 
-                    <!-- §6.5 S3 (D75) — the item-5 no-storage disclosure's new
-                         non-primary home (MainActivity.showAboutDialog); the
-                         old five-sentence @string/info_scan_passport blob
-                         that used to render here on every screen view is
-                         gone (DP7). -->
+                    <!-- The exact question from the signed request object, or D46's "Local scan (no site)" (see
+                         MainActivity.applySessionDisplay / SessionDisplay.render's questionText). D115: white text on
+                         the navy box (#0D2A4A), no light fill, no left bar. -->
                     <TextView
-                        android:id="@+id/button_about"
-                        style="?android:attr/borderlessButtonStyle"
-                        android:layout_width="wrap_content"
+                        android:id="@+id/question_line"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="end"
                         android:layout_marginTop="@dimen/activity_vertical_margin"
-                        android:text="@string/button_about" />
+                        android:background="@drawable/ask_box"
+                        android:gravity="center"
+                        android:minLines="1"
+                        android:padding="12dp"
+                        android:textColor="@color/ask_box_text"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        tools:text="This website asks if you are over 18" />
 
-                    <!-- MRZ input fields — kept (S3 does not remove them),
-                         placed above the question line where they read
-                         naturally: fill in the document, then see what's
-                         being asked, then act. -->
+                    <!-- The hint line (derived mode / "Locked: ..." banner; MainActivity.refreshSessionDisplay is its
+                         only writer). D115: directly under the question, above the fields and VERIFY. -->
+                    <TextView
+                        android:id="@+id/mode_status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center"
+                        android:textSize="12sp"
+                        android:textStyle="italic"
+                        tools:text="Locked: mode B — tap your document now" />
+
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/input_passport_number_layout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp">
+                        android:layout_marginTop="12dp"
+                        app:boxBackgroundMode="outline"
+                        app:boxCornerRadiusTopStart="6dp"
+                        app:boxCornerRadiusTopEnd="6dp"
+                        app:boxCornerRadiusBottomStart="6dp"
+                        app:boxCornerRadiusBottomEnd="6dp">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/input_passport_number"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:minHeight="48dp"
+                            android:hint="@string/input_passport_number"
                             android:inputType="textCapCharacters"
-                            android:hint="@string/input_passport_number" />
+                            />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -172,15 +177,22 @@
                         android:id="@+id/input_expiration_date_layout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/activity_vertical_margin">
+                        android:layout_marginTop="12dp"
+                        app:boxBackgroundMode="outline"
+                        app:boxCornerRadiusTopStart="6dp"
+                        app:boxCornerRadiusTopEnd="6dp"
+                        app:boxCornerRadiusBottomStart="6dp"
+                        app:boxCornerRadiusBottomEnd="6dp">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/input_expiration_date"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:minHeight="48dp"
                             android:hint="@string/input_expiration_date"
                             android:inputType="date"
-                            android:focusableInTouchMode="false" />
+                            android:focusableInTouchMode="false"
+                            />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -188,66 +200,24 @@
                         android:id="@+id/input_date_of_birth_layout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/activity_vertical_margin"
-                        android:layout_marginBottom="@dimen/activity_vertical_margin">
+                        android:layout_marginTop="12dp"
+                        app:boxBackgroundMode="outline"
+                        app:boxCornerRadiusTopStart="6dp"
+                        app:boxCornerRadiusTopEnd="6dp"
+                        app:boxCornerRadiusBottomStart="6dp"
+                        app:boxCornerRadiusBottomEnd="6dp">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/input_date_of_birth"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:minHeight="48dp"
                             android:hint="@string/input_date_of_birth"
                             android:inputType="date"
-                            android:focusableInTouchMode="false" />
+                            android:focusableInTouchMode="false"
+                            />
 
                     </com.google.android.material.textfield.TextInputLayout>
-
-                    <!-- §6.2 item 4 (2026-09 real-device change, "remove the mode
-                         radio entirely") — mode is DERIVED, never a user choice: a
-                         verified handoff's tier sets it (D33/D34); a bare local scan
-                         with no verified request is mode A by definition. This
-                         TextView is the ONLY place mode is ever displayed — there is
-                         no control here to disagree with the executed mode (F5's bug
-                         class is eliminated by construction) — see MainActivity
-                         class doc / MainActivity.refreshSessionDisplay / lockModeAndArm
-                         (D58 step 4 renamed refreshModeStatus). Device fix
-                         (2026-09-05, owner device round 3): moved from directly
-                         above the Scan/Verify button (where it read as leftover
-                         clutter near the action) to ABOVE the question line —
-                         one small line, text/logic unchanged, purely relocated. -->
-                    <TextView
-                        android:id="@+id/mode_status"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:textSize="12sp"
-                        android:textStyle="italic"
-                        tools:text="Locked: mode B — tap your document now" />
-
-                    <!-- §6.5 S2 (D74) item 2 / S3 (D75) pane-order item (1) —
-                         the exact question from the signed request object,
-                         or D46's "Local scan (no site)" with nothing
-                         pending. See MainActivity.applySessionDisplay /
-                         SessionDisplay.render's questionText. Content/
-                         wrapping UNCHANGED (device-confirmed, "this website
-                         asks if you are over 18" — owner: keep as is);
-                         minLines="1" only RESERVES a one-line floor so a
-                         short question never collapses shorter than the
-                         layout below expects — it does NOT cap growth, so
-                         the tier-B recognition sentence still renders in
-                         full rather than being truncated. Device fix
-                         (2026-09-05, owner device round 3): bold, centered,
-                         16sp — text/logic otherwise unchanged. -->
-                    <TextView
-                        android:id="@+id/question_line"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/activity_vertical_margin"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/ask_accent"
-                        android:gravity="center"
-                        android:minLines="1"
-                        tools:text="This website asks if you are over 18" />
 
                     <!-- §6.5 S3 (D75) pane-order item (2) — handoff block:
                          the "Paste link" button (not a bare always-visible
@@ -354,37 +324,43 @@
 
                     </LinearLayout>
 
-                    <!-- §6.5 S3 (D75) pane-order item (3) — the single
-                         Scan/Verify button; item 20's verb rule unchanged. -->
+                    <!-- The single large VERIFY button (item 20's verb rule unchanged; MainActivity sets its text). -->
                     <Button
                         android:id="@+id/button_lock_and_scan"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="72dp"
                         android:layout_marginTop="@dimen/activity_vertical_margin"
-                        android:layout_marginBottom="@dimen/activity_vertical_margin"
-                        android:text="@string/button_lock_and_scan" />
+                        android:text="@string/button_lock_and_scan"
+                        android:textSize="18sp" />
 
-                    <!-- FIX (owner, 2026-09-05, verbatim): "remove it from
-                         scan, you can keep summary of last scan below scan
-                         button to know, just the last one. last scan:
-                         state.gov, > 18: true + checkmark". Replaces the
-                         full report_view block that used to render here
-                         (§6.2 item 5's value-free verdict screen) — the Log
-                         and Diagnostics tabs remain the only full-detail
-                         readers. ONE line, from LastScanLine.render — see
-                         MainActivity.applyLastScanLine. maxLines/ellipsize
-                         cap this at a fixed one-line height (S3's "the
-                         button stays put" rule), same discipline as
-                         handoff_status/question_line above. -->
+                    <!-- D115: the always-visible last-scan strip directly under VERIFY. Text, colours and glyph come
+                         from LastScanStatus via MainActivity.applyLastScanLine (the single writer). A polite live
+                         region, bold, at least 48dp high; the glyph in the text means colour is never the only signal. -->
                     <TextView
                         android:id="@+id/last_scan_view"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:accessibilityLiveRegion="polite"
+                        android:background="@drawable/last_scan_bg"
+                        android:gravity="center_vertical"
+                        android:minHeight="48dp"
+                        android:paddingLeft="12dp"
+                        android:paddingRight="12dp"
+                        android:textColor="@color/status_none_text"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        tools:text="Last scan: state.gov, over 18: true, delivered ✓" />
+
+                    <TextView
+                        android:id="@+id/button_about"
+                        style="?android:attr/borderlessButtonStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end"
                         android:layout_marginBottom="@dimen/activity_vertical_margin"
-                        android:textSize="12sp"
-                        android:maxLines="1"
-                        android:ellipsize="end"
-                        tools:text="Last scan: state.gov, over 18: true ✓" />
+                        android:minHeight="48dp"
+                        android:text="@string/button_about" />
 
                 </LinearLayout>
 
@@ -437,17 +413,12 @@
 
         </ScrollView>
 
-        <!-- Device fix (2026-09-05, §6.5 S3 round 3 item 4) — the two
-             no-tap-needed probe buttons' new home, moved out of the scan
-             pane (owner: "text that still appears between verify... run
-             masterlist... run device key self" cluttered the area right
-             below the main button). Output keeps going where it went
-             before (diagnostics_report_view / the Log tab —
-             MainActivity.runMasterlistProbe / .runDeviceKeyProbe are
-             unchanged, only their trigger buttons moved). Hidden unless the
-             "Diagnostics" tab is selected. -->
+        <!-- M3b chunk 1 (item 7) / D115 — the Settings page: the holder's "Allow additional verifications" switch
+             (OFF by default; text from TierCText, unit-tested; hidden with only the unavailable note when the build
+             has tier C off), then Diagnostics as a COLLAPSED section at the bottom (the two probe buttons and their
+             output, moved here from the old Diagnostics tab). -->
         <ScrollView
-            android:id="@+id/diagnostics_layout"
+            android:id="@+id/settings_layout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:visibility="gone">
@@ -459,7 +430,42 @@
                 android:paddingRight="@dimen/activity_horizontal_margin"
                 android:orientation="vertical">
 
-                <Button
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switch_allow_additional"
+                    android:saveEnabled="false"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/activity_vertical_margin"
+                    android:layout_marginBottom="@dimen/activity_vertical_margin" />
+
+                <TextView
+                    android:id="@+id/settings_help"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/activity_vertical_margin"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/diagnostics_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:minHeight="48dp"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    tools:text="▸ Diagnostics" />
+
+                <LinearLayout
+                    android:id="@+id/diagnostics_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <Button
                     android:id="@+id/button_m2_masterlist_probe"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -496,41 +502,7 @@
                     android:textSize="12sp"
                     android:text="" />
 
-            </LinearLayout>
-
-        </ScrollView>
-
-        <!-- M3b chunk 1 (item 7): the Settings tab. ONE holder setting, "Allow additional verifications", OFF by
-             default; its text is set from TierCText so the wording is unit-tested. When the build has tier C off
-             (operator.json), the switch is hidden and only the unavailable note shows. Hidden unless the "Settings"
-             tab is selected (MainActivity.showPane). -->
-        <ScrollView
-            android:id="@+id/settings_layout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingLeft="@dimen/activity_horizontal_margin"
-                android:paddingRight="@dimen/activity_horizontal_margin"
-                android:orientation="vertical">
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switch_allow_additional"
-                    android:saveEnabled="false"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/activity_vertical_margin"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin" />
-
-                <TextView
-                    android:id="@+id/settings_help"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin"
-                    android:textSize="14sp" />
+                </LinearLayout>
 
             </LinearLayout>
 
@@ -543,6 +515,18 @@
             android:layout_gravity="bottom" />
 
     </FrameLayout>
+
+    <!-- D115: page dots. Decorative (hidden from accessibility): the title already names the page. Drawn by
+         MainActivity.showPane. -->
+    <LinearLayout
+        android:id="@+id/page_dots"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:importantForAccessibility="no"
+        android:orientation="horizontal"
+        android:paddingTop="8dp"
+        android:paddingBottom="4dp" />
 
     <!-- §6.2 item 24 (D70(c)) — build stamp footer: versionName + short git
          sha of the commit the running build was compiled from. Set from

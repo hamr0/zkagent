@@ -40,7 +40,7 @@ package com.tananaev.passportreader
  * state. [PaneState] is instantiated once per `MainActivity` instance,
  * exactly like the existing `reportLog` field (D58 step 1's precedent).
  *
- * Legal states, enumerated (this step's own right-sizing test): the two
+ * (D58 step 2 history; D115 changed the page set, see below.) Legal states, enumerated (this step's own right-sizing test): the two
  * fields are independent — [selectedTab] is one of exactly two values,
  * [TAB_SCAN] or [TAB_LOG] (`activity_main.xml` declares exactly two
  * `TabItem`s), and [readInProgress] is a plain `Boolean`. 2 x 2 = FOUR
@@ -59,43 +59,42 @@ package com.tananaev.passportreader
  * 1 already established the alternative pattern this follows exactly:
  * [ReportLog.restore] takes plain values, not a `Bundle`, and
  * `MainActivity` does the real Bundle read/write itself. [tabIndexToSave]/
- * [restoreTabIndex] are this class's equivalent.
+ * [restoreTabIndex] are this class's equivalent (renamed [pageIndexToSave]/[restorePageIndex] by D115).
+ *
+ * **D115 (2026-10-27, milestones.md §6.9.2 item 25):** the four-tab strip is
+ * gone. There are THREE swipeable pages — [PAGE_SCAN], [PAGE_LOG],
+ * [PAGE_SETTINGS] — and this class still owns the selected one
+ * ([selectedPage], formerly `selectedTab`). Diagnostics is no longer a page:
+ * it is a collapsed section at the bottom of Settings. The saved-state key
+ * and its integers are unchanged on purpose: an old saved value 2 (the old
+ * Diagnostics tab) and 3 (the old Settings tab) both land on
+ * [PAGE_SETTINGS], and any unknown value lands on [PAGE_SCAN], so a Bundle
+ * written by the previous build restores safely. 3 pages x 2 read states =
+ * six legal combinations. Which page a swipe or an arrow reaches is decided
+ * HERE ([previousPage]/[nextPage]/[pageTitle]) so it is unit-testable; the
+ * Activity only draws it.
  */
 class PaneState {
 
-    var selectedTab: Int = TAB_SCAN
+    var selectedPage: Int = PAGE_SCAN
         private set
 
     var readInProgress: Boolean = false
         private set
 
-    /** The tab listener's write (a real user tap or reselect) — see
-     * [MainActivity]'s tab-selection handler doc for the re-entry guard
-     * this pairs with, so [MainActivity.showPane] moving the TabLayout
-     * programmatically is never misread as a second user selection. */
-    fun userSelectedTab(index: Int) {
-        selectedTab = normalizeTab(index)
+    /** A real user selection (swipe or arrow). The Activity applies the
+     * result via [MainActivity.showPane]. */
+    fun userSelectedPage(index: Int) {
+        selectedPage = normalizePage(index)
     }
 
-    /** §6.2 item 17 (D67, Q39) — [MainActivity.handleIncomingIntent]'s write
-     * for an incoming `av://` handoff intent: MUST switch to [TAB_SCAN]
-     * regardless of the tab currently selected, distinct from
-     * [userSelectedTab] (a real user tap) — this is a NEW writer of
-     * [selectedTab] the same way [readStarted]/[readFinished] are, not a
-     * second path into [userSelectedTab]'s "user tap" semantics. Distinct
-     * also from the already-REJECTED D55 proposal to auto-switch on read
-     * COMPLETION — see this class's own trigger, an incoming intent, never
-     * a read finishing.
-     *
-     * [admitted] is the caller's own [HandoffAdmission.mayAdmitInboundHandoff]
-     * verdict, passed in rather than trusted-by-omission: the MUST text is
-     * explicit that a REFUSED intent must leave the tab alone, and folding
-     * the admission check in here (rather than relying on every call site
-     * to only call this after its own guard) makes "a refused intent never
-     * switches the tab" directly testable against this class alone, not
-     * only inferable from reading [MainActivity]'s call site. */
+    /** §6.2 item 17 (D67, Q39) — an incoming `av://` handoff intent MUST
+     * switch to [PAGE_SCAN] from any page. [admitted] is the caller's own
+     * [HandoffAdmission.mayAdmitInboundHandoff] verdict: a REFUSED intent
+     * leaves the page alone, and folding the check in here makes that
+     * directly testable against this class. */
     fun onIncomingHandoffIntent(admitted: Boolean) {
-        if (admitted) selectedTab = TAB_SCAN
+        if (admitted) selectedPage = PAGE_SCAN
     }
 
     /** [MainActivity.startSession]'s write — a chip read has begun. */
@@ -104,48 +103,56 @@ class PaneState {
     }
 
     /** [MainActivity.ReadTask.onPostExecute]'s write, the FIRST statement
-     * on every exit path (unchanged discipline from before this step,
-     * D55) — the read is over. */
+     * on every exit path (D55) — the read is over. */
     fun readFinished() {
         readInProgress = false
     }
 
     /** The value [MainActivity.onSaveInstanceState] persists under its own
-     * named Bundle key. Deliberately does NOT expose [readInProgress] for
-     * persistence: a read cannot meaningfully survive process death or an
-     * Activity recreation (nothing resumes an in-flight `IsoDep` session),
-     * matching audit row 11's pre-existing "LOST, resets to declared
-     * default" behaviour exactly — this step changes ONLY the tab index's
-     * fate on recreation, not `readInProgress`'s. */
-    fun tabIndexToSave(): Int = selectedTab
+     * Bundle key. Deliberately NOT [readInProgress] (a read cannot survive
+     * a recreation; audit row 11). */
+    fun pageIndexToSave(): Int = selectedPage
 
     /** [MainActivity.onCreate]'s restore call — MUST run before
-     * `showPane()` (see finding #1). `null` (fresh launch, or a Bundle
-     * that never had the key) yields the default, [TAB_SCAN] — matches
-     * the pre-step-2 behaviour for a first launch exactly. */
-    fun restoreTabIndex(saved: Int?) {
-        selectedTab = normalizeTab(saved ?: TAB_SCAN)
+     * `showPane()` (finding #1). `null` yields [PAGE_SCAN]; an old saved
+     * Diagnostics (2) or Settings (3) value yields [PAGE_SETTINGS]. */
+    fun restorePageIndex(saved: Int?) {
+        selectedPage = normalizePage(saved ?: PAGE_SCAN)
     }
 
-    // Device fix (2026-09-05) — §6.5 S3 round 3, item 4: a THIRD tab
-    // ("Diagnostics", the two no-tap-needed probe buttons moved out of the
-    // scan pane) extends the legal-state enumeration this class's own doc
-    // right-sized at "2 x 2 = FOUR" to THREE tab values x TWO readInProgress
-    // values = six. [TAB_DIAGNOSTICS] is a new writable value, not a new
-    // field — every existing writer ([userSelectedTab],
-    // [onIncomingHandoffIntent]'s TAB_SCAN target, [restoreTabIndex]) is
-    // unchanged in shape.
-    private fun normalizeTab(index: Int): Int = when (index) {
-        TAB_LOG -> TAB_LOG
-        TAB_DIAGNOSTICS -> TAB_DIAGNOSTICS
-        TAB_SETTINGS -> TAB_SETTINGS // M3b chunk 1: the holder's "Allow additional verifications" switch
-        else -> TAB_SCAN
+    private fun normalizePage(index: Int): Int = when (index) {
+        PAGE_LOG -> PAGE_LOG
+        PAGE_SETTINGS, LEGACY_TAB_DIAGNOSTICS, LEGACY_TAB_SETTINGS -> PAGE_SETTINGS
+        else -> PAGE_SCAN
     }
 
     companion object {
-        const val TAB_SCAN = 0
-        const val TAB_LOG = 1
-        const val TAB_DIAGNOSTICS = 2
-        const val TAB_SETTINGS = 3
+        const val PAGE_SCAN = 0
+        const val PAGE_LOG = 1
+        const val PAGE_SETTINGS = 2
+        const val PAGE_COUNT = 3
+
+        // Values written by builds before D115 (four tabs: Scan, Log, Diagnostics, Settings).
+        private const val LEGACY_TAB_DIAGNOSTICS = 2
+        private const val LEGACY_TAB_SETTINGS = 3
+
+        /** The page one step left of [page], or null at the first page. */
+        fun previousPage(page: Int): Int? = if (page in PAGE_LOG..PAGE_SETTINGS) page - 1 else null
+
+        /** The page one step right of [page], or null at the last page. */
+        fun nextPage(page: Int): Int? = if (page in PAGE_SCAN until PAGE_SETTINGS) page + 1 else null
+
+        /** The title for [page]: exactly "Scan", "Log" or "Settings". */
+        fun pageTitle(page: Int): String = when (page) {
+            PAGE_LOG -> "Log"
+            PAGE_SETTINGS -> "Settings"
+            else -> "Scan"
+        }
+
+        /** The text of the prev arrow on [page] ("\u2039 Log"), or null when hidden. */
+        fun previousArrowText(page: Int): String? = previousPage(page)?.let { "\u2039 ${pageTitle(it)}" }
+
+        /** The text of the next arrow on [page] ("Settings \u203A"), or null when hidden. */
+        fun nextArrowText(page: Int): String? = nextPage(page)?.let { "${pageTitle(it)} \u203A" }
     }
 }

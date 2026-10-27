@@ -36,28 +36,21 @@ package com.tananaev.passportreader
  * leave two of them `VISIBLE` at once.
  */
 object PaneVisibility {
-    // Device fix (2026-09-05) — §6.5 S3 round 3, item 4: a fourth pane,
-    // [Pane.DIAGNOSTICS], for the two no-tap-needed probe buttons moved out
-    // of the scan pane into their own tab. Same "always names exactly ONE
-    // pane" invariant this object's class doc already establishes — now
-    // four overlapping siblings, still mutually exclusive by construction.
-    enum class Pane { SCAN, LOG, DIAGNOSTICS, SETTINGS, LOADING }
+    // D115 (item 25): Diagnostics is no longer a pane — it is a collapsed
+    // section inside Settings. Same "always names exactly ONE pane"
+    // invariant: four overlapping siblings, mutually exclusive by construction.
+    enum class Pane { SCAN, LOG, SETTINGS, LOADING }
 
     /**
-     * @param readInProgress true while a chip read is in flight (mirrors
-     *   [MainActivity]'s `readInProgress` field) — takes precedence over
-     *   tab selection, matching the pre-D55 behaviour where a read in
-     *   progress always showed the loading pane regardless of which tab
-     *   was selected.
-     * @param selectedTabPosition the tab layout's current selection (0 =
-     *   Scan, 1 = Log, 2 = Diagnostics) — only consulted when no read is in
-     *   progress.
+     * @param readInProgress true while a chip read is in flight — takes
+     *   precedence over page selection.
+     * @param selectedPage [PaneState.selectedPage] (0 = Scan, 1 = Log,
+     *   2 = Settings); anything else falls back to Scan.
      */
-    fun choosePane(readInProgress: Boolean, selectedTabPosition: Int): Pane = when {
+    fun choosePane(readInProgress: Boolean, selectedPage: Int): Pane = when {
         readInProgress -> Pane.LOADING
-        selectedTabPosition == 1 -> Pane.LOG
-        selectedTabPosition == 2 -> Pane.DIAGNOSTICS
-        selectedTabPosition == 3 -> Pane.SETTINGS
+        selectedPage == PaneState.PAGE_LOG -> Pane.LOG
+        selectedPage == PaneState.PAGE_SETTINGS -> Pane.SETTINGS
         else -> Pane.SCAN
     }
 }

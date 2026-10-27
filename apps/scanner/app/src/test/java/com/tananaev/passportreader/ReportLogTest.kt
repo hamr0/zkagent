@@ -369,10 +369,14 @@ class ReportLogTest {
     }
 
     @Test
-    fun `a SCAN append with no lastScanInfo argument falls back to a generic REFUSED entry`() {
+    fun `a SCAN append with no lastScanInfo argument leaves the line alone - no implicit REFUSED default (D115, finding 51)`() {
         val log = ReportLog()
         log.append("report", summary(site = "state.gov"), nowMillis = 0L)
-        assertEquals(LastScanLine.Entry(origin = "state.gov", reason = LastScanLine.Reason.REFUSED), log.lastScanInfo)
+        assertEquals(null, log.lastScanInfo)
+        val prior = LastScanLine.Entry(origin = "state.gov", reason = LastScanLine.Reason.DELIVERED)
+        log.append("terminal", summary(site = "state.gov"), lastScanInfo = prior, nowMillis = 1L)
+        log.append("later, passes nothing", summary(site = "other.test"), nowMillis = 2L)
+        assertEquals("a call that passes nothing must not overwrite the prior entry", prior, log.lastScanInfo)
     }
 
     @Test
@@ -403,10 +407,12 @@ class ReportLogTest {
     @Test
     fun `lastScanInfo tracks the MOST RECENT terminal SCAN append, overwriting on each call`() {
         val log = ReportLog()
-        log.append("first", summary(site = "site-a.test"), nowMillis = 0L)
-        assertEquals(LastScanLine.Entry(origin = "site-a.test", reason = LastScanLine.Reason.REFUSED), log.lastScanInfo)
-        log.append("second", summary(site = "site-b.test"), nowMillis = 1000L)
-        assertEquals(LastScanLine.Entry(origin = "site-b.test", reason = LastScanLine.Reason.REFUSED), log.lastScanInfo)
+        val a = LastScanLine.Entry(origin = "site-a.test", reason = LastScanLine.Reason.REFUSED)
+        val b = LastScanLine.Entry(origin = "site-b.test", reason = LastScanLine.Reason.DELIVERED)
+        log.append("first", summary(site = "site-a.test"), lastScanInfo = a, nowMillis = 0L)
+        assertEquals(a, log.lastScanInfo)
+        log.append("second", summary(site = "site-b.test"), lastScanInfo = b, nowMillis = 1000L)
+        assertEquals(b, log.lastScanInfo)
     }
 
     @Test
@@ -454,14 +460,14 @@ class ReportLogTest {
         val log = ReportLog()
         log.noteNewHandoffCaptured()
         log.noteNewHandoffCaptured()
-        log.append("report", summary(site = "state.gov"), nowMillis = 0L)
+        log.append("report", summary(site = "state.gov"), lastScanInfo = LastScanLine.Entry(origin = "state.gov", reason = LastScanLine.Reason.DELIVERED), nowMillis = 0L)
         assertEquals(2, log.lastScanGeneration)
     }
 
     @Test
     fun `a pending SCAN append never stamps lastScanGeneration`() {
         val log = ReportLog()
-        log.append("terminal", summary(site = "state.gov"), nowMillis = 0L)
+        log.append("terminal", summary(site = "state.gov"), lastScanInfo = LastScanLine.Entry(origin = "state.gov", reason = LastScanLine.Reason.DELIVERED), nowMillis = 0L)
         log.noteNewHandoffCaptured()
         log.append("in progress", summary(site = "other-site.test"), attemptId = "a1", pending = true, nowMillis = 1000L)
         assertEquals("the pending append must not advance the stamped generation", 0, log.lastScanGeneration)
@@ -479,7 +485,7 @@ class ReportLogTest {
     fun `clear resets lastScanGeneration but never handoffGeneration`() {
         val log = ReportLog()
         log.noteNewHandoffCaptured()
-        log.append("report", summary(site = "state.gov"), nowMillis = 0L)
+        log.append("report", summary(site = "state.gov"), lastScanInfo = LastScanLine.Entry(origin = "state.gov", reason = LastScanLine.Reason.DELIVERED), nowMillis = 0L)
         log.clear()
         assertEquals("handoffGeneration tracks av:// captures, unrelated to clearing the log", 1, log.handoffGeneration)
         assertEquals(0, log.lastScanGeneration)
