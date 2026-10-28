@@ -219,4 +219,41 @@ class TierCRefusalReplyTest {
         // a malformed URI is contained too
         assertTrue(TierCRefusalReply.send(TierCRefusalReply.Plan("not a url", null)) is TierCRefusalReply.Outcome.Failed)
     }
+
+    // ---------------------------------------------------------------- finding #52: a redirect is a status, never followed
+
+    @Test
+    fun `a 301, 302 or 303 on the refusal post is returned as that status - the redirect is not followed and not told`() {
+        for (status in listOf(301, 302, 303, 307)) {
+            RedirectServer(status).use { srv ->
+                val out = TierCRefusalReply.send(TierCRefusalReply.Plan(srv.postUrl, "s1")) { uri, body -> TierCRefusalReply.postForm(uri, body) }
+                assertEquals("status $status", TierCRefusalReply.Outcome.Sent(status), out)
+                assertEquals("the post reached the server once ($status)", 1, srv.postHits())
+                assertEquals("the landing page got no request ($status)", 0, srv.landingHits())
+                val delivery = TierCText.Delivery.from(TierCRefusalReply.Plan(srv.postUrl, "s1"), out)
+                assertEquals(TierCText.Delivery.NotAccepted(status), delivery)
+                assertFalse(delivery.told)
+                assertEquals(
+                    "Refused: the website asked something this app does not answer. Refusal could not be sent (the website answered HTTP $status).",
+                    TierCText.logLine("Refused: the website asked something this app does not answer", delivery),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `the POST body to the site carries no reason code, whatever the refusal reason`() {
+        val reasons = listOf("nationality_asked_more_than_once", "holder_setting_off", "boundary_off_list", "dob_age_not_locked_age", "document_not_answerable")
+        RedirectServer(200).use { srv ->
+            for (r in reasons) {
+                // the reason never reaches send(): the only inputs are the plan and the fixed body
+                TierCRefusalReply.send(TierCRefusalReply.Plan(srv.postUrl, "s1")) { uri, body -> TierCRefusalReply.postForm(uri, body) }
+            }
+            assertEquals(reasons.size, srv.postHits())
+            for (b in srv.seen.map { it.body }) {
+                assertEquals("error=access_denied&state=s1", b)
+                for (r in reasons) assertFalse("body leaks $r", b.contains(r) || b.contains("nationality") || b.contains("limit"))
+            }
+        }
+    }
 }

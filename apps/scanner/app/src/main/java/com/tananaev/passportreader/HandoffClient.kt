@@ -88,6 +88,7 @@ object HandoffClient {
     fun fetchRequestRaw(requestUri: String): RawFetch {
         val conn = (URL(requestUri).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
+            instanceFollowRedirects = false // finding #52: a 3xx is a failed fetch, never followed (the gate approved THIS host only)
             connectTimeout = 10_000
             readTimeout = 10_000
         }
@@ -154,17 +155,30 @@ object HandoffClient {
             }
             append("vp_token=").append(Uri.encode(vpToken))
         }
+        return postForm(responseUri, form)
+    }
+
+    /** The transport half of [postDirectPost] (pure JVM, so the unit tests run it against a real local server).
+     * Redirects are NOT followed (finding #52): HttpURLConnection would re-issue a 301/302/303 as a body-less GET and
+     * return the landing page's 200, reading as delivered while the site received nothing. A 3xx comes back as the
+     * status it is and takes the non-2xx path. A 3xx may carry no body, so a null error stream reads as empty. */
+    fun postForm(responseUri: String, form: String): DirectPostResult {
         val conn = (URL(responseUri).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
+            instanceFollowRedirects = false
             connectTimeout = 10_000
             readTimeout = 10_000
             setRequestProperty("content-type", "application/x-www-form-urlencoded")
         }
-        conn.outputStream.use { it.write(form.toByteArray(StandardCharsets.UTF_8)) }
-        val status = conn.responseCode
-        val stream = if (status in 200..299) conn.inputStream else conn.errorStream
-        val body = stream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-        return DirectPostResult(status, body)
+        try {
+            conn.outputStream.use { it.write(form.toByteArray(StandardCharsets.UTF_8)) }
+            val status = conn.responseCode
+            val stream = if (status < 400) conn.inputStream else conn.errorStream // a 3xx body is on the input stream
+            val body = stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } ?: ""
+            return DirectPostResult(status, body)
+        } finally {
+            conn.disconnect()
+        }
     }
 }

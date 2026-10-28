@@ -76,6 +76,7 @@ object TierCRefusalReply {
         val conn = (URL(uri).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
+            instanceFollowRedirects = false // finding #52: a 3xx is a status, not a reason to re-send as a body-less GET
             connectTimeout = timeoutMs
             readTimeout = timeoutMs
             setRequestProperty("content-type", "application/x-www-form-urlencoded")
@@ -83,7 +84,7 @@ object TierCRefusalReply {
         try {
             conn.outputStream.use { it.write(body.toByteArray(StandardCharsets.UTF_8)) }
             val status = conn.responseCode
-            (if (status in 200..299) conn.inputStream else conn.errorStream)?.use { it.readBytes() }
+            (if (status < 400) conn.inputStream else conn.errorStream)?.use { it.readBytes() }
             return status
         } finally {
             conn.disconnect()

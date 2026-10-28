@@ -69,14 +69,43 @@ object TierCText {
     fun refusalDialog(r: TierCAdmission.Refusal, afterRead: Boolean, delivery: Delivery): String =
         if (r == TierCAdmission.Refusal.OPERATOR_SWITCH_OFF) startFor(r) else "${startFor(r)} ${ending(afterRead, delivery)}"
 
-    /** One-line reason (report/Log "result"), value-free. */
-    fun refusalResult(r: TierCAdmission.Refusal): String = when (r) {
+    /** One-line reason (report/Log "result"), value-free. [reason] is the fixed code from [TierCAdmission.Decision.Refuse]
+     * (a parse reason, or a gate/age code): when it is one [reasonWords] knows, the line says it in plain words after the
+     * general sentence, so the Log is specific while the dialog (which never takes a reason) stays one simple message
+     * and the website is told only a generic "refused" (D109 g5/h4, finding #53). */
+    fun refusalResult(r: TierCAdmission.Refusal, reason: String? = null): String = when (r) {
         TierCAdmission.Refusal.OPERATOR_SWITCH_OFF -> "Refused: this version of the app does not do additional verifications"
         TierCAdmission.Refusal.NOT_PINNED -> "Refused: this website is not approved to ask additional questions"
         TierCAdmission.Refusal.HOLDER_SETTING_OFF -> "Refused: additional verifications are turned off in Settings"
-        TierCAdmission.Refusal.REQUEST_NOT_ANSWERABLE -> "Refused: the website asked something this app does not answer"
-        TierCAdmission.Refusal.AGE_NOT_LOCKED_AGE, TierCAdmission.Refusal.AGE_CONFLICT_IN_REQUEST ->
-            "Refused: the website asked about a different age than the one it first asked"
+        TierCAdmission.Refusal.REQUEST_NOT_ANSWERABLE ->
+            "Refused: the website asked something this app does not answer" + (reason?.let(::reasonWords)?.let { " ($it)" } ?: "")
+        TierCAdmission.Refusal.AGE_NOT_LOCKED_AGE -> "Refused: the website asked about a different age than the one it first asked"
+        TierCAdmission.Refusal.AGE_CONFLICT_IN_REQUEST -> "Refused: the website asked about two different ages in one request"
+    }
+
+    /** Plain words for one fixed refusal code, for the Log only: the request codes ([TierCRequest.parse]) and the
+     * after-read codes ([TierCAnswers.answerAll] / [TierCPredicates]). Value-free: no name, number, country code or URL.
+     * Null for a code it does not know (the caller then says only the general sentence). */
+    fun reasonWords(code: String): String? = when (code) {
+        "predicates_absent" -> "no questions were listed"
+        "predicates_empty" -> "no question was asked"
+        "predicate_malformed" -> "a question was not readable"
+        "predicate_not_in_vocabulary" -> "a question this app does not know"
+        "nationality_asked_more_than_once" -> "nationality was asked more than once"
+        "boundary_malformed" -> "a question had an unreadable limit"
+        "boundary_off_list" -> "a question used a limit this app does not allow"
+        "code_invalid" -> "a question named a country code this app cannot read"
+        "exclusion_set_size" -> "a question listed no countries or too many"
+        "name_fields_malformed" -> "a name question was incomplete"
+        "number_malformed" -> "a document number question was incomplete"
+        "document_not_answerable" -> "your document did not pass the app's checks"
+        "expiry_unreadable" -> "the expiry date could not be read"
+        "dob_unreadable" -> "the date of birth could not be read"
+        "nationality_unreadable" -> "the nationality could not be read"
+        "document_number_unreadable" -> "the document number could not be read"
+        "name_unreadable" -> "the name could not be read"
+        "claimed_invalid" -> "a question's details were not valid"
+        else -> null
     }
 
     /** The Log tab line: the reason, then whether the refusal reached the site. Value-free (no name, number, code or URL). */
@@ -100,6 +129,10 @@ object TierCText {
     fun couldNotAnswerDialog(delivery: Delivery): String =
         "Your document could not answer every question the website asked. ${ending(true, delivery)}"
     const val COULD_NOT_ANSWER_RESULT = "Refused: your document could not answer every question"
+
+    /** The Log "result" for a post-read refusal: the general sentence plus the specific [reasonWords] (finding #53). */
+    fun couldNotAnswerResult(reason: String): String =
+        COULD_NOT_ANSWER_RESULT + (reasonWords(reason)?.let { " ($it)" } ?: "")
 
     /** D110: the report's "what was sent" line when the app tells the website, in one plain sentence, that the request
      * was refused. No reason, nothing about the holder or the document. */

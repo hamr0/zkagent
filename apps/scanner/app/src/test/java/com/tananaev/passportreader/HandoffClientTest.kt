@@ -65,4 +65,55 @@ class HandoffClientTest {
         val presentation = HandoffClient.buildPresentation("A", mapOf("over_threshold" to true, "threshold" to 18), ch, null, emptyList())
         assertEquals(ch.toString(), presentation.getJSONObject("challenge").toString())
     }
+
+    // ---------------------------------------------------------------- finding #52: a redirect on the answer post
+
+    @Test
+    fun `a 301, 302 or 303 on the answer post is returned as that status, not followed, and maps to Rejected`() {
+        for (status in listOf(301, 302, 303, 307)) {
+            RedirectServer(status).use { srv ->
+                val result = HandoffClient.postForm(srv.postUrl, "vp_token=x")
+                assertEquals("status $status", status, result.httpStatus)
+                assertEquals("", result.body) // a 3xx with no body: the null error stream reads as empty, no throw
+                assertEquals(1, srv.postHits())
+                assertEquals("the landing page got no request ($status)", 0, srv.landingHits())
+                // MainActivity maps `httpStatus in 200..299` to Accepted and everything else to Rejected
+                assertFalse(result.httpStatus in 200..299)
+                assertEquals(VerifierRefusal.Outcome.Refused("HTTP $status"), VerifierRefusal.classify(result.httpStatus, result.body))
+                assertEquals("Verifier refused: HTTP $status", VerifierRefusal.dialogMessage(VerifierRefusal.classify(result.httpStatus, result.body)) ?: "Verifier refused: HTTP ${result.httpStatus}")
+            }
+        }
+    }
+
+    @Test
+    fun `a 302 that carries a body is read, not thrown on`() {
+        RedirectServer(302, "{\"error\":\"moved\"}").use { srv ->
+            val result = HandoffClient.postForm(srv.postUrl, "vp_token=x")
+            assertEquals(302, result.httpStatus)
+            assertEquals("{\"error\":\"moved\"}", result.body)
+            assertEquals(0, srv.landingHits())
+        }
+    }
+
+    // ---------------------------------------------------------------- finding #52: a redirect on the request_uri GET
+
+    @Test
+    fun `a 301, 302, 303 or 307 on the request_uri GET is a failed fetch with that status and the landing host is never contacted`() {
+        for (status in listOf(301, 302, 303, 307)) {
+            RedirectServer(status).use { srv ->
+                val e = try {
+                    HandoffClient.fetchRequestRaw(srv.postUrl)
+                    null
+                } catch (e: HandoffClient.HandoffHttpException) {
+                    e
+                }
+                assertTrue("status $status must throw", e != null)
+                assertEquals(status, e!!.httpStatus)
+                assertEquals(1, srv.seen.count { it.method == "GET" && it.path == "/post" })
+                assertEquals("the landing host got no request ($status)", 0, srv.landingHits())
+                // RequestTrust.verifyHandoff turns this into the existing refusal
+                assertTrue(e.message!!.startsWith("GET http://127.0.0.1:"))
+            }
+        }
+    }
 }

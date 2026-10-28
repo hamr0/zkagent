@@ -1064,7 +1064,7 @@ abstract class MainActivity : AppCompatActivity() {
      * never silent). This runs at the lock tap on a request the user chose to verify, not on a foreign intent, so the
      * outcome dialog (which clears the pending request) is the right surface (findings #12/#13 are about foreign intents). */
     private fun refuseTierC(verified: RequestTrust.VerifiedRequest, refusal: TierCAdmission.Decision.Refuse, afterRead: Boolean = false, onArrival: Boolean = false) {
-        val reason = TierCText.refusalResult(refusal.refusal)
+        val reason = TierCText.refusalResult(refusal.refusal, refusal.reason)
         Log.e(TAG, "M3b tier-C: REFUSED ${if (afterRead) "after the read (answer-time re-decision)" else if (onArrival) "on arrival (D112), before any read or mint" else "before any read or mint"} — cause=${refusal.refusal.name.lowercase(Locale.ROOT)} reason=${refusal.reason} chip_read=$afterRead mint=false")
         // D110: a request that passed the gates (verified, operator on, host pinned) is told one generic "refused".
         val notice = TierCRefusalReply.plan(verified, OperatorPolicy.TIER_C_ENABLED, OperatorPolicy.TIER_C_VERIFIERS)
@@ -1134,7 +1134,7 @@ abstract class MainActivity : AppCompatActivity() {
             // generic "refused" goes out; the reason stays here. The dialog and Log line wait for the post's result.
             val notice = TierCRefusalReply.plan(snapshot.request, OperatorPolicy.TIER_C_ENABLED, OperatorPolicy.TIER_C_VERIFIERS)
             deliverGenericTierCRefusal(notice, "document_could_not_answer") { delivery ->
-                val line = TierCText.logLine(TierCText.COULD_NOT_ANSWER_RESULT, delivery)
+                val line = TierCText.logLine(TierCText.couldNotAnswerResult(answered.reason), delivery)
                 emitReport(
                     baseReport + "\ntier_c: REFUSED whole — ${answered.reason}; no answer sent" + if (delivery.told) ", a plain refused notice was sent" else "",
                     ReportLog.DisclosureSummary(
