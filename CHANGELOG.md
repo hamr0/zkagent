@@ -3,6 +3,113 @@
 All notable changes to zkagent are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: [SemVer](https://semver.org/).
 
+## [0.9.0] — 2026-10-28
+
+Lockstep release (D72, ship as 0.9.0 per D117): `packages/chiproof`, `apps/demo` and
+`apps/scanner` move 0.8.0 → 0.9.0 together (`package.json` + lockfile for chiproof and the
+demo; scanner versionCode 7 → 8 / versionName "0.9.0"). Minor bump: tier C is a new
+feature. Versioning stays 0.x with no 1.0. M3b/tier C was revived by D109 after the 0.8.0
+close-out, and is built and device-checked on a Pixel 6a with a US passport and an NL ID card.
+This release does not claim zero-knowledge: tier C is plain passive-authentication reads
+answered as yes/no.
+
+### Added
+
+- **Tier C: attributed yes/no checks for pinned sites (D109).** A pinned site can ask one
+  request several plain questions and get a yes/no per question, never a value. Five question
+  kinds: document expiry bucket (3/6/12 months), date-of-birth range with the fixed age
+  boundaries, nationality (confirm "is it X?", or "not in this set"), document-number match,
+  and a name match that takes two fields, `given_names` and `surname`, so no name order is
+  assumed (given names match in full, ICAO 9303 Part 3 transliteration accepted, truncation
+  stays disclosed). The whole request is all-or-nothing: if any question is off-list or the
+  request breaks a rule, nothing is read. Proven on the real chip first (60/60 predicate
+  battery on both documents) before the rest was built.
+- **Three gates, all off or empty by default.** Tier C is reachable only through the
+  operator's `operator.json` switch (`tier_c.enabled`), plus an exact-hostname
+  `tier_c_verifiers` pin list, plus the holder's own Settings switch "Allow additional
+  verifications" (OFF by default; it turns off again on reinstall). A build with the
+  operator switch off shows a plain note instead of the setting.
+- **Shared age lock (D109).** One age boundary per site is shared across tiers A, B and C
+  (tier-C date-of-birth range included); `multi_threshold_verifiers` sites are exempt. The lock
+  is written only after every question has been answered, never on a refusal.
+- **Generic site refusal (D110).** When a gated tier-C request is refused, the site receives
+  one generic OpenID4VP `access_denied` with the same body for every cause, so a pinned site
+  learns only "refused"; the specific reason is shown in the app only. One attempt, never
+  retried. The app says "the website was told" only after a 2xx.
+- **D118: at most one `nationality_is` and one `nationality_not_in` per request.** Closes the
+  one-scan route around D102's 10-code cap (many exclusion sets or many "is it X?" guesses in
+  a single request could reveal nationality). Counted by kind, so one of each stays valid.
+  chiproof returns `nationality_asked_more_than_once` (never throws), the scanner refuses
+  with the same reason. D102's cap of 10 codes per exclusion set is enforced site-side and
+  app-side.
+- **chiproof tier-C API.** `validateTierCPredicates` (fixed vocabulary and boundary lists,
+  never throws), `issueChallenge({tier:'C', predicates})` (predicates signed inside the
+  challenge), `checkTierCAnswers` (answers checked against the challenge's predicates one for
+  one, in order; echoes names and fixed boundaries, never a site value), and
+  `verifyTierCRefusal` (`access_denied` → `ok:true, allowed:false, refused:true`; other
+  errors `ok:false, allowed:null`). Answers wire: `{spec:'zkagent/1', tier:'C', challenge,
+  answers}`. Contracts never throw.
+- **Open age verification.** `operator.json` `verifiers` may now be the string `"any"` (build
+  rule 12) instead of a hostname array, so tier A/B age checks can be open to any site.
+  Tier C still needs the exact-hostname pin, and `multi_threshold_verifiers` keeps its own
+  list. An unpinned tier-C request under "any" still costs the key fetch and the
+  `request_uri` GET (stated in the customer guide).
+- **Real-TLS key discovery with no redirects (D113).** The well-known request-signer key
+  fetch follows no redirects (any 3xx counts as not resolvable). Verified with loopback
+  sockets in the unit suite and once against a real CA-valid host: the good site answered, a
+  mismatched-key site and an untrusted-certificate site were each refused.
+- **Demo: tier-C site side.** `apps/demo` issues tier-C challenges through chiproof, verifies
+  the answers, shows a third action "Prove specific attributes" (loopback only) with one
+  generic Refused outcome, and renders no value. A `PUBLIC_SCHEME` knob and a test-only TLS
+  deploy kit support the real-TLS run. The demo page stays the local test and showcase page
+  for chiproof adopters (D111).
+
+### Changed
+
+- **Refusal popups (D112, D113).** Every refused site request shows one plain popup ("This
+  website's request could not be verified, so it was not answered. Nothing was read and
+  nothing was sent."); the technical reason stays in the Log tab. Tier-C refusals are decided
+  on arrival, before any Verify tap. Every non-success outcome popup uses the red refusal
+  colour; success popups stay plain.
+- **Link-once and in-flight restore (item 18, finding #48).** Each incoming link is handled
+  once: a persisted, capped record (50 SHA-256 hashes of the whole link, no origins or
+  request text) keeps a replayed link from re-running after process death or a package
+  update. A recreation during an in-flight check restores the verified handoff without a
+  second `request_uri` GET.
+- **Settings help (D114).** The help text is three paragraphs (Off / On / limits) and states
+  that an approved website can ask the same questions again on later scans and that the
+  setting turns off again on reinstall. A refused request's scan-pane status reads "This
+  website's request could not be verified. You can still scan your document for yourself."
+- **Tabless, always-light layout (D115).** The four-tab strip is replaced by three swipeable
+  pages (Scan, Log, Settings) with a centred title, arrows and dots; Diagnostics sits at the
+  bottom of Settings. The site's question shows in a navy box, and the last-scan line under
+  the button is green when it worked, red when it didn't, grey before any scan. The app is
+  always light (night resources removed). `ReportLog.append` no longer defaults a missing
+  last-scan to REFUSED (finding #51).
+- **operator.json build rules 10-12 and negative cases (item 19).** Rules 10-11 (tier C
+  switch and pin list) and 12 (`verifiers: "any"`) are enforced at build time. The negative
+  script now has 39 `PASS` cases, including comma/quote/backslash rejection for
+  `multi_threshold_verifiers` and `tier_c_verifiers`.
+- **Docs.** README rewritten for tier C and open age verification (and no longer says
+  "zero-knowledge"); customer guide §4.1 states every tier-C limit plainly; the privacy
+  policy names the holder setting, the hashed handled-link record and that tier C answers
+  several yes/no questions; chiproof README gains a tier-C section; stale version and
+  "closed" lines corrected. The D115 design plan and scanner design memory moved into `docs/`.
+- **Housekeeping.** `.claude/` is no longer tracked in git (it stays on disk).
+
+### Known limits / not done
+
+- Not checked on the phone: the D118 one-of-each rule, the post-read refusal line, the
+  Settings page on a tier-C-off build, the green "delivered" last-scan line, and TalkBack.
+  These are covered by unit tests and the negative script only.
+- The real-TLS key fetch was run once, on one host.
+- Not device-checked and stated in the records: the under-threshold popup, a recreation while a
+  request is still verifying (unit-tested only).
+- Item 24, the showcase page covering every scenario, moves to 0.10.0 (D117).
+- Chip cloning stays an accepted limitation; a pinned site learns only "refused" (finding #31).
+- Verified at the release commit: chiproof 211 tests + typecheck, demo 66, scanner 632 with
+  0 failures, operator-json negative script 39 `PASS`.
+
 ## [0.8.0] — 2026-10-24
 
 Lockstep release (D72): `packages/chiproof` and `apps/scanner` move 0.7.1 →

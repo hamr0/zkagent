@@ -369,12 +369,12 @@ android {
         // from. Single real target device for M2 (Pixel 6a, Android 14+).
         minSdk = 30
         targetSdk = 36
-        versionCode = 7
+        versionCode = 8
         // D72 (2026-09-03): lockstep versioning — versionName now tracks the
         // repo's single release version (packages/chiproof/package.json +
         // this field + one CHANGELOG.md section, bumped together every
         // release), not an app-only number.
-        versionName = "0.8.0"
+        versionName = "0.9.0"
 
         // §6.2 item 24 (D70(c)) — exposed as BuildConfig.GIT_SHA, consumed
         // by VersionStamp.format(). Not a manifest label: a manifest
