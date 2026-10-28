@@ -1,6 +1,6 @@
 # apps/demo — M3 age-gate demo (PRD §6.3, D73–D76)
 
-**Status: shipped with v0.6.0 and later releases. The project was closed as a complete experiment (D108) and then revived for tier C (D109); the demo's tier-C site side (`tierc.mjs`) is built and device-checked and ships in 0.9.0.** This is the reference adopter of `chiproof`, run locally for demonstration, not a hosted service. Tests: `npm test` (node:test).
+**Status: shipped with v0.6.0 and later releases. The project was closed as a complete experiment (D108) and then revived for tier C (D109); the demo's tier-C site side (`tierc.mjs`) is built and device-checked and shipped in 0.9.0.** This is the reference adopter of `chiproof`, run locally for demonstration, not a hosted service. Tests: `npm test` (node:test).
 
 The M3 vanilla demo: a plain HTML/CSS/JS website (no framework, no build step) that plays the
 role of an adopter's OWN verifier around `chiproof` (the M1 verdict core). It is meant as a

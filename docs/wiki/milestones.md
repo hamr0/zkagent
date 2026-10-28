@@ -244,7 +244,7 @@ delegation) — it does not touch the rung-2 agent layer (backlog, D108).
 (2026-10-24). All items below were ruled (D89–D106), with D107 recording a further round of owner
 rulings on points the first §6.9 draft raised. The build-scope design at §6.9 was approved by the
 owner on 2026-10-25 as amended (D109(h)), which satisfies NO-GO #10 for that amended scope and
-nothing wider. Tier C is now built and device-checked and ships in 0.9.0 (D116); the scanner answers it only with the operator switch on, the site's exact hostname pinned and the holder's setting on, and refuses it otherwise. See `backlog.md`.
+nothing wider. Tier C is now built and device-checked and shipped in 0.9.0 (D116); the scanner answers it only with the operator switch on, the site's exact hostname pinned and the holder's setting on, and refuses it otherwise. See `backlog.md`.
 
 **D109 amendment (2026-10-25), approved as amended by D109(h):** the owner revived M3b and reduced
 its scope. Items 3-6 below that rested on operator-signed membership statements (the statement
@@ -914,7 +914,7 @@ here only, not actioned.
 
 ## 6.9 M3b scope (IN BUILD — approved 2026-10-25, D109(h); tier C built and device-checked, D116)
 
-> **IN BUILD (approved 2026-10-25, D109(h)); tier C itself is built and device-checked and ships in 0.9.0 (D116, 2026-10-27).** Was PARKED by D108 (2026-10-24). The owner reviewed a
+> **IN BUILD (approved 2026-10-25, D109(h)); tier C itself is built and device-checked and shipped in 0.9.0 (D116, 2026-10-27).** Was PARKED by D108 (2026-10-24). The owner reviewed a
 > plain-language summary of the tier-C plan on 2026-10-25 and APPROVED it with amendments (D109(h)),
 > which satisfies NO-GO #10 for the scope as amended below and nothing wider. Nothing in this
 > section was built when this was written. Update (D116): tier C is now built and device-checked; the scanner answers it only with the operator switch on, the site's exact hostname pinned and the holder's setting on. The milestone stays in build.

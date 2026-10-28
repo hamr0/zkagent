@@ -37,7 +37,7 @@ The phone reads the chip over NFC and checks the government's own signature on i
 
 ## What's built
 
-Three parts, all open source under Apache-2.0. Tier C (below) is built and device-checked and ships in 0.9.0, which is not out yet. The latest release is v0.8.0.
+Three parts, all open source under Apache-2.0. Tier C (below) is built and device-checked and shipped in 0.9.0. The latest release is v0.9.0.
 
 | Part | What it is | Where |
 |---|---|---|
@@ -72,7 +72,7 @@ It is closed by default. Three things must all be true before the app answers a 
 
 The app answers every question in a request or refuses the whole request, never part of it. For any tier-C refusal the site sees only a generic "refused". The specific reason shows in the app only. A build that turns tier C on without a pin list, or has a pin list without turning it on, fails to build.
 
-Tier C is built and device-checked on a US passport and a Dutch ID card, and ships in 0.9.0. It is not zero-knowledge either: it is minimal disclosure of yes/no answers. The limits are listed under [Honest limits](#honest-limits).
+Tier C is built and device-checked on a US passport and a Dutch ID card, and shipped in 0.9.0. It is not zero-knowledge either: it is minimal disclosure of yes/no answers. The limits are listed under [Honest limits](#honest-limits).
 
 ### Age thresholds
 
@@ -106,7 +106,7 @@ Age verification (tiers A and B) can be open to any site. In `operator.json`, `"
 - **Bans that stick:** banning the per-site tag keeps the same person out, even under a new email address.
 - **A human, not a bot:** a privacy-preserving captcha replacement.
 
-**Built and device-checked, ships in 0.9.0 (tier C):**
+**Built and device-checked, shipped in 0.9.0 (tier C):**
 - **KYC-style yes/no checks:** name match, date of birth within a range, nationality, document valid for at least 3, 6 or 12 months, and document-number match. These are answered only to sites whose exact hostname the operator pinned, and only when the holder allows additional verifications.
 
 **Agents (in the IETF draft, not built here):**
@@ -153,7 +153,7 @@ You need an Android phone with NFC and a chip passport or ID card.
 
 ## Reuse it
 
-The latest release is v0.8.0 (2026-10-24). Version 0.9.0, with tier C, is in build. zkagent has no production users and stays on 0.x. It's built to be picked apart. [`docs/product/reuse-map.md`](docs/product/reuse-map.md) lists every liftable part (the verdict core, the evidence plugs, the chip and masterlist check, the secure-hardware key, the handoff, the config gate and the publish workflow) with its maturity, evidence and caveats.
+The latest release is v0.9.0 (2026-10-28), with tier C. zkagent has no production users and stays on 0.x. It's built to be picked apart. [`docs/product/reuse-map.md`](docs/product/reuse-map.md) lists every liftable part (the verdict core, the evidence plugs, the chip and masterlist check, the secure-hardware key, the handoff, the config gate and the publish workflow) with its maturity, evidence and caveats.
 
 ## Repo layout
 
