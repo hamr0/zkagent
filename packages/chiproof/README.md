@@ -26,6 +26,49 @@ const verdict = await verifier.verify({
 });
 ```
 
+## Tier C: asking specific questions
+
+Tier C asks a pinned site's chosen questions about the document (expiry bucket, date-of-birth range, nationality, name, document number) and gets back one yes/no per question. It is off unless you turn it on in two places, and the challenge must be signed by an issuer you trust:
+
+```js
+import { generateKeyPairSync } from 'node:crypto';
+import { createVerifier, InMemoryNonceStore, verifyTierCRefusal } from 'chiproof';
+
+const issuerKeys = generateKeyPairSync('ed25519'); // your challenge-signing key; keep the private half server-side
+const verifier = createVerifier({
+  scopeDomain: 'example.com',
+  challengeSecret: 'a-secret-at-least-16-bytes-long',
+  stores: { nonce: new InMemoryNonceStore({ quiet: true }) },
+  tiers: { max: 'C' },                                                                   // 1. allow tier C
+  trustedChallengeIssuers: [{ pubkey: issuerKeys.publicKey, key_id: 'my-issuer', maxTier: 'C' }], // 2. trust this signer for C
+});
+
+const challenge = verifier.issueChallenge({
+  tier: 'C',
+  predicates: [
+    { name: 'expiry_beyond', months: 6 },                  // months: 3 | 6 | 12
+    { name: 'dob_at_least', age: 18 },                     // age: 15 | 16 | 18 | 21 | 60 | 65
+    { name: 'nationality_not_in', codes: ['CUB', 'RUS'] }, // 1 to 10 codes
+  ],
+  ttlMs: 60_000,
+  issuer: { privateKey: issuerKeys.privateKey, key_id: 'my-issuer' },
+});
+
+// `presentation` is what the phone posts back: { spec: 'zkagent/1', tier: 'C', challenge, answers }.
+const verdict = await verifier.verify(presentation);
+// verdict.answers: [{ name: 'expiry_beyond', months: 6, result: true }, ...]  one per question, in order
+
+// If the holder declines, the app posts an OpenID4VP error; classify it:
+const refusal = verifyTierCRefusal({ error: 'access_denied', state }); // { ok: true, allowed: false, refused: true, ... }
+```
+
+- **Read `verdict.answers[].result`, never `verdict.allowed`.** `allowed: true` only means "a well-formed answer to exactly what you asked arrived". A `result: false` is a real answer, not a failure.
+- **The refusal is generic.** `verifyTierCRefusal` returns the same verdict for every cause (D110); you cannot tell why the holder said no. You match `state` to your own transaction.
+- **Limits, checked when you issue the challenge** (`issueChallenge` throws, and `validateTierCPredicates(list)` returns `{ok:false, reason}` without throwing): an exclusion set holds at most 10 country codes (D102), and a request carries at most one `nationality_is` and at most one `nationality_not_in` (D118, reason `nationality_asked_more_than_once`). Other questions are not capped.
+- Without `tiers: { max: 'C' }` and a `trustedChallengeIssuers` entry with `maxTier: 'C'`, `verify()` returns `tier_exceeds_max` or `signature_required_at_tier_c`.
+
+The full contract is in [`chiproof.context.md`](./chiproof.context.md).
+
 ## Full integration guide
 
 Every config option, the complete public API, the `NonceStore` and evidence-plug

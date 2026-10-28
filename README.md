@@ -33,7 +33,7 @@ zkagent is an **open-source lab** that proves one thing in working code: you can
 
 The phone reads the chip over NFC and checks the government's own signature on it (ICAO 9303 passive authentication). It then sends the requesting site a single answer instead of the data. The document never leaves the phone, and nothing from it is stored.
 
-**Zero-knowledge in spirit, not in cryptography.** zkagent uses no zero-knowledge circuits of its own. Its privacy comes from minimalism: one bit out, a fresh single-use nonce, per-site keys, and coarsened dates so that nothing stable leaks. It's simple, auditable and deliberately boring. Third-party ZK proofs can be plugged in as optional evidence, but they are never the default.
+**Minimal disclosure, not zero-knowledge cryptography.** zkagent uses no zero-knowledge circuits of its own. Its privacy comes from minimalism: one bit out, a fresh single-use nonce, per-site keys, and coarsened dates so that nothing stable leaks. It's simple, auditable and deliberately boring. Third-party ZK proofs can be plugged in as optional evidence, but they are never the default.
 
 ## What's built
 
