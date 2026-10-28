@@ -306,7 +306,7 @@ abstract class MainActivity : AppCompatActivity() {
     // 2026-09 real-device fix: no RadioGroup/RadioButton any more — mode
     // is DERIVED (see class doc, item 4 section) and this TextView is its
     // ONLY display, doubling as the pre-lock "current derived mode"
-    // indicator and the post-lock "Locked: mode X" banner (see
+    // indicator and the post-lock "Ready — tap your document now" banner (see
     // refreshSessionDisplay / lockModeAndArm).
     private lateinit var modeStatusView: TextView
     private lateinit var lockButton: Button
@@ -1037,7 +1037,7 @@ abstract class MainActivity : AppCompatActivity() {
         // [authorizedHandoff]'s doc).
         authorizedHandoff = snapshot
         // D58 step 4: [refreshSessionDisplay] reads [lockedMode] (just set,
-        // above) and renders the SAME "Locked: mode X — tap your document
+        // above) and renders the SAME "Ready — tap your document
         // now" banner, disabled button, and (Q40, CLOSED D67) "Tap and
         // scan" label — see [SessionDisplay.render]'s `locked` branch.
         refreshSessionDisplay()
@@ -1668,7 +1668,7 @@ abstract class MainActivity : AppCompatActivity() {
      * call site already renders, regardless of whether [outcome] is
      * [RequestTrust.Outcome.Verified] or [RequestTrust.Outcome.Refused] —
      * the old unconditional `modeStatusView.text`/`lockButton.isEnabled`
-     * writes this replaced could stomp the "Locked: mode X" banner; these
+     * writes this replaced could stomp the "Ready — tap your document now" banner; these
      * cannot. */
     private fun applyHandoffVerificationOutcome(handoff: HandoffClient.PendingHandoff, outcome: RequestTrust.Outcome) {
         if (pendingHandoff !== handoff) {

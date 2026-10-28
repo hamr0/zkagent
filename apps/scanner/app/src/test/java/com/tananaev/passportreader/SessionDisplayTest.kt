@@ -88,7 +88,7 @@ class SessionDisplayTest {
     @Test
     fun `locked mode A shows the locked banner, disables the button, and blanks the handoff line`() {
         val p = SessionDisplay.render(locked = SessionDisplay.LockedMode.A, handoff = SessionDisplay.HandoffState.None)
-        assertEquals("Locked: mode A — tap your document now", p.modeStatusText)
+        assertEquals("Ready — tap your document now", p.modeStatusText)
         assertEquals("", p.handoffStatusText)
         assertFalse(p.lockButtonEnabled)
         assertEquals(SessionDisplay.LockButtonLabel.TAP_AND_SCAN, p.lockButtonLabel)
@@ -97,7 +97,7 @@ class SessionDisplayTest {
     @Test
     fun `locked mode B shows the locked banner`() {
         val p = SessionDisplay.render(locked = SessionDisplay.LockedMode.B, handoff = SessionDisplay.HandoffState.None)
-        assertEquals("Locked: mode B — tap your document now", p.modeStatusText)
+        assertEquals("Ready — tap your document now", p.modeStatusText)
     }
 
     /**
@@ -116,7 +116,7 @@ class SessionDisplayTest {
             locked = SessionDisplay.LockedMode.B,
             handoff = SessionDisplay.HandoffState.Verified("attacker.example", "A"),
         )
-        assertEquals("Locked: mode B — tap your document now", p.modeStatusText)
+        assertEquals("Ready — tap your document now", p.modeStatusText)
         assertFalse("must not mention the foreign origin", p.handoffStatusText.contains("attacker.example"))
         assertEquals("", p.handoffStatusText)
         assertFalse(p.lockButtonEnabled)
@@ -141,7 +141,7 @@ class SessionDisplayTest {
             locked = SessionDisplay.LockedMode.A,
             handoff = SessionDisplay.HandoffState.Refused("some foreign refusal reason"),
         )
-        assertEquals("Locked: mode A — tap your document now", p.modeStatusText)
+        assertEquals("Ready — tap your document now", p.modeStatusText)
         assertFalse(p.handoffStatusText.contains("some foreign refusal reason"))
         assertFalse(p.lockButtonEnabled)
     }
@@ -425,7 +425,7 @@ class SessionDisplayTest {
         val line = "\u2022 Whether your document is valid for more than 6 months from today"
         val verified = SessionDisplay.HandoffState.Verified("127.0.0.1:8787", "C", threshold = null, tierCLine = line)
         val p = SessionDisplay.render(locked = SessionDisplay.LockedMode.C, handoff = SessionDisplay.HandoffState.None, handoffDrivenLock = true, lockedQuestionHandoff = verified)
-        assertEquals("Locked: mode C — tap your document now", p.modeStatusText)
+        assertEquals("Ready — tap your document now", p.modeStatusText)
         assertEquals("This website asks:\n$line", p.questionText)
         assertFalse(p.questionText.contains("over"))
     }

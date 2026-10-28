@@ -268,12 +268,10 @@ object SessionDisplay {
     ): Projection {
         val pasteButtonEnabled = HandoffAdmission.mayAdmitInboundHandoff(sessionLocked = locked != null, readInProgress = readInProgress)
         if (locked != null) {
-            // Matches lockModeAndArm's pre-refactor text verbatim
-            // ("Locked: mode ${lockedMode} — tap your document now") —
-            // PresentationMode/[LockedMode]'s default toString() gives
-            // exactly "A"/"B", same as before.
+            // Same banner for every tier ("Ready — tap your document
+            // now"); no mode letter, which is internal jargon.
             return Projection(
-                modeStatusText = "Locked: mode $locked — tap your document now",
+                modeStatusText = "Ready — tap your document now",
                 // Whatever the pre-lock handoff status said is moot once
                 // locked — lockModeAndArm's own doc already required
                 // reading only the verified request's tier before this

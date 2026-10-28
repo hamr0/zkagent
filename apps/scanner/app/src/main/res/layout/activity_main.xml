@@ -139,7 +139,7 @@
                         android:textStyle="bold"
                         tools:text="This website asks if you are over 18" />
 
-                    <!-- The hint line (derived mode / "Locked: ..." banner; MainActivity.refreshSessionDisplay is its
+                    <!-- The hint line (derived mode / "Ready — tap your document now" banner; MainActivity.refreshSessionDisplay is its
                          only writer). D115: directly under the question, above the fields and VERIFY. -->
                     <TextView
                         android:id="@+id/mode_status"
@@ -149,7 +149,7 @@
                         android:gravity="center"
                         android:textSize="12sp"
                         android:textStyle="italic"
-                        tools:text="Locked: mode B — tap your document now" />
+                        tools:text="Ready — tap your document now" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/input_passport_number_layout"
