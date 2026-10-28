@@ -12,4 +12,4 @@ Standards guide (read when designing/building something new, not hot context):
 .claude/remember/AGENT_RULES.md
 <!-- AGENT_RULES:END -->
 
-Repo-specific: `.claude/remember/` is tracked here by design (LIBRARY_CONVENTIONS §7 exemption), except `.claude/remember/last-review.md` and `fix-ledger.md`, which are gitignored since tracking them made `/branch-review` invalidate itself (writing them dirties the tree pre-Phase-0; committing them moves HEAD past the recorded SHA, failing Phase 0.5). `.claude/stash/` is gitignored for new files (session handover notes, not deliverables); stash files already tracked before that change stay tracked.
+Repo-specific: `.claude/` is gitignored and untracked as of 2026-10-28 (owner); memory, stashes, review records and the fix ledger live on disk only.
