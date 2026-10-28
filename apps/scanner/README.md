@@ -27,6 +27,9 @@ licensing is ever clarified otherwise. Not independently resolved.
 
 ## Build
 
+A complete cold-clone walk-through (prerequisites, install routes, tests, phone checks) is in
+`docs/product/install-and-test-guide.md`; the short version follows.
+
 ```
 export JAVA_HOME=$HOME/.gradle/jdks/eclipse_adoptium-17-amd64-linux.2 ANDROID_HOME=$HOME/Android/Sdk
 ./gradlew :app:assembleRegularDebug      # debug — one cleartext exception (10.0.2.2/localhost)

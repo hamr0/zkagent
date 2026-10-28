@@ -30,6 +30,9 @@ only to `127.0.0.1`/`localhost`/`10.0.2.2` in debug builds and to nothing at all
 a LAN-IP origin or a self-signed HTTPS cert is refused by the released APK. No scanner-side
 change is required or in scope (§6.3 item 13).
 
+Prerequisites, the phone-side steps and the full manual phone test are in
+`docs/product/install-and-test-guide.md`.
+
 ## Wire steps
 
 | Wire step | Endpoint here | Capture source |
@@ -189,6 +192,17 @@ node scripts/fake-wallet.mjs --base http://127.0.0.1:8787 [--tier A|B] [--mode v
 Plays the phone's role headlessly (fetch `request.jwt` → verify its JWS → build a presentation →
 `direct_post` → poll), so the roundtrip is provable without a device. See the script's own
 header comment for what each `--mode` exercises.
+
+## Redirect proxy (test helper)
+
+`scripts/redirect-proxy.mjs` is a test helper, not product. It sits on the port the phone reaches and forwards to the real demo on another port, except that it answers `POST /wallet/direct_post` (and, with `--redirect-get`, `GET /wallet/request.jwt/*`) with a 3xx redirect to a 200 page of its own. It checks that the scanner never follows a redirect on its calls to the site (finding #52): a correct app never makes the proxy log a `LANDING` line, and the transaction stays `pending`.
+
+```
+PORT=8788 node server.mjs &
+node scripts/redirect-proxy.mjs --listen 8787 --upstream 8788 --code 302 [--landing /redirect-landing] [--redirect-get]
+```
+
+It logs method, path, status and body length only. The device procedure is in `docs/product/install-and-test-guide.md`.
 
 ## Byte layout, scope-domain history, and other implementation notes
 

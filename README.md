@@ -149,6 +149,8 @@ You need an Android phone with NFC and a chip passport or ID card.
 2. Run the demo site on your computer and reach it from the phone over USB with `adb reverse tcp:8787 tcp:8787`. The steps are in [`apps/demo/README.md`](apps/demo/README.md).
 3. To use the verifier in your own site, run `npm install chiproof`.
 
+The full walk-through, from prerequisites and building to the automated tests and a step-by-step phone test, is [`docs/product/install-and-test-guide.md`](docs/product/install-and-test-guide.md).
+
 [`docs/product/customer-guide.md`](docs/product/customer-guide.md) explains every screen, and section 7.1 covers building and signing your own scanner.
 
 ## Reuse it
@@ -161,6 +163,7 @@ The latest release is v0.9.0 (2026-10-28), with tier C. zkagent has no productio
 - `apps/scanner`: the Android scanner
 - `apps/demo`: the local demo site
 - `docs/product/zkagent-prd.md`: the spec, decisions and NO-GO table
+- `docs/product/install-and-test-guide.md`: install, build, test and reuse, from a cold clone
 - `docs/product/customer-guide.md`: screen-by-screen guide
 - `docs/product/reuse-map.md`: parts you can lift
 - `docs/wiki/backlog.md`: designed but not built, and how to revive it
