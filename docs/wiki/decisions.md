@@ -593,6 +593,7 @@ Applied in milestones.md §6.9.2 item 16 (standing rule (j)) and item 17. Findin
 6. **Scope and release.** New M3b chunk 4 item 25; ships in 0.9.0. No new third-party dependency.
 Applied in milestones.md §6.9.2 item 25 and §6.9.7 (chunk 4). See D70, D75, D112, D113, D114.
 Device-checked 2026-10-27 (seven checks PASSED; gaps stated): docs/logs/M3B-D115-EVIDENCE-2026-10-27.md.
+Design record: docs/archive/scanner-nav-design-plan-2026-10-27.md (the approved plan); living design guide: docs/product/scanner-design-memory.md.
 
 **D116 (2026-10-27, owner) — the docs may call tier C built, worded "built and device-checked; ships in 0.9.0", never "shipped" or "released".** Context: M3b chunks 1-3 and the chunk 4 items so far are built and device-checked, and 0.9.0 is not out. Item 20 (README rewrite) and D109(e) allowed tier C to be called built only once it is. Ruling: the README, the customer guide and the other live docs may now describe tier C as "built and device-checked; ships in 0.9.0". The words "shipped" and "released" wait for the 0.9.0 release. Applied in milestones.md §6.9.2 item 20 (README rewritten) and the customer guide's tier-C wording. Other live docs that still say "not yet built" are listed for the owner and are not edited here. Nothing here calls any of this zero-knowledge. See D109(e), D109(h).
 
