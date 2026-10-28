@@ -88,14 +88,29 @@ class TierCArrivalTest {
 
     @Test
     fun `MainActivity runs the arrival step before the request becomes the verified one, and refuses with the notice path`() {
-        val src = File("src/main/java/com/tananaev/passportreader/MainActivity.kt").readText()
+        // Working-directory independent: Gradle runs unit tests from the module dir, an IDE may run from the repo root.
+        val src = listOf("src/main/java", "app/src/main/java")
+            .map { File(it, "com/tananaev/passportreader/MainActivity.kt") }.first { it.exists() }.readText()
         val call = src.indexOf("TierCArrival.plan(")
         val verifiedWrite = src.indexOf("verifiedRequest = outcome.request")
         assertTrue("TierCArrival.plan must be called from MainActivity", call > 0)
         assertTrue("arrival must run before verifiedRequest is set", verifiedWrite > call)
         val between = src.substring(call, verifiedWrite)
-        assertTrue(between.contains("TierCArrival.Plan.Refuse"))
-        assertTrue(between.contains("refuseTierC(outcome.request, arrival.refusal, onArrival = true)"))
-        assertTrue("the arrival refusal returns before the request is stored", between.contains("return"))
+        // The arguments the plan is decided from must be the real operator/holder/lock inputs, not literals.
+        assertTrue(between.contains("operatorEnabled = OperatorPolicy.TIER_C_ENABLED"))
+        assertTrue(between.contains("pinned = OperatorPolicy.TIER_C_VERIFIERS"))
+        assertTrue(between.contains("holderAllowsAdditional = holderSettings.allowAdditionalVerifications()"))
+        assertTrue(between.contains("locks = originThresholdLocks"))
+        // The refusal branch is an unconditional `if (arrival is Refuse) { ... refuseTierC(...); return }`: a
+        // condition with an extra `&& false` or a return outside the block must turn this red.
+        val guard = "if (arrival is TierCArrival.Plan.Refuse) {"
+        val guardAt = between.indexOf(guard)
+        assertTrue("the Refuse guard must be exactly `$guard`", guardAt >= 0)
+        val block = between.substring(guardAt + guard.length)
+        val refuseAt = block.indexOf("refuseTierC(outcome.request, arrival.refusal, onArrival = true)")
+        val returnAt = block.indexOf("return")
+        val closeAt = block.indexOf("\n                }")
+        assertTrue("refuseTierC is called inside the Refuse block", refuseAt in 0 until closeAt)
+        assertTrue("the arrival refusal returns, inside the block, after the refusal and before the request is stored", returnAt in (refuseAt + 1) until closeAt)
     }
 }
