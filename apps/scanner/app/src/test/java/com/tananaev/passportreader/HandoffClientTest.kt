@@ -80,7 +80,8 @@ class HandoffClientTest {
                 // MainActivity maps `httpStatus in 200..299` to Accepted and everything else to Rejected
                 assertFalse(result.httpStatus in 200..299)
                 assertEquals(VerifierRefusal.Outcome.Refused("HTTP $status"), VerifierRefusal.classify(result.httpStatus, result.body))
-                assertEquals("Verifier refused: HTTP $status", VerifierRefusal.dialogMessage(VerifierRefusal.classify(result.httpStatus, result.body)) ?: "Verifier refused: HTTP ${result.httpStatus}")
+                assertEquals("The website did not accept the answer — reopen the link from the site.", VerifierRefusal.dialogMessage(VerifierRefusal.classify(result.httpStatus, result.body)))
+                assertEquals("verdict: REFUSED — verifier: HTTP $status", VerifierRefusal.reportLine(VerifierRefusal.classify(result.httpStatus, result.body)))
             }
         }
     }

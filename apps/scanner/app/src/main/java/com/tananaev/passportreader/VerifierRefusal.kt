@@ -104,11 +104,16 @@ object VerifierRefusal {
     fun dialogMessage(outcome: Outcome): String? = when (outcome) {
         Outcome.Sent -> null
         Outcome.AlreadyUsed -> ALREADY_USED_MESSAGE
-        is Outcome.Refused -> "Verifier refused: ${outcome.label}"
+        is Outcome.Refused -> NOT_ACCEPTED_MESSAGE // technical detail (status/label) stays in reportLine only
     }
 
     /** Same register as `MainActivity.SESSION_EXPIRED_MESSAGE`
      * ("Verification session expired — reopen the link from the site."),
      * owner-specified verbatim. */
     const val ALREADY_USED_MESSAGE = "This link was already used — reopen the link from the site."
+
+    /** Popup for any other non-2xx (302, 400, 500, ...) — friendly, same
+     * register as [ALREADY_USED_MESSAGE]. Owner-specified verbatim
+     * (2026-10-28, finding #54). The HTTP status/label stays in the Log. */
+    const val NOT_ACCEPTED_MESSAGE = "The website did not accept the answer — reopen the link from the site."
 }

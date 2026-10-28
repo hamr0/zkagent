@@ -1228,7 +1228,7 @@ abstract class MainActivity : AppCompatActivity() {
                 showBlockingOutcomeDialog(TierCText.completionMessage(answers.size), isAccessEstablishmentFailure = false)
             } else if (deliveryResult is DeliveryResult.Rejected) {
                 val outcome = VerifierRefusal.classify(deliveryResult.httpStatus, deliveryResult.body)
-                showBlockingOutcomeDialog(VerifierRefusal.dialogMessage(outcome) ?: "Verifier refused: HTTP ${deliveryResult.httpStatus}", isAccessEstablishmentFailure = false, refusal = true) // D113 c: red
+                showBlockingOutcomeDialog(VerifierRefusal.dialogMessage(outcome) ?: VerifierRefusal.NOT_ACCEPTED_MESSAGE, isAccessEstablishmentFailure = false, refusal = true) // D113 c: red
             } else {
                 showBlockingOutcomeDialog(TierCText.NOT_DELIVERED_DIALOG, isAccessEstablishmentFailure = false, refusal = true)
             }
@@ -3388,7 +3388,7 @@ abstract class MainActivity : AppCompatActivity() {
                 // already_responded reported PASS) is exactly this gap.
                 val outcome = VerifierRefusal.classify(deliveryResult.httpStatus, deliveryResult.body)
                 showBlockingOutcomeDialog(
-                    VerifierRefusal.dialogMessage(outcome) ?: "Verifier refused: HTTP ${deliveryResult.httpStatus}",
+                    VerifierRefusal.dialogMessage(outcome) ?: VerifierRefusal.NOT_ACCEPTED_MESSAGE,
                     isAccessEstablishmentFailure = false,
                     refusal = true, // D113 c: red
                 )
@@ -4018,7 +4018,7 @@ abstract class MainActivity : AppCompatActivity() {
                 // already_responded reported PASS) is exactly this gap.
                 val outcome = VerifierRefusal.classify(deliveryResult.httpStatus, deliveryResult.body)
                 showBlockingOutcomeDialog(
-                    VerifierRefusal.dialogMessage(outcome) ?: "Verifier refused: HTTP ${deliveryResult.httpStatus}",
+                    VerifierRefusal.dialogMessage(outcome) ?: VerifierRefusal.NOT_ACCEPTED_MESSAGE,
                     isAccessEstablishmentFailure = false,
                     refusal = true, // D113 c: red
                 )

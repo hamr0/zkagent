@@ -134,7 +134,26 @@ class VerifierRefusalTest {
     }
 
     @Test
-    fun `dialogMessage for a generic Refused names the label with the Verifier refused prefix`() {
-        assertEquals("Verifier refused: HTTP 502", VerifierRefusal.dialogMessage(VerifierRefusal.Outcome.Refused("HTTP 502")))
+    fun `dialogMessage for a generic Refused is the friendly message and carries no technical detail`() {
+        val expected = "The website did not accept the answer — reopen the link from the site."
+        assertEquals(expected, VerifierRefusal.dialogMessage(VerifierRefusal.Outcome.Refused("HTTP 502")))
+        assertEquals(expected, VerifierRefusal.dialogMessage(VerifierRefusal.Outcome.Refused("HTTP 302")))
+        assertEquals(expected, VerifierRefusal.dialogMessage(VerifierRefusal.Outcome.Refused("some_error")))
+    }
+
+    @Test
+    fun `the Log line for a generic Refused still carries the HTTP status and the error label`() {
+        assertEquals("verdict: REFUSED — verifier: HTTP 302", VerifierRefusal.reportLine(VerifierRefusal.Outcome.Refused("HTTP 302")))
+        assertEquals("verdict: REFUSED — verifier: bad_nonce", VerifierRefusal.reportLine(VerifierRefusal.Outcome.Refused("bad_nonce")))
+        // end to end from a raw status: the label comes out of classify, the line carries it
+        assertEquals("verdict: REFUSED — verifier: HTTP 500", VerifierRefusal.reportLine(VerifierRefusal.classify(500, "")))
+    }
+
+    @Test
+    fun `the 409 already-used popup is unchanged`() {
+        assertEquals(
+            "This link was already used — reopen the link from the site.",
+            VerifierRefusal.dialogMessage(VerifierRefusal.classify(409, "{\"error\":\"already_responded\"}")),
+        )
     }
 }
