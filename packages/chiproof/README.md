@@ -39,6 +39,7 @@ const verifier = createVerifier({
   scopeDomain: 'example.com',
   challengeSecret: 'a-secret-at-least-16-bytes-long',
   stores: { nonce: new InMemoryNonceStore({ quiet: true }) },
+  allowInMemoryStore: true, // examples only: use a persistent NonceStore in production
   tiers: { max: 'C' },                                                                   // 1. allow tier C
   trustedChallengeIssuers: [{ pubkey: issuerKeys.publicKey, key_id: 'my-issuer', maxTier: 'C' }], // 2. trust this signer for C
 });
