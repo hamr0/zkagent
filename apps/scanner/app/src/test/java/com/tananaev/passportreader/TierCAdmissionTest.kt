@@ -151,4 +151,29 @@ class TierCAdmissionTest {
         assertNull(d.ageToLock)
         assertEquals(1, d.predicates.size)
     }
+
+    // ---------------------------------------------------------------- D118 through the whole decision
+
+    private fun natIs(code: String) = JSONObject().put("name", "nationality_is").put("code", code)
+
+    private fun natNot(vararg codes: String) = JSONObject().put("name", "nationality_not_in").put("codes", JSONArray(codes.toList()))
+
+    private fun preds(vararg p: JSONObject): JSONObject {
+        val a = JSONArray()
+        for (x in p) a.put(x)
+        return JSONObject().put("zkagent", JSONObject().put("tier", "C").put("challenge", JSONObject().put("predicates", a)))
+    }
+
+    @Test
+    fun `two of a kind nationality predicate is refused whole by the full decision with all gates passing (D118)`() {
+        val twoNot = decide(preds(natNot("CUB"), natNot("RUS")))
+        val twoIs = decide(preds(natIs("NLD"), natIs("DEU")))
+        for (d in listOf(twoNot, twoIs)) {
+            d as TierCAdmission.Decision.Refuse
+            assertEquals(TierCAdmission.Refusal.REQUEST_NOT_ANSWERABLE, d.refusal)
+            assertEquals("nationality_asked_more_than_once", d.reason)
+        }
+        // control: one of each kind passes the same gates and is admitted
+        assertTrue(decide(preds(natIs("NLD"), natNot("CUB"))) is TierCAdmission.Decision.Admit)
+    }
 }

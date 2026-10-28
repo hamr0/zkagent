@@ -7,6 +7,10 @@
 # fails. Read exit codes off bare commands only (AGENT_RULES) — never off a
 # pipeline's exit code, which would report the LAST command in the pipe.
 #
+# WARNING: rewrites the tracked apps/scanner/operator.json in place for about
+# 3 minutes. Run it ALONE — a gradle task started meanwhile (e.g.
+# testRegularDebugUnitTest) fails with a bogus "operator.json: rule N" error.
+#
 # Run from apps/scanner/ or anywhere; paths below are relative to this
 # script's own location.
 set -u

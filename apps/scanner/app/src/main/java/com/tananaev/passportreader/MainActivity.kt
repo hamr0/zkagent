@@ -471,8 +471,10 @@ abstract class MainActivity : AppCompatActivity() {
         }
         applyDiagnosticsSection()
 
-        // No SharedPreferences/DataStore read or write anywhere in this
-        // activity — MRZ fields start empty every launch (NO-GO #9).
+        // The only SharedPreferences this activity touches are the holder
+        // setting (zkagent_holder_settings) and the link-once record
+        // (zkagent_link_once) — neither holds a passport field; MRZ fields
+        // start empty every launch (NO-GO #9).
 
         // §6.2 item 23 (D70(b)): the DURABLE path — a cold start after
         // process death, where no Bundle exists at all. MUST run BEFORE

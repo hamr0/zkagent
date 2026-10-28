@@ -446,4 +446,13 @@ class SessionDisplayTest {
         assertEquals("This website asks if you are over 18, and may recognise you again on this site",
             SessionDisplay.render(locked = null, handoff = SessionDisplay.HandoffState.Verified("h", "B", 18)).questionText)
     }
+
+    // ----------------------------------------------------------- mode labels
+
+    @Test
+    fun `modeLabel words for each locked mode, tier C included`() {
+        assertEquals("anonymous", SessionDisplay.modeLabel(SessionDisplay.LockedMode.A))
+        assertEquals("recognisable to this site", SessionDisplay.modeLabel(SessionDisplay.LockedMode.B))
+        assertEquals("answers named questions about your document", SessionDisplay.modeLabel(SessionDisplay.LockedMode.C))
+    }
 }
