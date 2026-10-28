@@ -13,9 +13,9 @@
 - Roboto. Body text is 14–16sp, and the primary action label is 18sp.
 
 ## Color
-- Primary is teal #009688 (night #26a69a).
+- Primary is teal #009688. The app is always light (D115): there is no night palette.
 - The site's question is a dark navy box (#0D2A4A) with white text.
-- Red (`refusal_text` #B3261E, night #FF8A80) means "it didn't work", and is used for every non-success popup (D113).
+- Red (`refusal_text` #B3261E) means "it didn't work", and is used for every non-success popup (D113).
 - Success popups use the normal text colour.
 - Status strips are teal ✓ for delivered, red ✗ for refused, and grey – for none yet. Colour is never the only signal.
 
@@ -25,7 +25,7 @@
 - Modals: blocking outcome dialogs are for results the user must acknowledge. Use a Snackbar for transient facts.
 
 ## Accessibility rules
-- Touch targets are at least 48dp, and contrast is at least 4.5:1 day and night.
+- Touch targets are at least 48dp, and contrast is at least 4.5:1 on the light palette.
 - Status lines are live regions, and icons accompany colour.
 
 ## Repo conventions

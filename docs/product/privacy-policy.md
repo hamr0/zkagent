@@ -29,8 +29,10 @@ progress.
 ## What it derives, and what it sends
 
 From the chip, the app checks the issuing government's own signature and
-derives a single yes/no answer to a question a website asked (for example,
-"is this person over 18"). That yes/no answer — and, only if you choose the
+derives yes/no answers to the questions a website asked (for example,
+"is this person over 18"; with the optional "additional verifications"
+setting on and a site your operator approved, a few more such questions
+about the document). That yes/no answer — and, only if you choose the
 website's "recognise me again" option, a pseudonymous tag computed just for
 that website — is sent to the website you opened the scan from. Nothing else
 about the document ever leaves the phone: not your name, date of birth,
@@ -68,6 +70,12 @@ The app also keeps, on your device only: any cryptographic keys it generated
 for a website you chose to be recognised at, and which age question a given
 website has locked in (so the same website can't later ask you a different
 age).
+
+The app also keeps two small settings records, on your device only: your
+"Allow additional verifications" choice (off by default), and a list of
+short one-way fingerprints (SHA-256 hashes) of the last 50 links it handled,
+so the same link is not handled twice. A fingerprint cannot be turned back
+into the link, and no document field is ever part of either record.
 
 Android's automatic app backup is turned off for this app, so none of this
 data is ever copied off your device by the operating system.
