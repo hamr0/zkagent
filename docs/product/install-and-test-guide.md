@@ -489,6 +489,10 @@ curl -s -w ' http=%{http_code}\n' -X POST -H 'content-type: application/json' \
   -d '{"mode":"C","predicates":[{"name":"nationality_is","code":"USA"},{"name":"nationality_not_in","codes":["CUB","RUS"]}]}' \
   http://127.0.0.1:8787/ui/presentations
 # expect http=201
+curl -s -w ' http=%{http_code}\n' -X POST -H 'content-type: application/json' \
+  -d '{"mode":"C","predicates":[{"name":"document_number_is","number":"AB1"},{"name":"document_number_is","number":"AB2"}]}' \
+  http://127.0.0.1:8787/ui/presentations
+# expect {"error":"document_number_asked_more_than_once"} http=400   (D119: one document-number test per request)
 demo_stop
 ```
 

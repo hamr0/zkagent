@@ -65,7 +65,7 @@ const refusal = verifyTierCRefusal({ error: 'access_denied', state }); // { ok: 
 
 - **Read `verdict.answers[].result`, never `verdict.allowed`.** `allowed: true` only means "a well-formed answer to exactly what you asked arrived". A `result: false` is a real answer, not a failure.
 - **The refusal is generic.** `verifyTierCRefusal` returns the same verdict for every cause (D110); you cannot tell why the holder said no. You match `state` to your own transaction.
-- **Limits, checked when you issue the challenge** (`issueChallenge` throws, and `validateTierCPredicates(list)` returns `{ok:false, reason}` without throwing): an exclusion set holds at most 10 country codes (D102), and a request carries at most one `nationality_is` and at most one `nationality_not_in` (D118, reason `nationality_asked_more_than_once`). Other questions are not capped.
+- **Limits, checked when you issue the challenge** (`issueChallenge` throws, and `validateTierCPredicates(list)` returns `{ok:false, reason}` without throwing): an exclusion set holds at most 10 country codes (D102), and a request carries at most one `nationality_is` and at most one `nationality_not_in` (D118, reason `nationality_asked_more_than_once`), and at most one `document_number_is` (D119, reason `document_number_asked_more_than_once`). Other questions are not capped.
 - Without `tiers: { max: 'C' }` and a `trustedChallengeIssuers` entry with `maxTier: 'C'`, `verify()` returns `tier_exceeds_max` or `signature_required_at_tier_c`.
 
 The full contract is in [`chiproof.context.md`](./chiproof.context.md).

@@ -111,6 +111,9 @@ export function validateTierCPredicates(input) {
   for (const kind of ['nationality_is', 'nationality_not_in']) {
     if (out.filter((p) => p.name === kind).length > 1) return { ok: false, reason: 'nationality_asked_more_than_once' };
   }
+  // D119: at most one `document_number_is` per request. Several number tests in one scan would let a site test many
+  // guesses at once (finding #28 item 3).
+  if (out.filter((p) => p.name === 'document_number_is').length > 1) return { ok: false, reason: 'document_number_asked_more_than_once' };
   return { ok: true, predicates: /** @type {import('./types.js').TierCPredicate[]} */ (out) };
 }
 

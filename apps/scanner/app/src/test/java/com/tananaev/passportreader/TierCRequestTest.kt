@@ -153,6 +153,25 @@ class TierCRequestTest {
     }
 
     @Test
+    fun `at most one document_number_is per request (D119)`() {
+        fun num(n: String) = one("name" to "document_number_is", "number" to n)
+        val name = one("name" to "name_match", "given_names" to "Jan", "surname" to "de Vries")
+        val refused = listOf(
+            arr(num("X1"), num("X2")),
+            arr(num("X1"), name, num("X2")),
+            arr(num("X1"), num("X1")),
+        )
+        for (preds in refused) {
+            assertEquals(TierCRequest.Parse.Refuse("document_number_asked_more_than_once"), TierCRequest.parse(request(preds)))
+        }
+        val forty = JSONArray().also { a -> repeat(40) { i -> a.put(num("G$i")) } }
+        assertEquals(TierCRequest.Parse.Refuse("document_number_asked_more_than_once"), TierCRequest.parse(request(forty)))
+        // one is accepted, alone and beside other kinds
+        assertTrue(TierCRequest.parse(request(arr(num("X1")))) is TierCRequest.Parse.Ok)
+        assertTrue(TierCRequest.parse(request(arr(num("X1"), name, one("name" to "expiry_beyond", "months" to 6)))) is TierCRequest.Parse.Ok)
+    }
+
+    @Test
     fun `an ICAO special code stays its own value and is a valid claim`() {
         val p = TierCRequest.parse(request(arr(one("name" to "nationality_is", "code" to "D"))))
         assertEquals(TierCRequest.Parse.Ok(listOf(TierCRequest.Predicate.NationalityIs("D"))), p)

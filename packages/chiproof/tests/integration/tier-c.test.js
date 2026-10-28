@@ -101,7 +101,7 @@ test('D118: at most one nationality_is and one nationality_not_in per request, c
   const all = validateTierCPredicates(ALL_FIVE);
   assert.equal(all.ok, true); assert.equal(all.predicates.length, 6);
   // the other kinds are not capped by D118
-  assert.equal(validateTierCPredicates([NAME, NAME, NUMBER, NUMBER, { name: 'expiry_beyond', months: 3 }, { name: 'expiry_beyond', months: 12 }, { name: 'dob_at_least', age: 18 }, { name: 'dob_at_least', age: 21 }]).ok, true);
+  assert.equal(validateTierCPredicates([NAME, NAME, NUMBER, { name: 'expiry_beyond', months: 3 }, { name: 'expiry_beyond', months: 12 }, { name: 'dob_at_least', age: 18 }, { name: 'dob_at_least', age: 21 }]).ok, true);
   // many full-size exclusion sets cannot slip through
   const forty = Array.from({ length: 40 }, () => NOT('AAA', 'BBB', 'CCC', 'DDD', 'EEE', 'FFF', 'GGG', 'HHH', 'III', 'JJJ'));
   assert.equal(validateTierCPredicates(forty).reason, 'nationality_asked_more_than_once');
@@ -114,6 +114,29 @@ test('D118: issuing refuses two of one nationality kind, loudly, and verify() re
   // a challenge minted validly, then given a second question and re-signed by the trusted issuer
   const c = issue(v, [{ name: 'nationality_is', code: 'NLD' }]);
   const forged = { ...c, predicates: [...c.predicates, { name: 'nationality_is', code: 'DEU' }] };
+  delete forged.sig;
+  forged.sig = edSign(null, Buffer.from(canonicalize(forged), 'utf8'), ISSUER.privateKey).toString('base64');
+  const out = await v.verify(present(forged, answersFor(forged.predicates)), { now: T0 });
+  assert.deepEqual([out.ok, out.allowed], [true, false]);
+  assert.equal(out.reason, 'challenge_predicates_invalid');
+});
+
+test('D119: at most one document_number_is per request; a second is refused whole, never thrown', async () => {
+  const N2 = { name: 'document_number_is', number: 'YY1111111' };
+  for (const bad of [[NUMBER, N2], [NUMBER, NAME, N2], [NUMBER, NUMBER], Array.from({ length: 40 }, (_, i) => ({ name: 'document_number_is', number: `G${i}` }))]) {
+    const r = validateTierCPredicates(bad);
+    assert.equal(r.ok, false); assert.equal(r.reason, 'document_number_asked_more_than_once');
+  }
+  // one is fine, alone and beside every other kind
+  assert.equal(validateTierCPredicates([NUMBER]).ok, true);
+  assert.equal(validateTierCPredicates(ALL_FIVE).ok, true);
+  // D118's reason is unchanged
+  assert.equal(validateTierCPredicates([{ name: 'nationality_is', code: 'NLD' }, { name: 'nationality_is', code: 'DEU' }]).reason, 'nationality_asked_more_than_once');
+  // issuing throws; a signed challenge carrying two is refused by verify()
+  const v = makeVerifier();
+  assert.throws(() => issue(v, [NUMBER, N2]), /document_number_asked_more_than_once/);
+  const c = issue(v, [NUMBER]);
+  const forged = { ...c, predicates: [...c.predicates, N2] };
   delete forged.sig;
   forged.sig = edSign(null, Buffer.from(canonicalize(forged), 'utf8'), ISSUER.privateKey).toString('base64');
   const out = await v.verify(present(forged, answersFor(forged.predicates)), { now: T0 });

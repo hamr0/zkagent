@@ -80,6 +80,10 @@ object TierCRequest {
         if (out.count { it is Predicate.NationalityIs } > 1 || out.count { it is Predicate.NationalityNotIn } > 1) {
             return Parse.Refuse("nationality_asked_more_than_once")
         }
+        // D119: at most one document_number_is per request (many number tests in one scan would test many guesses at once).
+        if (out.count { it is Predicate.DocumentNumberIs } > 1) {
+            return Parse.Refuse("document_number_asked_more_than_once")
+        }
         return Parse.Ok(out)
     }
 

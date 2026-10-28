@@ -92,6 +92,7 @@ object TierCText {
         "predicate_malformed" -> "a question was not readable"
         "predicate_not_in_vocabulary" -> "a question this app does not know"
         "nationality_asked_more_than_once" -> "nationality was asked more than once"
+        "document_number_asked_more_than_once" -> "the document number was asked more than once"
         "boundary_malformed" -> "a question had an unreadable limit"
         "boundary_off_list" -> "a question used a limit this app does not allow"
         "code_invalid" -> "a question named a country code this app cannot read"

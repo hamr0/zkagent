@@ -157,6 +157,7 @@ class TierCTextTest {
             "predicate_malformed" to "$notAnswer (a question was not readable)",
             "predicate_not_in_vocabulary" to "$notAnswer (a question this app does not know)",
             "nationality_asked_more_than_once" to "$notAnswer (nationality was asked more than once)",
+            "document_number_asked_more_than_once" to "$notAnswer (the document number was asked more than once)",
             "boundary_malformed" to "$notAnswer (a question had an unreadable limit)",
             "boundary_off_list" to "$notAnswer (a question used a limit this app does not allow)",
             "code_invalid" to "$notAnswer (a question named a country code this app cannot read)",
@@ -165,7 +166,7 @@ class TierCTextTest {
             "number_malformed" to "$notAnswer (a document number question was incomplete)",
         )
         for ((code, text) in table) assertEquals(code, text, TierCText.refusalResult(TierCAdmission.Refusal.REQUEST_NOT_ANSWERABLE, code))
-        assertEquals(11, table.size)
+        assertEquals(12, table.size)
         // an unknown code falls back to the general sentence, and no reason at all is the old line
         assertEquals(notAnswer, TierCText.refusalResult(TierCAdmission.Refusal.REQUEST_NOT_ANSWERABLE, "something_new"))
         assertEquals(notAnswer, TierCText.refusalResult(TierCAdmission.Refusal.REQUEST_NOT_ANSWERABLE))
@@ -212,7 +213,7 @@ class TierCTextTest {
 
     @Test
     fun `no Log reason text carries a developer term, a code or a value`() {
-        val codes = listOf("predicates_absent", "predicates_empty", "predicate_malformed", "predicate_not_in_vocabulary", "nationality_asked_more_than_once",
+        val codes = listOf("predicates_absent", "predicates_empty", "predicate_malformed", "predicate_not_in_vocabulary", "nationality_asked_more_than_once", "document_number_asked_more_than_once",
             "boundary_malformed", "boundary_off_list", "code_invalid", "exclusion_set_size", "name_fields_malformed", "number_malformed",
             "document_not_answerable", "expiry_unreadable", "dob_unreadable", "nationality_unreadable", "document_number_unreadable", "name_unreadable", "claimed_invalid")
         var checked = 0

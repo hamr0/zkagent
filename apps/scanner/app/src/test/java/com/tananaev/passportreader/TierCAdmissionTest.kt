@@ -176,4 +176,14 @@ class TierCAdmissionTest {
         // control: one of each kind passes the same gates and is admitted
         assertTrue(decide(preds(natIs("NLD"), natNot("CUB"))) is TierCAdmission.Decision.Admit)
     }
+
+    @Test
+    fun `two document_number_is predicates are refused whole by the full decision with all gates passing (D119)`() {
+        fun num(n: String) = JSONObject().put("name", "document_number_is").put("number", n)
+        val d = decide(preds(num("X1"), num("X2"))) as TierCAdmission.Decision.Refuse
+        assertEquals(TierCAdmission.Refusal.REQUEST_NOT_ANSWERABLE, d.refusal)
+        assertEquals("document_number_asked_more_than_once", d.reason)
+        // control: one document number passes the same gates and is admitted
+        assertTrue(decide(preds(num("X1"))) is TierCAdmission.Decision.Admit)
+    }
 }

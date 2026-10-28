@@ -213,6 +213,15 @@ test('bad predicate requests are a 400 and make no transaction', async () => {
   assert.equal((await create({ mode: 'C', predicates: [{ name: 'expiry_beyond', months: 12 }] })).status, 201); // control
 });
 
+test('D119: two document_number_is in one request is a 400 with the reason and makes no transaction; one is accepted', async () => {
+  const one = { name: 'document_number_is', number: 'XX0000001' };
+  const two = { name: 'document_number_is', number: 'XX0000002' };
+  const res = await create({ mode: 'C', predicates: [one, two] });
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).error, 'document_number_asked_more_than_once');
+  assert.equal((await create({ mode: 'C', predicates: [one] })).status, 201); // control
+});
+
 test('tier A and B requests are unchanged by the tier-C addition', async () => {
   const a = await (await create({ mode: 'A' })).json();
   const reqA = await requestObject(a);

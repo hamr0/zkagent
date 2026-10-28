@@ -129,7 +129,8 @@ Nothing below is hidden by the design and none of it is fixed; each is a disclos
   questions on later scans and keep confirming guesses of a name, a document number or a nationality
   until one is right. Your setting is the brake: turn it off and tier C is never answered.
   Within a single request the app refuses a second nationality question of the same kind (one "is it
-  X?" and one "is it none of these?" at most), so one scan cannot cover every country but one.
+  X?" and one "is it none of these?" at most), so one scan cannot cover every country but one. It
+  likewise refuses a second document-number question in one request, so one scan tests one guess.
 - **Expiry date.** The 3, 6 and 12 month expiry questions are three different questions and are not
   locked, so a site can combine them to narrow down your document's expiry date. That is not prevented.
 - **Age.** Age narrowing is prevented: a site gets one age in total, whichever it asks first, through an
