@@ -75,6 +75,11 @@ object TierCRequest {
                 is One.Bad -> return Parse.Refuse(one.reason)
             }
         }
+        // D118: at most one nationality_is and one nationality_not_in per request, counted by kind (closes the
+        // many-exclusion-sets / many-guesses route round D102's cap).
+        if (out.count { it is Predicate.NationalityIs } > 1 || out.count { it is Predicate.NationalityNotIn } > 1) {
+            return Parse.Refuse("nationality_asked_more_than_once")
+        }
         return Parse.Ok(out)
     }
 

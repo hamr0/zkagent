@@ -275,6 +275,9 @@ Must be decided before M3b is scoped:
    **Nationality exclusion cap (D102):** an exclusion set may name at most 10 countries; a request
    naming more than 10 MUST fail loudly (no mint) — without a cap, naming "every country but one"
    is a confirmation predicate disguised as an exclusion. See decisions.md D102.
+   **One nationality question of each kind (D118):** a request carries at most one `nationality_is`
+   and at most one `nationality_not_in`; two of a kind fails loudly like D102's cap, because many
+   exclusion sets (or many guesses) in one scan would reveal the nationality anyway. See decisions.md D118.
 2. **DECIDED — per-tier limits and cumulative-disclosure cost (D91, 2026-09-07; closes Q34's
    limits half).** Flat app-side hard cap of 3 tier-C predicates per presentation, no per-domain
    operator knob (the cap rides on D20's existing pinning gate rather than adding a new one, and
@@ -1155,7 +1158,7 @@ with end-of-month clamping) are RULED; the POC checks the real data against them
    default, announced to owner 2026-10-25, not objected (D109(k)1-4)**; no similarity score (Q22
    unchanged); (c) DOB-range boolean (item 9's fixed ages, and the site's shared age lock, item 9);
    (d) nationality, exclusion mode (site names a set, MUST NOT exceed 10 countries per D102, else
-   fail loudly/no mint) and confirmation mode (site names one nationality, boolean); **codes
+   fail loudly/no mint; at most one `nationality_is` and one `nationality_not_in` per request, D118) and confirmation mode (site names one nationality, boolean); **codes
    (D109(g)3): ISO 3166 alpha-3 exactly as written in the MRZ; ICAO special codes (for example
    `D` for Germany, others in ICAO 9303 Part 3) are their own distinct values, never mapped;** (e)
    document-number match — boolean true/false ONLY, the number itself MUST NEVER be disclosed as a

@@ -2,11 +2,12 @@
 // vocabulary and boundary lists, challenge issuance, answers verification, and the generic-refusal verdict.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { generateKeyPairSync, randomBytes, sign as edSign } from 'node:crypto';
 import {
   createVerifier, issueChallenge, InMemoryNonceStore, validateTierCPredicates, checkTierCAnswers, verifyTierCRefusal,
   tierCPredicateLabel, TIER_C_EXPIRY_MONTHS, TIER_C_DOB_AGES, TIER_C_MAX_EXCLUSION_SET,
 } from '../../src/index.js';
+import { canonicalize } from '../../src/canonical.js';
 
 const T0 = 1_000_000;
 const ISSUER = generateKeyPairSync('ed25519');
@@ -83,6 +84,41 @@ test('nationality codes are 1 to 3 letters A-Z; an exclusion set holds 1 to 10',
     assert.equal(r.ok, false); assert.equal(r.reason, 'exclusion_set_size');
   }
   assert.equal(validateTierCPredicates([{ name: 'nationality_not_in', codes: ['CUB', 'C1'] }]).reason, 'code_invalid');
+});
+
+test('D118: at most one nationality_is and one nationality_not_in per request, counted by kind', () => {
+  const IS = (code) => ({ name: 'nationality_is', code });
+  const NOT = (...codes) => ({ name: 'nationality_not_in', codes });
+  // two of one kind, however small each set: refused with a fixed reason, never thrown
+  for (const bad of [[IS('NLD'), IS('DEU')], [NOT('CUB'), NOT('RUS')], [NOT('CUB'), NAME, NOT('RUS')], [IS('NLD'), NUMBER, IS('USA')]]) {
+    const r = validateTierCPredicates(bad);
+    assert.equal(r.ok, false, JSON.stringify(bad)); assert.equal(r.reason, 'nationality_asked_more_than_once');
+  }
+  // one of each kind is allowed, alone and beside the other three kinds (no general cap: 6 predicates here)
+  assert.equal(validateTierCPredicates([IS('NLD'), NOT('CUB')]).ok, true);
+  assert.equal(validateTierCPredicates([IS('NLD')]).ok, true);
+  assert.equal(validateTierCPredicates([NOT('CUB')]).ok, true);
+  const all = validateTierCPredicates(ALL_FIVE);
+  assert.equal(all.ok, true); assert.equal(all.predicates.length, 6);
+  // the other kinds are not capped by D118
+  assert.equal(validateTierCPredicates([NAME, NAME, NUMBER, NUMBER, { name: 'expiry_beyond', months: 3 }, { name: 'expiry_beyond', months: 12 }, { name: 'dob_at_least', age: 18 }, { name: 'dob_at_least', age: 21 }]).ok, true);
+  // many full-size exclusion sets cannot slip through
+  const forty = Array.from({ length: 40 }, () => NOT('AAA', 'BBB', 'CCC', 'DDD', 'EEE', 'FFF', 'GGG', 'HHH', 'III', 'JJJ'));
+  assert.equal(validateTierCPredicates(forty).reason, 'nationality_asked_more_than_once');
+});
+
+test('D118: issuing refuses two of one nationality kind, loudly, and verify() refuses a signed challenge that carries them', async () => {
+  const v = makeVerifier();
+  assert.throws(() => issue(v, [{ name: 'nationality_is', code: 'NLD' }, { name: 'nationality_is', code: 'DEU' }]), /nationality_asked_more_than_once/);
+  assert.throws(() => issue(v, [{ name: 'nationality_not_in', codes: ['CUB'] }, { name: 'nationality_not_in', codes: ['RUS'] }]), /nationality_asked_more_than_once/);
+  // a challenge minted validly, then given a second question and re-signed by the trusted issuer
+  const c = issue(v, [{ name: 'nationality_is', code: 'NLD' }]);
+  const forged = { ...c, predicates: [...c.predicates, { name: 'nationality_is', code: 'DEU' }] };
+  delete forged.sig;
+  forged.sig = edSign(null, Buffer.from(canonicalize(forged), 'utf8'), ISSUER.privateKey).toString('base64');
+  const out = await v.verify(present(forged, answersFor(forged.predicates)), { now: T0 });
+  assert.deepEqual([out.ok, out.allowed], [true, false]);
+  assert.equal(out.reason, 'challenge_predicates_invalid');
 });
 
 test('codes are normalised to upper case; name and number values are kept as given', () => {

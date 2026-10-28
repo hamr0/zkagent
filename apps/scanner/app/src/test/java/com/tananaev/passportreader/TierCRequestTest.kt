@@ -119,6 +119,40 @@ class TierCRequestTest {
     }
 
     @Test
+    fun `at most one nationality_is and one nationality_not_in per request, counted by kind (D118)`() {
+        fun natIs(c: String) = one("name" to "nationality_is", "code" to c)
+        fun natNot(vararg c: String) = one("name" to "nationality_not_in", "codes" to JSONArray(c.toList()))
+        val name = one("name" to "name_match", "given_names" to "Jan", "surname" to "de Vries")
+        val refused = listOf(
+            arr(natIs("NLD"), natIs("DEU")),
+            arr(natNot("CUB"), natNot("RUS")),
+            arr(natNot("CUB"), name, natNot("RUS")),
+            arr(natIs("NLD"), one("name" to "document_number_is", "number" to "X1"), natIs("USA")),
+        )
+        for (preds in refused) {
+            assertEquals(TierCRequest.Parse.Refuse("nationality_asked_more_than_once"), TierCRequest.parse(request(preds)))
+        }
+        // forty full-size exclusion sets (the route D118 closes) are refused too, not just a pair
+        val forty = JSONArray().also { a -> repeat(40) { a.put(natNot("AAA", "BBB", "CCC", "DDD", "EEE", "FFF", "GGG", "HHH", "III", "JJJ")) } }
+        assertEquals(TierCRequest.Parse.Refuse("nationality_asked_more_than_once"), TierCRequest.parse(request(forty)))
+
+        // one of each kind is accepted, alone and beside every other kind: no general cap
+        assertTrue(TierCRequest.parse(request(arr(natIs("NLD"), natNot("CUB")))) is TierCRequest.Parse.Ok)
+        assertTrue(TierCRequest.parse(request(arr(natIs("NLD")))) is TierCRequest.Parse.Ok)
+        assertTrue(TierCRequest.parse(request(arr(natNot("CUB")))) is TierCRequest.Parse.Ok)
+        val all = arr(
+            one("name" to "expiry_beyond", "months" to 6), one("name" to "dob_at_least", "age" to 21),
+            natIs("NLD"), natNot("CUB", "RUS"), name, one("name" to "document_number_is", "number" to "ZZ9988776"),
+        )
+        val parsed = TierCRequest.parse(request(all))
+        assertTrue(parsed is TierCRequest.Parse.Ok)
+        assertEquals(6, (parsed as TierCRequest.Parse.Ok).predicates.size)
+        // the other kinds are not capped by D118
+        val repeated = arr(name, name, one("name" to "expiry_beyond", "months" to 3), one("name" to "expiry_beyond", "months" to 12))
+        assertTrue(TierCRequest.parse(request(repeated)) is TierCRequest.Parse.Ok)
+    }
+
+    @Test
     fun `an ICAO special code stays its own value and is a valid claim`() {
         val p = TierCRequest.parse(request(arr(one("name" to "nationality_is", "code" to "D"))))
         assertEquals(TierCRequest.Parse.Ok(listOf(TierCRequest.Predicate.NationalityIs("D"))), p)

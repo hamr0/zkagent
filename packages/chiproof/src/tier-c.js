@@ -106,6 +106,11 @@ export function validateTierCPredicates(input) {
         break;
     }
   }
+  // D118: at most one `nationality_is` and one `nationality_not_in` per request, counted by kind. Without it a
+  // site could cover every country but one with many exclusion sets (or guess one country at a time) in one scan.
+  for (const kind of ['nationality_is', 'nationality_not_in']) {
+    if (out.filter((p) => p.name === kind).length > 1) return { ok: false, reason: 'nationality_asked_more_than_once' };
+  }
   return { ok: true, predicates: /** @type {import('./types.js').TierCPredicate[]} */ (out) };
 }
 
