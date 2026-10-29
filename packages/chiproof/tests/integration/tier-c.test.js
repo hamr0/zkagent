@@ -121,7 +121,7 @@ test('D118: issuing refuses two of one nationality kind, loudly, and verify() re
   assert.equal(out.reason, 'challenge_predicates_invalid');
 });
 
-test('D119: at most one document_number_is per request; a second is refused whole, never thrown', async () => {
+test('D119: at most one document_number_is per request; validateTierCPredicates returns ok:false (never throws) for a second, and issueChallenge throws at mint', async () => {
   const N2 = { name: 'document_number_is', number: 'YY1111111' };
   for (const bad of [[NUMBER, N2], [NUMBER, NAME, N2], [NUMBER, NUMBER], Array.from({ length: 40 }, (_, i) => ({ name: 'document_number_is', number: `G${i}` }))]) {
     const r = validateTierCPredicates(bad);

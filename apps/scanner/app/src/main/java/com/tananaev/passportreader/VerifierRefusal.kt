@@ -107,6 +107,13 @@ object VerifierRefusal {
         is Outcome.Refused -> NOT_ACCEPTED_MESSAGE // technical detail (status/label) stays in reportLine only
     }
 
+    /** The popup message for a response already known to be NON-2xx (every
+     * `DeliveryResult.Rejected` call site): [ALREADY_USED_MESSAGE] for a 409
+     * `already_responded`, else [NOT_ACCEPTED_MESSAGE]. Non-null by
+     * construction, so call sites need no fallback. */
+    fun rejectedDialogMessage(httpStatus: Int, body: String): String =
+        if (classify(httpStatus, body) == Outcome.AlreadyUsed) ALREADY_USED_MESSAGE else NOT_ACCEPTED_MESSAGE
+
     /** Same register as `MainActivity.SESSION_EXPIRED_MESSAGE`
      * ("Verification session expired — reopen the link from the site."),
      * owner-specified verbatim. */

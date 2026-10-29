@@ -1229,8 +1229,7 @@ abstract class MainActivity : AppCompatActivity() {
             if (MintConfirmation.confirmsSuccess(deliveryAccepted = accepted)) {
                 showBlockingOutcomeDialog(TierCText.completionMessage(answers.size), isAccessEstablishmentFailure = false)
             } else if (deliveryResult is DeliveryResult.Rejected) {
-                val outcome = VerifierRefusal.classify(deliveryResult.httpStatus, deliveryResult.body)
-                showBlockingOutcomeDialog(VerifierRefusal.dialogMessage(outcome) ?: VerifierRefusal.NOT_ACCEPTED_MESSAGE, isAccessEstablishmentFailure = false, refusal = true) // D113 c: red
+                showBlockingOutcomeDialog(VerifierRefusal.rejectedDialogMessage(deliveryResult.httpStatus, deliveryResult.body), isAccessEstablishmentFailure = false, refusal = true) // D113 c: red
             } else {
                 showBlockingOutcomeDialog(TierCText.NOT_DELIVERED_DIALOG, isAccessEstablishmentFailure = false, refusal = true)
             }
@@ -3388,9 +3387,8 @@ abstract class MainActivity : AppCompatActivity() {
                 // dialog fired for a non-2xx direct_post response at all
                 // (silent refusal); the owner's device evidence (HTTP 409
                 // already_responded reported PASS) is exactly this gap.
-                val outcome = VerifierRefusal.classify(deliveryResult.httpStatus, deliveryResult.body)
                 showBlockingOutcomeDialog(
-                    VerifierRefusal.dialogMessage(outcome) ?: VerifierRefusal.NOT_ACCEPTED_MESSAGE,
+                    VerifierRefusal.rejectedDialogMessage(deliveryResult.httpStatus, deliveryResult.body),
                     isAccessEstablishmentFailure = false,
                     refusal = true, // D113 c: red
                 )
@@ -4018,9 +4016,8 @@ abstract class MainActivity : AppCompatActivity() {
                 // (silent refusal, grouped with NoResponseUri/TransportFailed
                 // above the fix); the owner's device evidence (HTTP 409
                 // already_responded reported PASS) is exactly this gap.
-                val outcome = VerifierRefusal.classify(deliveryResult.httpStatus, deliveryResult.body)
                 showBlockingOutcomeDialog(
-                    VerifierRefusal.dialogMessage(outcome) ?: VerifierRefusal.NOT_ACCEPTED_MESSAGE,
+                    VerifierRefusal.rejectedDialogMessage(deliveryResult.httpStatus, deliveryResult.body),
                     isAccessEstablishmentFailure = false,
                     refusal = true, // D113 c: red
                 )

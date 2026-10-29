@@ -503,6 +503,7 @@ demo_stop
 | App says it cannot reach the site, or nothing reaches the demo, on the **release** APK | Expected. Release has no cleartext exception (not even for `127.0.0.1`). Use a debug build for the local demo, or a real HTTPS origin (`apps/demo/deploy/README.md`) |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | A build signed by another key is installed. `adb uninstall com.zkagent.scanner`, then install. This wipes app data |
 | Page loads on the computer but not in the phone's Chrome | `adb reverse` was lost (any USB replug or `adb kill-server` drops it). Redo `adb reverse tcp:8787 tcp:8787` and check `adb reverse --list` |
+| Every scan says "request could not be verified" or "The website did not accept the answer" on a real site | The site's `request_uri` or `response_uri` sits behind a redirect (http to https, apex to www, trailing slash). The app follows no redirects (#52); serve both at their final URL |
 | `Error: listen EADDRINUSE ... 8787` | Another demo (or the proxy) is on 8787. Find it with `ss -ltnp 'sport = :8787'` and stop that exact pid, or start the demo with another `PORT` |
 | `adb devices` empty or `unauthorized` | Reconnect, accept the debugging prompt, `adb kill-server && adb start-server` |
 | Gradle: `Unsupported class file major version` or a Java error | Wrong JDK. Check `"$JAVA_HOME/bin/java" -version` says 17 |

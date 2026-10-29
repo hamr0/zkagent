@@ -156,4 +156,17 @@ class VerifierRefusalTest {
             VerifierRefusal.dialogMessage(VerifierRefusal.classify(409, "{\"error\":\"already_responded\"}")),
         )
     }
+
+    @Test
+    fun `rejectedDialogMessage maps a non-2xx status and body to the literal popup strings`() {
+        assertEquals(
+            "This link was already used — reopen the link from the site.",
+            VerifierRefusal.rejectedDialogMessage(409, "{\"error\":\"already_responded\"}"),
+        )
+        val generic = "The website did not accept the answer — reopen the link from the site."
+        assertEquals(generic, VerifierRefusal.rejectedDialogMessage(409, "{\"error\":\"conflict\"}"))
+        assertEquals(generic, VerifierRefusal.rejectedDialogMessage(302, ""))
+        assertEquals(generic, VerifierRefusal.rejectedDialogMessage(400, "{\"error\":\"already_responded\"}"))
+        assertEquals(generic, VerifierRefusal.rejectedDialogMessage(500, "internal error"))
+    }
 }

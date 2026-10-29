@@ -6,7 +6,7 @@ Settings screen, the green delivered line, the post-read refusal line, D118, red
 
 **Branch / commit**: 0.9.0 phase A on the released APK (tag `v0.9.0` -> `4bdc25c`); phase B on a debug build of `cb3f07a`
 (main); the fix is `72dc143` on `fix/0.9.1-redirect-and-log-reason`. Finding #54 (popup wording) was changed after the device
-re-check, on the same branch, and has not been seen on a device.
+re-check, on the same branch, and was device-checked later the same day (section 7b).
 
 **Rule for this file (carried from chunks 1 to 3, D112 and D113)**: no PII, ever, and no hostname, domain or IP of the
 owner's infrastructure. Every run used loopback only (127.0.0.1 via `adb reverse`). The owner typed document details on
@@ -74,7 +74,7 @@ Re-check on a debug tier-C-on build of the fix, with the proxy:
 | # | Check | Result |
 |---|---|---|
 | R1 | 302 on the refusal POST | Log "...(nationality was asked more than once). Refusal could not be sent (the website answered HTTP 302).", no hit on the proxy's landing page, demo `pending`. PASS |
-| R2 | 302 on the answer POST | Popup "Verifier refused: HTTP 302", demo `pending`. PASS on behaviour; the owner called the wording crude, which became finding #54 (the wording has since changed to "The website did not accept the answer — reopen the link from the site.", changed after the re-check, on the same branch, and **not yet seen on a device**) |
+| R2 | 302 on the answer POST | Popup "Verifier refused: HTTP 302", demo `pending`. PASS on behaviour; the owner called the wording crude, which became finding #54 (the wording changed after the re-check to "The website did not accept the answer — reopen the link from the site."; device-checked 2026-10-28 on a debug tier-C-on build of `6b54a9a` through a 302 proxy: the owner read that popup and a red last-scan line; logcat `http_status=302`, verdict REFUSED; demo state `pending`) |
 | R3 | 302 on the `request_uri` GET | "This website's request could not be verified, so it was not answered. Nothing was read and nothing was sent.", no landing hit. PASS |
 
 The line colours for R2 and R3 were not read by the owner; logcat shows the refusals.
@@ -89,8 +89,14 @@ Qualifications (stated limits):
 - All phase B evidence is debug-build; the released APK cannot reach loopback, so the release build carries only the Settings check.
 - The tier-C post-read refusal has no deterministic trigger with real documents, so it was not exercised.
 - TalkBack was not run.
-- The finding #54 wording has not been seen on a device.
 - The re-check line colours for R2 and R3 were not read by the owner.
+
+## 7b — Later device checks, same day (debug tier-C-on build of the D119 work, content of `1e7c776`)
+
+| # | Check | Result |
+|---|---|---|
+| L1 | D119: a request with two `document_number_is` | Refused on arrival; logcat `reason=document_number_asked_more_than_once chip_read=false`. The owner read the generic popup ("This website asked something this app does not answer...") and a Log line ending "(the document number was asked more than once)". The demo saw one verdict, `refused=true`, and 0 occurrences of the reason. A chiproof/demo curl check returns 400 for two (unit-tested). PASS |
+| L2 | Banner | The owner tapped Verify with the fields filled and read "Ready — tap your document now". PASS |
 
 ## 8 — Privacy check
 
@@ -99,4 +105,4 @@ about are not document values). No real document data in this file.
 
 ## 9 — Open items
 
-Finding #54 (wording) awaits a device look. Nothing here is a ruling.
+Nothing open from #54. Nothing here is a ruling.

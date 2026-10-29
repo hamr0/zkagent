@@ -27,7 +27,7 @@ other is the single most common misreading of a scan.
 
 | | Answers | Possible values |
 |---|---|---|
-| The app's popup | Delivery status: did the phone read the chip and get its presentation to the verifier | "Read OK", "Sent", "Refused by the app" (a local check failed before anything was sent), "Verifier refused the upload" |
+| The app's popup | Delivery status: did the phone read the chip and get its presentation to the verifier | "Read OK", "Sent", "Refused by the app" (a local check failed before anything was sent), "The website did not accept the answer — reopen the link from the site." (the verifier answered with a non-2xx status, any redirect included; the status and the verifier's error label appear only in the Log), "This link was already used — reopen the link from the site." (HTTP 409 already_responded) |
 | The page | The site's verdict: what the verifier decided to do with what it received | "Allowed", "Not allowed", "Already registered at this site", "Key mismatch" |
 
 Why they're separate: the app's own network call (`direct_post`) gets back a **receipt**, not a
@@ -173,7 +173,10 @@ Nothing below is hidden by the design and none of it is fixed; each is a disclos
   once, against one real host, in a test (chunk 3, check 23(d), `docs/logs/M3B-CHUNK3-EVIDENCE-2026-10-27.md`):
   a good key answered, a mismatched key was refused and an untrusted certificate was refused. Wide
   real-world interop beyond that one host is untested. The key fetch follows no redirects at all: any
-  redirect counts as "key not found" and the request is refused (D113).
+  redirect counts as "key not found" and the request is refused (D113). Since 0.9.x (#52) the app also follows no
+  redirects on the `request_uri` fetch and on the answer or refusal POST to `response_uri`: a 3xx is treated as
+  not delivered (or, on the fetch, as "request could not be verified"). Operators must serve `request_uri` and
+  `response_uri` at their final URL, with no http-to-https, apex-to-www or trailing-slash redirects.
 
 **Your setting**
 
