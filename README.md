@@ -37,7 +37,7 @@ The phone reads the chip over NFC and checks the government's own signature on i
 
 ## What's built
 
-Three parts, all open source under Apache-2.0. Tier C (below) is built and device-checked and shipped in 0.9.0. The latest release is v0.9.0.
+Three parts, all open source under Apache-2.0. Tier C (below) is built and device-checked and shipped in 0.9.0. The latest release is v0.9.1.
 
 | Part | What it is | Where |
 |---|---|---|
@@ -155,7 +155,7 @@ The full walk-through, from prerequisites and building to the automated tests an
 
 ## Reuse it
 
-The latest release is v0.9.0 (2026-10-28), with tier C. zkagent has no production users and stays on 0.x. It's built to be picked apart. [`docs/product/reuse-map.md`](docs/product/reuse-map.md) lists every liftable part (the verdict core, the evidence plugs, the chip and masterlist check, the secure-hardware key, the handoff, the config gate and the publish workflow) with its maturity, evidence and caveats.
+The latest release is v0.9.1 (2026-10-29), a patch on 0.9.0 (tier C shipped in 0.9.0). zkagent has no production users and stays on 0.x. It's built to be picked apart. [`docs/product/reuse-map.md`](docs/product/reuse-map.md) lists every liftable part (the verdict core, the evidence plugs, the chip and masterlist check, the secure-hardware key, the handoff, the config gate and the publish workflow) with its maturity, evidence and caveats.
 
 ## Repo layout
 

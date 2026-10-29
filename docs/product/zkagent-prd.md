@@ -8,7 +8,7 @@ sources: [docs/archive/zkagent-prd.md, docs/wiki/decisions.md D108]
 # zkagent — PRD
 
 > **Status (2026-10-24, D108): complete experiment. Closed cleanly, not abandoned.**
-> v1 — rung 1, milestones M0–M3 — is delivered; latest release **v0.9.0**, 2026-10-28 (chiproof 0.9.0 on npm,
+> v1 — rung 1, milestones M0–M3 — is delivered; latest release **v0.9.1**, 2026-10-29 (chiproof 0.9.1 on npm,
 > scanner APK on GitHub Releases); the project stays on 0.x (no 1.0).
 > The owner may revive it, reuse parts, or reuse the whole. Parked and unbuilt work (S4,
 > Play track, rung 2, Track Z, and others) is listed in [`../wiki/backlog.md`](../wiki/backlog.md);
@@ -70,7 +70,7 @@ Two rungs; only the first is v1. Rung 2 is not being built and is not planned �
 
 | Rung | Contents | Milestones | Status |
 |---|---|---|---|
-| 1 — the core | Chip read, government-signature verification, mode A age bit, mode B zktag, attestation, verifier SDK, demo. Published as `chiproof`. | M0–M3 | **This is v1. Delivered** (v0.9.0; see §15). Nothing else is v1. |
+| 1 — the core | Chip read, government-signature verification, mode A age bit, mode B zktag, attestation, verifier SDK, demo. Published as `chiproof`. | M0–M3 | **This is v1. Delivered** (v0.9.1; see §15). Nothing else is v1. |
 | 2 — the agent layer | Delegation certs, RFC 9421 request signing, per-serial revocation, blocklist + pseudonymous appeal. | M4–M5 | **Backlog, not planned (D108).** Specified in outline (FR5/FR8, Q8), never designed or built here; gated on at least one real adopter, of which there is none. See `backlog.md`. |
 
 Rung 1 ships both modes together — the zktag is opt-in per presentation (D13), so it does not delay the age wedge. Track Z (parallel, gated by D23) covers ZK over the passport; no milestone until the gates hold. The core is borrowable: anyone, including a government, may embed `chiproof` in their own app — a one-sided sale that mitigates the two-sided-market problem (§14). Two hard prerequisites: the derivation must be a published spec (FR11), or two clients fork the identity space; and the verifier must decide which clients it accepts (FR10), or openness becomes forgeability. (zkagent-prd.md:816-830)
@@ -177,11 +177,11 @@ the wiki pages it points to.
 
 **What shipped.**
 - `chiproof` — the verifier SDK, on npm (`chiproof@0.8.0`, Apache-2.0, zero runtime dependencies), `packages/chiproof`.
-- The reference scanner — signed Android APK on GitHub Releases (v0.9.0 release asset `app-regular-release.apk`), `apps/scanner`.
+- The reference scanner — signed Android APK on GitHub Releases (v0.9.1 release asset `app-regular-release.apk`), `apps/scanner`.
 - The demo verifier — `apps/demo`, a local site acting as the requesting party, its own adopter of `chiproof`; run over USB with `adb reverse tcp:8787 tcp:8787` (D76).
 - What each tier does: tier A returns one yes/no bit and carries no signature by design (D27, D77); tier B adds a per-site tag and a phone-key signature that the site binds on first sight (D38). The honest limits are in `docs/product/customer-guide.md` §10 and the README.
 
-**Versioning.** Lockstep (D72): `packages/chiproof/package.json`, scanner `versionName`, one `CHANGELOG.md` section. The project stays on 0.x — the latest release is 0.9.0, "no v 1.0" (D108(b)). "v1" in this PRD names a scope (rung 1), not a version number.
+**Versioning.** Lockstep (D72): `packages/chiproof/package.json`, scanner `versionName`, one `CHANGELOG.md` section. The project stays on 0.x — the latest release is 0.9.1, "no v 1.0" (D108(b)). "v1" in this PRD names a scope (rung 1), not a version number.
 
 **Success criteria (§13) against evidence.**
 
@@ -195,4 +195,4 @@ the wiki pages it points to.
 
 **Known limits, stated with the criteria.** Captcha-grade, not bank-grade (NO-GO #5). Chip-cloning is an accepted, disclosed limitation: "one human, one zktag" holds only where `chip_auth` is true (FR11, D29). Tier A is unsigned by design; the tier-B key comes from no configured trust source and is bound on first sight (D38, D78). v1 is not zero-knowledge (NO-GO #7). The reference scanner ships with no device-attestation plug (D27), so client identity is only the attester key (S4 in `backlog.md`).
 
-**Not delivered.** Everything in `backlog.md`: M3b/tier C is no longer parked (revived 2026-10-25, D109(h); tier C is built and device-checked and shipped in 0.9.0, D116; the M3b milestone is still in build and 0.9.0 is released), and the rest: §6.5 S4, the Play track, rung 2 (M4/M5), Track Z, the demo's own operator config, multi-threshold origins.
+**Not delivered.** Everything in `backlog.md`: M3b/tier C is no longer parked (revived 2026-10-25, D109(h); tier C is built and device-checked and shipped in 0.9.0, D116; the M3b milestone is still in build and 0.9.0 and 0.9.1 are released), and the rest: §6.5 S4, the Play track, rung 2 (M4/M5), Track Z, the demo's own operator config, multi-threshold origins.

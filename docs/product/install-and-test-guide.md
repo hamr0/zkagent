@@ -10,7 +10,7 @@ sources: [README.md, apps/scanner/README.md, apps/demo/README.md, apps/scanner/a
 For someone who clones this repo cold and wants to build the Android scanner, install it on a phone,
 run the local test website, run every automated test, walk the manual phone checks, and reuse the
 parts. Every command below was read from the repo's own scripts, build files and CI config.
-Written 2026-10-28 for v0.9.0 (plus the 0.9.1 fixes on the working branch; where a screen string
+Written 2026-10-28 for v0.9.0 and updated 2026-10-29 for the released v0.9.1 (where a screen string
 differs between them, the 0.9.1 wording is given and flagged).
 
 Nothing here needs a Mac, a paid Apple account or Google Play: the project is Android-first and
@@ -111,20 +111,20 @@ Real passport material must never enter git. `fixtures/real/`, `*.mrz`, `*.dg1`,
 Use this to try the shipped app. It does **not** work against the local demo (section 8); it carries
 the tier-C-off Settings check (section 9, scenario P1) and any real HTTPS site you pin yourself.
 
-1. Download `app-regular-release.apk` from the GitHub Releases page of the repo (`v0.9.0`):
+1. Download `app-regular-release.apk` from the GitHub Releases page of the repo (`v0.9.1`):
    https://github.com/hamr0/zkagent/releases
-2. Verify it before installing. The values below are from the v0.9.0 release notes and `CHANGELOG.md`:
+2. Verify it before installing. The signer certificate below is from the release notes and `CHANGELOG.md`; the APK hash is in the v0.9.1 release notes:
 
 ```
 sha256sum app-regular-release.apk
-# expect 3a2576d1df8e424974284b0c3d2a2e17c78eac248bd18bafb82aac4739c080ab
+# expect the sha256 given in the v0.9.1 release notes (the v0.9.0 APK was 3a2576d1df8e424974284b0c3d2a2e17c78eac248bd18bafb82aac4739c080ab)
 
 "$ANDROID_HOME"/build-tools/36.1.0/apksigner verify --print-certs app-regular-release.apk
 # expect "Signer #1 certificate SHA-256 digest:" 1f6bceae0ffe9c2b326f2aab2202f0bdf3df7e5bdd8fac50aba2e1d318407264
 # (signer CN=zkagent showcase). Use whichever build-tools directory you have.
 
 "$ANDROID_HOME"/build-tools/36.1.0/aapt2 dump badging app-regular-release.apk | head -1
-# expect package: name='com.zkagent.scanner' versionCode='8' versionName='0.9.0'
+# expect package: name='com.zkagent.scanner' versionCode='9' versionName='0.9.1'
 ```
 
 3. Sideload:
@@ -232,7 +232,7 @@ adb install <the apk>
 
 This wipes the app's data (holder setting back to OFF, age locks cleared, Log empty), which is also
 the clean start the phone tests want. The version/commit footer at the bottom of the scan screen
-shows which build is running (for example `0.9.0 4bdc25c`; a `-dirty` suffix means built from a
+shows which build is running (for example `0.9.1 850f96f`; a `-dirty` suffix means built from a
 tree with local changes).
 
 ## 5. Run the local test site (apps/demo)
@@ -545,7 +545,7 @@ Run order that minimises reinstalls: P1 on the released APK, then install debug,
 source ~/zkagent-phone.sh
 adb uninstall $PKG
 adb install /path/to/app-regular-release.apk ; echo "install exit=$?"
-adb shell dumpsys package $PKG | grep -E "versionName|versionCode=|DEBUGGABLE"    # 0.9.0, 8, no DEBUGGABLE
+adb shell dumpsys package $PKG | grep -E "versionName|versionCode=|DEBUGGABLE"    # 0.9.1, 9, no DEBUGGABLE
 cap_start A
 adb shell am force-stop $PKG
 ```
@@ -562,7 +562,7 @@ Owner actions
 7. Tap the left arrow twice.
 
 Expected
-- Footer: `0.9.0` and a commit stamp (`4bdc25c` for the release; no `-dirty`).
+- Footer: `0.9.1` and a commit stamp (`850f96f` for the release; no `-dirty`).
 - Top bar: no tab strip; title "Settings" centred; no right arrow on the Settings page.
 - The text reads exactly: "Additional verifications are not available in this version of the app."
 - No switch labelled "Allow additional verifications" anywhere.
@@ -570,9 +570,9 @@ Expected
 - Step 7 returns to the Scan page.
 - `$W/logcat-A.txt` has no `AndroidRuntime` lines.
 
-Pass: the exact sentence is read, no switch visible, version reads 0.9.0, no crash.
+Pass: the exact sentence is read, no switch visible, version reads 0.9.1, no crash.
 
-(An optional TalkBack pass over the three pages is in the project history; it was not run for 0.9.0
+(An optional TalkBack pass over the three pages is in the project history; it was not run for 0.9.0 or 0.9.1
 and stays disclosed as not checked.)
 
 `cap_stop` when done.
@@ -799,7 +799,7 @@ Confirm `request_uri GET` for the request in the demo log, then tell the tester 
 the scan button; hold the document to the phone; read the popup and tap OK; read the line under the scan button and its colour.
 
 Expected
-- Red popup: "The website did not accept the answer — reopen the link from the site." (0.9.1 fix-branch wording, finding #54, not yet released; the 0.9.0 and first-fix wording was "Verifier refused: HTTP 302".)
+- Red popup: "The website did not accept the answer — reopen the link from the site." (0.9.1 wording, finding #54, released in 0.9.1; the 0.9.0 and first-fix wording was "Verifier refused: HTTP 302".)
 - Last-scan line red, never "Delivered" and never green. The Log entry names the HTTP status.
 - Proxy log: `REDIRECTED POST /wallet/direct_post`, no `LANDING`.
 - Site: `curl .../ui/presentations/<TX>` shows `"status":"pending"` (the presentation never arrived).
