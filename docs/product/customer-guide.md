@@ -131,6 +131,15 @@ Nothing below is hidden by the design and none of it is fixed; each is a disclos
   Within a single request the app refuses a second nationality question of the same kind (one "is it
   X?" and one "is it none of these?" at most), so one scan cannot cover every country but one. It
   likewise refuses a second document-number question in one request, so one scan tests one guess.
+- **For site builders: the same caps are enforced when the site creates its request.** A tier-C
+  request may carry at most one `nationality_is`, at most one `nationality_not_in` (D118, in 0.9.0)
+  and at most one `document_number_is` (D119, from 0.9.1); every other question is uncapped.
+  chiproof's `issueChallenge` throws at creation (reasons `nationality_asked_more_than_once` and
+  `document_number_asked_more_than_once`), and the app refuses a request that carries more on
+  arrival, with the generic refusal popup (the site sees only "refused") and the specific reason in
+  the in-app Log. **Upgrading from chiproof 0.9.0 to 0.9.1:** 0.9.0 accepted two
+  `document_number_is` in one request, 0.9.1 throws, so a site that built two must send them as
+  separate requests (one per scan) or its challenge route will fail on every scan.
 - **Expiry date.** The 3, 6 and 12 month expiry questions are three different questions and are not
   locked, so a site can combine them to narrow down your document's expiry date. That is not prevented.
 - **Age.** Age narrowing is prevented: a site gets one age in total, whichever it asks first, through an
