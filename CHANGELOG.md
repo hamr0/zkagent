@@ -3,6 +3,85 @@
 All notable changes to zkagent are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: [SemVer](https://semver.org/).
 
+## [0.9.1] — 2026-10-29
+
+> **UPGRADE NOTE (chiproof API change in a patch release).** From 0.9.1,
+> `issueChallenge({tier:'C', predicates})` **throws** when the predicates contain more than
+> one `document_number_is` (D119). 0.9.0 accepted two or more. A site that sent several
+> document-number tests in one tier-C request must split them into separate requests before
+> upgrading; the scanner app also refuses such a request on arrival (reason
+> `document_number_asked_more_than_once`). `validateTierCPredicates` returns `ok:false` and
+> `verify()` returns `challenge_predicates_invalid` for the same input; they do not throw. The
+> owner chose a patch bump (0.9.1, not 0.10.0) knowingly, despite this behaviour change.
+
+Lockstep release (D72): `packages/chiproof`, `apps/demo` and `apps/scanner` move 0.9.0 →
+0.9.1 together (`package.json` + lockfile for chiproof and the demo; scanner versionCode
+8 → 9 / versionName "0.9.1"). Patch bump, owner decision 2026-10-29 (see the upgrade note
+above). Versioning stays 0.x with no 1.0. This release fixes what the phone check of 0.9.0
+exposed; it adds no new tier-C capability.
+
+### Fixed
+
+- **No redirects on any site call (#52, HIGH, found in the 0.9.0 phone check).** The tier-C
+  refusal POST and the answer `direct_post` followed a 301/302/303 as a body-less GET and read
+  the landing page's 200 as delivered: the app showed a green "Delivered" (or "the website was
+  only told") while the site received nothing and stayed pending. The refusal POST, the answer
+  POST and the `request_uri` GET now all refuse redirects, so a 3xx takes the existing
+  not-delivered / refused / fetch-failed path; the `request_uri` GET can no longer be sent on
+  to a host the hostname gate did not allow. The well-known key fetch already refused redirects
+  (D113), so all four network call sites now match. A 3xx response body is read from the input
+  stream (a null error stream no longer throws). Operators must serve `request_uri` and
+  `response_uri` at their final URL.
+- **Friendly popup when the website does not accept the answer (#54).** Any non-2xx answer
+  without its own message (302 since #52, 400, 500, and so on) used to read "Verifier refused:
+  HTTP <n>". It now reads "The website did not accept the answer — reopen the link from the
+  site." The HTTP status and label stay in the Log tab, the report and logcat. The 409
+  already-used popup is unchanged.
+- **Plain post-lock banner (#28 item 6).** After Verify the banner read "Locked: mode X — tap
+  your document now"; it now reads "Ready — tap your document now" for every tier.
+
+### Added
+
+- **The Log names the specific tier-C refusal reason (#53).** The tier-C popup stays one
+  generic message and the website still gets only a generic `access_denied` (D109 g5/h4), but
+  the in-app Log line now states the specific reason in plain, value-free words.
+- **D119: at most one `document_number_is` per tier-C request (chiproof and scanner).** Several
+  document-number tests in one request would let a pinned site test many guesses in one scan
+  (finding #28 item 3). Mirrors D118: a second `document_number_is` refuses the whole request,
+  reason `document_number_asked_more_than_once`. In chiproof `validateTierCPredicates` returns
+  `ok:false` (never throws), `issueChallenge` throws at creation, and `verify()` returns
+  `challenge_predicates_invalid`. The app refuses on arrival (before any chip read), the Log
+  says "the document number was asked more than once", and the site is told only "refused".
+  This is not a general cap: the other question kinds stay uncapped as in 0.9.0.
+- **Docs and test helpers.** A single install-and-test guide from clone to a passing phone test
+  (`docs/product/install-and-test-guide.md`, linked from the READMEs); a redirect-proxy test
+  helper (`apps/demo/scripts/redirect-proxy.mjs`, not product code, which found #52); the
+  value-free 0.9.0 phone-check and fix re-check evidence log; and the customer guide now
+  tells site builders about the per-request tier-C caps (D118, D119) and the no-redirect rule.
+
+### Changed
+
+- **Test strengthening.** The D112 tier-C arrival wiring test (#47) now pins the real plan
+  inputs and the exact refusal guard in `MainActivity` (mutating the guard turns it red); a
+  D118 admission-level test refuses a doubled `nationality_is` / `nationality_not_in` through
+  `TierCAdmission.decide` with every gate passing; the locked-mode sentences, tier C included,
+  are pinned. Also tidied with no behaviour change: one shared non-null rejected-popup helper
+  (`VerifierRefusal.rejectedDialogMessage`), corrected code comments, and a header on
+  `operator-json-negative.sh` warning that it rewrites the tracked `operator.json` and must
+  never run alongside gradle.
+
+### Known limits / not done
+
+- Phone evidence for these fixes comes from a debug build (a tier-C-on build with a
+  redirecting proxy on loopback); release APKs cannot reach loopback, so the redirect re-check
+  is not release-build evidence. The #54 popup, the D119 refusal and the new banner were each
+  read by the owner on the phone.
+- TalkBack was not checked.
+- The D118 one-of-each rule and the other limits listed under 0.9.0 are unchanged.
+- Item 24, the showcase page covering every scenario, stays labelled for 0.10.0 (D117, D111).
+- Verified at HEAD before the version bump: chiproof 212 tests + typecheck (0.9.0: 211), demo
+  67 (66), scanner 649 with 0 failures (632).
+
 ## [0.9.0] — 2026-10-28
 
 Lockstep release (D72, ship as 0.9.0 per D117): `packages/chiproof`, `apps/demo` and
