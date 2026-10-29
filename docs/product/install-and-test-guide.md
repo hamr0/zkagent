@@ -113,11 +113,11 @@ the tier-C-off Settings check (section 9, scenario P1) and any real HTTPS site y
 
 1. Download `app-regular-release.apk` from the GitHub Releases page of the repo (`v0.9.1`):
    https://github.com/hamr0/zkagent/releases
-2. Verify it before installing. The signer certificate below is from the release notes and `CHANGELOG.md`; the APK hash is in the v0.9.1 release notes:
+2. Verify it before installing. The signer certificate below is from the release notes and `CHANGELOG.md`; the v0.9.1 APK hash is below:
 
 ```
 sha256sum app-regular-release.apk
-# expect the sha256 given in the v0.9.1 release notes (the v0.9.0 APK was 3a2576d1df8e424974284b0c3d2a2e17c78eac248bd18bafb82aac4739c080ab)
+# expect 46bef7ff4d154d4e17c4bb60ed1e54dcac855dbace3dfab9e29e5ff2e6a6ee1d (v0.9.1, 20969533 bytes; the v0.9.0 APK was 3a2576d1df8e424974284b0c3d2a2e17c78eac248bd18bafb82aac4739c080ab)
 
 "$ANDROID_HOME"/build-tools/36.1.0/apksigner verify --print-certs app-regular-release.apk
 # expect "Signer #1 certificate SHA-256 digest:" 1f6bceae0ffe9c2b326f2aab2202f0bdf3df7e5bdd8fac50aba2e1d318407264
