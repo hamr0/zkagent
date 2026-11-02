@@ -144,16 +144,16 @@ is a behaviour change (something that exists is wrong), an idea (something missi
 - Tier-C fence drops the Log entry when the Activity is recreated during the tier-C answer POST:
   the answer is delivered but no Log entry is written and the link stays in flight, so a rescan
   gets a 409 popup. Code read only. Anchor: `apps/scanner/app/src/main/java/com/tananaev/passportreader/MainActivity.kt`. Change.
-- `issueChallenge({tier:'C'})` without an `issuer` mints an unsigned challenge without throwing;
-  the mistake shows only after a real scan (`signature_required_at_tier_c`). Anchor:
-  `packages/chiproof/src/challenge.js`. Change.
+- CLOSED 2026-11-02 (D120, on the 0.10.0 branch, not yet released): `issueChallenge({tier:'C'})`
+  without an `issuer` now throws at creation (`issuer_required_at_tier_c`). Was: it minted an unsigned
+  challenge and the mistake showed only after a real scan. Anchor: `packages/chiproof/src/challenge.js`.
 - The demo's loopback gate trusts the Host header behind nginx, so a request with a forged Host
   would open mode C publicly. Must be fixed before the demo is ever hosted (NO-GO #3 keeps it
   local-only for now). Anchor: `apps/demo/tierc.mjs`. Change.
-- chiproof's non-blank test for `name_match` strips only `<`, whitespace and ASCII `-`, while the
-  app's `siteWords` also drops apostrophes and Unicode dashes; a name field of only `'` passes
-  chiproof, is signed, then the app refuses the whole request as malformed. Anchor:
-  `packages/chiproof/src/tier-c.js`. Change.
+- CLOSED 2026-11-02 (D121, on the 0.10.0 branch, not yet released): chiproof now normalises a
+  `name_match` name exactly as the app's `siteWords` does and refuses at creation only a name left with
+  no word (`name_fields_malformed`). Was: a field of only `'` passed chiproof, was signed, then the app
+  refused the whole request. Anchor: `packages/chiproof/src/tier-c.js`.
 - Resolved by disclosure, not by code: D119 made `issueChallenge` throw for two
   `document_number_is` in a patch release (0.9.1). The CHANGELOG 0.9.1 upgrade note and
   `customer-guide.md` now say so. The ledger bullet can be treated as resolved (the owner chose
@@ -183,8 +183,9 @@ is a behaviour change (something that exists is wrong), an idea (something missi
 - #43: the document-fields check still runs before the defensive Verify-tap tier-C check;
   reachable only if the holder switch or age lock changes between arrival and the tap.
 - #32: the demo page lead says "Two things a website can ask" (there are now three). Folded into
-  item 24 (showcase page, 0.10.0).
-- #46: `apps/demo/scripts/tierc-poc-request.mjs` has no tier-A threshold flag. Folded into item 24.
+  item 24 (showcase page, 0.10.0). Done in 24d93c0 (lead rewritten), unreleased.
+- #46: `apps/demo/scripts/tierc-poc-request.mjs` has no tier-A threshold flag. Folded into item 24;
+  done in 24d93c0 (`--threshold`, `--as-host`), unreleased.
 
 **Not run or not checked (disclosed):**
 
