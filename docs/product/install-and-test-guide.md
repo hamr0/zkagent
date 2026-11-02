@@ -111,20 +111,20 @@ Real passport material must never enter git. `fixtures/real/`, `*.mrz`, `*.dg1`,
 Use this to try the shipped app. It does **not** work against the local demo (section 8); it carries
 the tier-C-off Settings check (section 9, scenario P1) and any real HTTPS site you pin yourself.
 
-1. Download `app-regular-release.apk` from the GitHub Releases page of the repo (`v0.9.1`):
-   https://github.com/hamr0/zkagent/releases
-2. Verify it before installing. The signer certificate below is from the release notes and `CHANGELOG.md`; the v0.9.1 APK hash is below:
+1. Download `app-regular-release.apk` from the GitHub Releases page of the repo (`v0.10.0`):
+   https://github.com/hamr0/zkagent/releases/tag/v0.10.0
+2. Verify it before installing. The signer certificate below is from the release notes and `CHANGELOG.md`; the v0.10.0 APK hash is below:
 
 ```
 sha256sum app-regular-release.apk
-# expect 46bef7ff4d154d4e17c4bb60ed1e54dcac855dbace3dfab9e29e5ff2e6a6ee1d (v0.9.1, 20969533 bytes; the v0.9.0 APK was 3a2576d1df8e424974284b0c3d2a2e17c78eac248bd18bafb82aac4739c080ab)
+# expect 7f2f007441b9efca3b088859f08922dab01e540f7c53757b2f8840cc06dae365 (v0.10.0, 20970117 bytes; the v0.9.1 APK was 46bef7ff4d154d4e17c4bb60ed1e54dcac855dbace3dfab9e29e5ff2e6a6ee1d)
 
 "$ANDROID_HOME"/build-tools/36.1.0/apksigner verify --print-certs app-regular-release.apk
 # expect "Signer #1 certificate SHA-256 digest:" 1f6bceae0ffe9c2b326f2aab2202f0bdf3df7e5bdd8fac50aba2e1d318407264
 # (signer CN=zkagent showcase). Use whichever build-tools directory you have.
 
 "$ANDROID_HOME"/build-tools/36.1.0/aapt2 dump badging app-regular-release.apk | head -1
-# expect package: name='com.zkagent.scanner' versionCode='9' versionName='0.9.1'
+# expect package: name='com.zkagent.scanner' versionCode='10' versionName='0.10.0'
 ```
 
 3. Sideload:
@@ -232,7 +232,7 @@ adb install <the apk>
 
 This wipes the app's data (holder setting back to OFF, age locks cleared, Log empty), which is also
 the clean start the phone tests want. The version/commit footer at the bottom of the scan screen
-shows which build is running (for example `0.9.1 850f96f`; a `-dirty` suffix means built from a
+shows which build is running (for example `0.10.0 9f20cf8`; a `-dirty` suffix means built from a
 tree with local changes).
 
 ## 5. Run the local test site (apps/demo)
@@ -559,7 +559,7 @@ Run order that minimises reinstalls: P1 on the released APK, then install debug,
 source ~/zkagent-phone.sh
 adb uninstall $PKG
 adb install /path/to/app-regular-release.apk ; echo "install exit=$?"
-adb shell dumpsys package $PKG | grep -E "versionName|versionCode=|DEBUGGABLE"    # 0.9.1, 9, no DEBUGGABLE
+adb shell dumpsys package $PKG | grep -E "versionName|versionCode=|DEBUGGABLE"    # 0.10.0, 10, no DEBUGGABLE
 cap_start A
 adb shell am force-stop $PKG
 ```
@@ -576,7 +576,7 @@ Owner actions
 7. Tap the left arrow twice.
 
 Expected
-- Footer: `0.9.1` and a commit stamp (`850f96f` for the release; no `-dirty`).
+- Footer: `0.10.0` and a commit stamp (`9f20cf8` for the release; no `-dirty`).
 - Top bar: no tab strip; title "Settings" centred; no right arrow on the Settings page.
 - The text reads exactly: "Additional verifications are not available in this version of the app."
 - No switch labelled "Allow additional verifications" anywhere.
@@ -584,7 +584,7 @@ Expected
 - Step 7 returns to the Scan page.
 - `$W/logcat-A.txt` has no `AndroidRuntime` lines.
 
-Pass: the exact sentence is read, no switch visible, version reads 0.9.1, no crash.
+Pass: the exact sentence is read, no switch visible, version reads 0.10.0, no crash.
 
 (An optional TalkBack pass over the three pages is in the project history; it was not run for 0.9.0 or 0.9.1
 and stays disclosed as not checked.)
