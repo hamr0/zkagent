@@ -10,5 +10,8 @@
     "@aztec/bb.js": "5.0.0",
     "@peculiar/asn1-schema": "*",
     "@peculiar/asn1-x509": "*"
+  },
+  "overrides": {
+    "ws": "^8.21.0"
   }
 }
