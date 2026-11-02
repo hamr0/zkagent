@@ -22,85 +22,83 @@
 
 ---
 
-## Why this exists
+## What it is and why
 
-zkagent came out of two needs that turn out to share one root.
+zkagent delivers a **working verification model**: a binary, non-leaking verifier you can use today, or take, modify and customise without starting from scratch. It has many knobs to open or change: `operator.json`, tiers, age thresholds, hostname pin lists and evidence plugs. The goal is achieved: your identity can be verified inline without revealing one more detail about who you are. The aim is to stop sharing document scans online, even with an employer.
 
-**1. Age verification is spreading, and the current answer over-asks.** Governments are mandating age checks for social media and adult content. The tools on offer are ID uploads, face scans and issuer-run wallets, and all of them collect far more than the question needs. [8een](https://github.com/hamr0/8een) walked the EU's own age-verification design step by step and showed the limits of the mdoc approach: it needs an issuer, an enrolment step and a wallet before anyone can answer "over 18?".
-
-**2. The internet needs a personhood signal, and agents need a human root.** Humans now compete with machines online, and bots are getting cheaper while the humans behind them get harder to see. Sites want "one real person, once" without learning who that person is. The agent-auth standards emerging now (Web Bot Auth, OAuth on-behalf-of drafts and others) all root trust in a vendor or a custodial account. None of them can say "a real, unique human stands behind this agent" without an identity provider in the middle.
-
-**The shared root: everyone assumes an issuer.** Governments already issued a credential: the signed chip in your passport or ID card. zkagent reuses it directly, with no new issuer, no enrolment and no account.
-
-## What it is
-
-zkagent is an **open-source lab** that proves one thing in working code: you can prove a trait about yourself, such as your age or that you're a unique human, from a real government document, without disclosing the document.
-
-The phone reads the chip over NFC and checks the government's own signature on it (ICAO 9303 passive authentication). It then sends the requesting site a single answer instead of the data. The document never leaves the phone, and nothing from it is stored.
-
-**Minimal disclosure, not zero-knowledge cryptography.** zkagent uses no zero-knowledge circuits of its own. Its privacy comes from minimalism: one bit out, a fresh single-use nonce, per-site keys, and coarsened dates so that nothing stable leaks. It's simple, auditable and deliberately boring. Third-party ZK proofs can be plugged in as optional evidence, but they are never the default.
+- **The problem:** age checks are spreading, and today's tools (ID uploads, face scans, issuer-run wallets) collect far more than the question needs. Sites also want "one real person, once" without learning who. Agent-auth standards root trust in a vendor or an account, never in a human. [8een](https://github.com/hamr0/8een) walked the EU's age-verification design and showed the limits of the mdoc approach: it needs an issuer, an enrolment step and a wallet.
+- **The idea:** governments already issued a credential, the signed chip in your passport or ID card. zkagent reuses it. No new issuer, no enrolment, no account.
+- **How it works:** the phone reads the chip over NFC and checks the government's own signature (ICAO 9303 passive authentication). The requesting site gets one answer, not the data. The document never leaves the phone and nothing from it is stored.
+- **Three parts:** the Android scanner app, the `chiproof` verifier library, and a local demo site. All open source, Apache-2.0.
+- **Not zero-knowledge.** zkagent uses no ZK circuits of its own. Privacy comes from minimal disclosure: one bit out, a fresh single-use nonce, per-site keys, and coarsened dates. Third-party ZK proofs can be plugged in as optional evidence, never as the default.
 
 ## What's built
 
-Three parts, all open source under Apache-2.0. Tier C (below) is built and device-checked and shipped in 0.9.0. The latest release is v0.10.0.
+The latest release is v0.10.0. Built and checked on an Android Pixel 6a, mostly against the local demo (same-device link and QR code), and once end-to-end against a remote HTTPS site.
 
 | Part | What it is | Where |
 |---|---|---|
-| **`chiproof`** | The verifier library: what a website runs to check an answer. `verify()` never throws; `issueChallenge` throws on a malformed request (for example tier C without an issuer). It issues challenges, spends single-use nonces, negotiates tiers, builds and checks tier-C requests, and has a pluggable evidence registry. Zero runtime dependencies, with TypeScript types. | [npm](https://www.npmjs.com/package/chiproof) · `packages/chiproof` |
-| **Scanner** | The reference Android app. It reads the chip, verifies it, asks the holder for consent with a biometric prompt, and sends the answer. Its Settings page has the holder's switch for tier C. | [GitHub Releases](https://github.com/hamr0/zkagent/releases) (signed APK) · `apps/scanner` |
-| **Demo** | A small local website that plays the requesting site, so you can run the whole loop end to end, tier C included. | `apps/demo` |
+| **`chiproof`** | The verifier library a website runs. `verify()` never throws; `issueChallenge` throws on a malformed request (for example tier C without an issuer). Issues challenges, spends single-use nonces, negotiates tiers, builds and checks tier-C requests, has a pluggable evidence registry. No runtime dependencies, TypeScript types. | [npm](https://www.npmjs.com/package/chiproof) · `packages/chiproof` |
+| **Scanner** | The reference Android app. Reads the chip, verifies it, asks the holder to consent with a biometric prompt, sends the answer. Settings holds the holder's switch for tier C. | [GitHub Releases](https://github.com/hamr0/zkagent/releases) (signed APK) · `apps/scanner` |
+| **Demo** | A small local website that plays the requesting site, so you can run the whole loop, tier C included. | `apps/demo` |
 
 ### Two kinds of proof
 
 | | **Tier A: anonymous** | **Tier B: unique human, per site** |
 |---|---|---|
-| Answers | "Over N?" true/false | "Over N?" true/false, **plus** "I'm the same person you saw before" |
-| Signed? | No, by design. It carries nothing that could link two visits. | Yes, by a key held in the phone's secure hardware (StrongBox P-256, or Ed25519 where available) |
-| Can the site recognise you again? | Never. Two visits look identical. | Only that site, through a per-site tag. Two sites can never connect you. |
+| What the site learns | "Over N?" yes or no | "Over N?" yes or no, plus a per-site tag for the document |
+| Can the site recognise a repeat visit? | No. Two visits look identical. | Yes, at that one site only. A second scan of the same document shows as "already registered". |
+| Can two sites link you? | No | No. The tag differs per site. |
+| Signed? | No, by design | Yes, by a device key (`sig-ed25519/1` or `sig-p256/1`; StrongBox P-256, or Ed25519 where available) |
 | Good for | Pure age gates | One account per person, bans that stick, anti-bot gating |
 
 ### Tier C: yes/no checks on document fields (off by default)
 
-Tier C answers a short list of yes/no questions about fields on the document. The site never gets the field itself. The questions are:
+Tier C is mainly for government services, KYC and similar checks: it confirms document facts without the site receiving or scanning the document.
+
+The site never gets the field itself, only a yes or no. The questions:
 
 - the document is valid for at least 3, 6 or 12 more calendar months
-- the name matches (the site sends `given_names` and `surname` as two separate fields, so there is no order to get wrong)
+- the name matches (`given_names` and `surname` sent as two fields, so no order to get wrong)
 - the date of birth shows an age of at least 15, 16, 18, 21, 60 or 65
 - the nationality is a given code, or is not in a short list of codes
 - the document number matches
 
-It is closed by default. Three things must all be true before the app answers a tier-C request:
+All three must be true before the app answers:
 
 1. The operator turned tier C on in `operator.json` (`tier_c.enabled`).
-2. The site's exact hostname is on the operator's `tier_c_verifiers` list. This is a hostname pin, not a key pin. The list is baked into the build, so changing it means rebuilding.
-3. The holder turned on the setting **Allow additional verifications**. It is OFF by default. While it is off, only age verification (tiers A and B) ever leaves the phone.
+2. The site's exact hostname is on the operator's `tier_c_verifiers` list. This pins a hostname, not a key, and is baked into the build.
+3. The holder turned on **Allow additional verifications**. It is OFF by default; while off, only age checks (tiers A and B) leave the phone.
 
-The app answers every question in a request or refuses the whole request, never part of it. For any tier-C refusal the site sees only a generic "refused". The specific reason shows in the app only. A build that turns tier C on without a pin list, or has a pin list without turning it on, fails to build.
-
-Tier C is built and device-checked on a US passport and a Dutch ID card, and shipped in 0.9.0. It is not zero-knowledge either: it is minimal disclosure of yes/no answers. The limits are listed under [Honest limits](#honest-limits).
+- The app answers every question in a request or refuses the whole request.
+- A refused site sees only a generic "refused". The reason shows in the app only.
+- A build with tier C on but no pin list, or a pin list but tier C off, fails to build.
+- Checked on a US passport and a Dutch ID card, shipped in 0.9.0. Not zero-knowledge. Limits: [Honest limits](#honest-limits).
 
 ### Age thresholds
 
-Sites pick from a fixed, published list: **over 15, 16, 18, 21, 60 or 65**. Each site gets one age, locked the first time it asks, so it can't fish for your exact age by asking several. The lock is shared across tiers: the age a site first asks about, in an age check or in tier C's date-of-birth question, is the only one it can ever use. The one exception is a site the operator names in `multi_threshold_verifiers`, which can ask several ages. The showcase build names none. Dates are coarsened to the day before they're compared.
-
-Age verification (tiers A and B) can be open to any site. In `operator.json`, `"verifiers": "any"` answers an age check from any website, and the showcase build uses it. The exact-hostname list form stays available for a closed build. `"any"` never opens tier C.
+- Fixed list: **over 15, 16, 18, 21, 60 or 65**.
+- Each site gets one age, locked the first time it asks, so it can't fish for your exact age. The lock is shared across tiers, tier C's date-of-birth question included.
+- Exception: sites in `multi_threshold_verifiers` can ask several ages. The showcase build names none.
+- Dates are coarsened to the day before comparing.
+- Age checks (tiers A and B) can be open to any site: `"verifiers": "any"` in `operator.json`, as the showcase build does. An exact-hostname list stays available for a closed build. `"any"` never opens tier C.
 
 ### Features
 
-- The government's chip signature is verified against the German BSI CSCA masterlist, and the masterlist's own signature chain is checked when it loads.
-- Chip authentication is reported where the document supports it.
-- Same-device links (`av://`) or a QR code scanned with the phone's camera, with no in-app scanner needed.
-- The site's request is signed (ES256), and its origins must all match. A refusal is always shown as a refusal, never as success.
-- A per-site age lock, and an operator choice between open age verification (`"verifiers": "any"`) and an exact-hostname allowlist, both configured at build time in `operator.json`. Tier C has its own switch and pin list there. A bad config fails the build loudly.
-- A refusal or error is shown in red in the app. For tier C, the requesting site sees only a generic refusal; the reason is shown in the app only.
-- A capped scan log that holds no values, and a privacy policy stating that nothing from the document is stored.
-- Evidence plugs: device-key signatures (`sig-p256/1`, `sig-ed25519/1`), `signed-receipt/1`, and the optional third-party ZK plug `zk-passport/1` (tier A, validation-grade).
+- Chip signature checked against the German BSI CSCA masterlist; the masterlist's own signature chain is checked at load.
+- Chip authentication reported where the document supports it.
+- Same-device links (`av://`) or a QR code scanned with the phone's camera. No in-app scanner needed.
+- The site's request is signed (ES256) and its origins must all match. A refusal is always shown as a refusal, never as success.
+- Build-time config in `operator.json`: open or allowlisted age checks, plus tier C's own switch and pin list. A bad config fails the build.
+- Refusals and errors show in red in the app.
+- A capped scan log with no values, and a privacy policy stating nothing from the document is stored.
+- Evidence plugs: device-key signatures (`sig-p256/1`, `sig-ed25519/1`), `signed-receipt/1`, and optional third-party ZK `zk-passport/1` (tier A, validation-grade).
 
 ### What it works with
 
 - **Documents:** ICAO 9303 e-passports and chip ID cards, over BAC or PACE. Tested on a US passport and a Dutch ID card.
 - **Phones:** Android with NFC. Tested on a Pixel 6a. iOS is out of scope.
-- **Sites:** any Node 20+ backend, through `chiproof`. The request and response shapes follow OpenID4VP (a signed request object and a `direct_post` response).
+- **Sites:** any Node 20+ backend, through `chiproof`. Request and response shapes follow OpenID4VP (signed request object, `direct_post` response).
 
 ## Use cases
 
@@ -129,22 +127,28 @@ The agent half of zkagent (delegation certificates, signed agent requests, revoc
 
 ## Honest limits
 
-- Passive authentication proves the chip data is genuine. It doesn't prove the person holding the phone is the document's owner.
-- Where a document lacks chip authentication, a cloned chip would answer as the real holder would. This is disclosed, not mitigated.
-- A person holding k documents can get up to k tags at a site: at most k, never exactly one.
-- Tier A is unsigned by design, and the tier-B key comes from no configured trust source, because no device-attestation plug was built.
-- Tested on one phone model and two documents. It makes no claim about other countries or devices.
+| Limit | What it means |
+|---|---|
+| Not proof of ownership | Passive authentication proves the chip data is genuine. It doesn't prove the person holding the phone owns the document. |
+| Cloned chips | Where a document lacks chip authentication, a cloned chip answers as the real holder would. Disclosed, not mitigated. Tier B uniqueness only holds where `chip_auth` is true. |
+| Several documents | A person with k documents can get up to k tags at a site: at most k, never exactly one. |
+| Trust sources | Tier A is unsigned by design. The tier-B key comes from no configured trust source, because no device-attestation plug was built. |
+| Narrow testing | One phone model (a Pixel 6a) and two documents, mostly against the local demo. A remote HTTPS site was reached once end-to-end, against one host. No claim about other countries, devices or sites; wide interoperability is untested. |
+| Accessibility | TalkBack was found unusable and is not checked. |
+| Release vs debug | Phone evidence against the local demo comes from debug builds; release APKs can't reach `127.0.0.1` by design. |
 
-Tier C adds these limits, each stated in full in [`docs/product/customer-guide.md`](docs/product/customer-guide.md) section 4.1:
+**Tier C adds these.** Each is stated in full in [`docs/product/customer-guide.md`](docs/product/customer-guide.md) section 4.1.
 
-- **Repeat questions.** Nothing limits how often an approved site asks. It can keep confirming guesses of a name, a document number or a nationality. Your setting is the brake: turn it off and tier C is never answered.
-- **Expiry and age.** The 3, 6 and 12 month questions can be combined to narrow the expiry date. Age is locked to one value per site, except for sites in `multi_threshold_verifiers`, which can narrow it down. The one age a site gets is still one bit about the date of birth.
-- **Document number.** A "yes" links you to a number the site already had.
-- **Long names.** A very long name may read as "no match", because the document cuts long names short and given names must match in full.
-- **The pin is a hostname.** It trusts whoever controls that hostname's DNS and TLS. The list changes only with a new build, there is no remote revocation, and no authority stands behind it.
-- **Many hostnames, many ages.** The age lock is per hostname, so a party that runs many hostnames can ask a different age on each.
-- **Sites learn the link was opened.** In an open build the app must fetch the request before it knows it is tier C. A site that is not pinned still learns that the link was opened and from which network address, then is refused before anything is read.
-- **Little real-world testing.** Fetching a site's signing key over real HTTPS was run once, against one host. Wide interoperability is untested.
+| Limit | What it means |
+|---|---|
+| Repeat questions | Nothing limits how often an approved site asks, so it can keep confirming guesses of a name, document number or nationality. Your setting is the brake: off means tier C is never answered. |
+| Expiry | The 3, 6 and 12 month questions can be combined to narrow the expiry date. |
+| Age | Locked to one value per site, but that one age is still one bit about the date of birth. Sites in `multi_threshold_verifiers` can narrow it down. |
+| Many hostnames | The age lock is per hostname, so a party running many hostnames can ask a different age on each. |
+| Document number | A "yes" links you to a number the site already had. |
+| Long names | A very long name may read as "no match": the document cuts long names short, and given names must match in full. |
+| The pin is a hostname | It trusts whoever controls that hostname's DNS and TLS. The list changes only with a new build. No remote revocation, no authority behind it. |
+| Link-open is visible | In an open build the app must fetch the request before it knows it is tier C. An unpinned site still learns the link was opened, and from which network address, then is refused before anything is read. |
 
 ## Try it
 
