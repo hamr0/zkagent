@@ -3,6 +3,68 @@
 All notable changes to zkagent are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · versioning: [SemVer](https://semver.org/).
 
+## [0.10.0] — 2026-11-02
+
+> **UPGRADE NOTE (breaking for sites, chiproof).** From 0.10.0, `issueChallenge({tier:'C', ...})`
+> **throws** (`issuer_required_at_tier_c`) when no issuer is passed (D120). 0.9.1 and earlier
+> accepted the mint and the mistake only showed after a real scan. A site that mints tier C
+> without an issuer must now pass one. `verify()` keeps its `signature_required_at_tier_c`
+> path unchanged. Separately, the tier-C name-match refusal reason is renamed
+> `name_fields_invalid` → `name_fields_malformed` (D121); update any code that matches the old string.
+
+Lockstep release (D72): `packages/chiproof`, `apps/demo` and `apps/scanner` move 0.9.1 →
+0.10.0 together (`package.json` + lockfile for chiproof and the demo; scanner versionCode
+9 → 10 / versionName "0.10.0"). Minor bump: the demo becomes a test and showcase page, and
+D120 changes chiproof behaviour. Versioning stays 0.x with no 1.0.
+
+### Added
+
+- **The demo page is now the local test and showcase page (item 24, D111, D122).** All 26
+  scenario rows are on the page, each with a one-line explanation and a "Needs" marking
+  (`apps/demo/scenarios.mjs`). Test mode is `DEMO_TEST_MODE=1`, off by default
+  (`TIERC_POC_ALLOW_RAW=1` stays as an alias): test-only controls render only in test mode, and
+  with it off the server refuses test-only request shapes (`400 test_mode_off`). Rows 17, 25 and
+  26 use `http://localhost:8787` as the second, unlisted site (`as_host`, loopback-only), with a
+  per-scope verifier so a localhost answer is checked against the scope it was minted for. Rows
+  17, 18 and 26 show "No answer" (the app tells an unapproved site nothing); rows 14-16 show
+  "Refused". `tierc-poc-request.mjs` gains `--threshold` and `--as-host` (#46). The READMEs gain a
+  "Test it with a real phone" section. The page lead no longer says "Two things" (#32).
+  Localhost proof-of-concept and device round on the Pixel 6a are recorded under `docs/logs/`.
+
+### Changed
+
+- **Names are normalised the way the app does it (D121, chiproof).** chiproof now mirrors the
+  app's `TierCNameMatch.siteWords`: apostrophes are dropped and hyphens, dashes, whitespace and
+  `<` are word separators. A name left with no word is refused at creation with the app's
+  reason, now `name_fields_malformed` (renamed from `name_fields_invalid`). The em dash,
+  horizontal bar, minus sign and the em, small and fullwidth hyphen variants are separators in
+  the app as well, so a site's "Jean—Pierre" now matches JEAN<PIERRE instead of giving a wrong
+  "no match". One truth table is pinned in both the chiproof and scanner suites.
+- **Demo wording.** Row 5 says "already registered" on a repeat tier-B scan; row 21 says an old
+  link still shows the question and Verify then gives "Verification session expired" (past its
+  time) or "This link was already used" (used, in time).
+- **Docs.** Customer guide section 6.9 now splits the stale-link row: only an expired link is
+  refused before the chip read; a used link still in its time is read, the site answers 409 and
+  the app shows "This link was already used". The demo README says to reset the store after an
+  app reinstall (otherwise `attester_key_mismatch` while the phone says "Delivered"). Backlog and
+  milestones swept (D120, D121, #32, #46 closed; item 24 records #55).
+
+### Fixed
+
+- **A link that arrives while an outcome popup is open survives the popup's dismissal (#55).**
+  Closing a terminal outcome dialog released the live pending handoff, so a new `av://` link
+  captured while the dialog was open (`onNewIntent`) was marked terminal and dropped; the next
+  Verify did a local-only read ("Read OK — nothing was sent"). The dialog now releases only the
+  handoff it reported (`OutcomeDismissScope.ownsHandoff`, reference identity). Confirmed on the
+  Pixel 6a: Delivered popup open, fresh link, OK, question kept, Verify, Delivered.
+
+### Known limits / not done
+
+- Device evidence for item 24 and #55 comes from a debug build against the loopback demo;
+  release APKs cannot reach loopback, so it is not release-build evidence.
+- TalkBack was not checked.
+- The limits listed under 0.9.0 and 0.9.1 are unchanged.
+
 ## [0.9.1] — 2026-10-29
 
 > **UPGRADE NOTE (chiproof API change in a patch release).** From 0.9.1,
