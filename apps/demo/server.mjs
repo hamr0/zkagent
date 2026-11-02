@@ -465,9 +465,10 @@ function renderOutcome(tier, s) {
   let line = 'The verifier could not check (' + v.reason + ').';
   if (v.allowed === true) {
     headingClass = 'allowed';
-    headingText = tier === 'B' ? 'Registered as a unique adult human' : 'Proved: over 18';
+    const again = tier === 'B' && s.already_registered === true;
+    headingText = tier === 'B' ? (again ? 'Already registered as a unique adult human' : 'Registered as a unique adult human') : 'Proved: over 18';
     line = tier === 'B'
-      ? 'This document is now registered as a unique adult human at this site.'
+      ? (again ? 'This document was already registered as a unique adult human at this site.' : 'This document is now registered as a unique adult human at this site.')
       : 'You proved you are over 18.';
   } else if (v.allowed === false) {
     headingClass = 'notAllowed';

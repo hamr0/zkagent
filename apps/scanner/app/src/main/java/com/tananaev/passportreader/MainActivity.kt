@@ -2377,16 +2377,22 @@ abstract class MainActivity : AppCompatActivity() {
         val keepLockedMode = FailureTransition.keepsLockedMode(isAccessEstablishmentFailure, isTransientChipCommunicationFailure)
         val displayedMessage = OutcomeText.withModeSentence(message, lockedModeForDisplay())
         Log.i(TAG, "M2 stage: terminal outcome dialog shown: $displayedMessage")
+        // Finding #55: the transaction this dialog reports. A link captured while it is open is a different one.
+        val handoffWhenShown = pendingHandoff
         AlertDialog.Builder(this)
             .setMessage(dialogText(displayedMessage, refusal))
             .setCancelable(false)
             .setPositiveButton(R.string.dialog_ok) { dialog, _ ->
                 dialog.dismiss()
                 if (!keepMrzAndMode) {
-                    releasePendingHandoff()
-                    verifiedRequest = null
+                    // Finding #55: only the handoff this dialog reported is released; a newer link captured while
+                    // the dialog was open (onNewIntent) keeps its pending/verified state and its link-once entry.
+                    if (OutcomeDismissScope.ownsHandoff(handoffWhenShown, pendingHandoff)) {
+                        releasePendingHandoff()
+                        verifiedRequest = null
+                    }
                     // D58 step 3: cleared in the SAME lockstep — see
-                    // [authorizedHandoff]'s doc.
+                    // [authorizedHandoff]'s doc. Belongs to the reported transaction, so cleared either way.
                     authorizedHandoff = null
                 }
                 wipeSession(keepMrz = keepMrzAndMode, keepLockedMode = keepLockedMode)

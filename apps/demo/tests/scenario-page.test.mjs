@@ -270,3 +270,28 @@ test('#46: the helper --as-host localhost mints a localhost-origin link', async 
   assert.match(stdout, /as_host=localhost/);
   assert.ok(stdout.includes(encodeURIComponent(`http://localhost:${u.port}/wallet/direct_post`)));
 });
+
+// ---- row 5: an already-registered tier-B result must not say "now registered" ----------------------------------------
+
+test('row 5: renderOutcome words a tier-B repeat as already registered, and a first scan as now registered', async () => {
+  const html = await page(false);
+  const m = html.match(/function renderOutcome\([\s\S]*?\n\}\n(?=\s*function renderCompare)/);
+  assert.ok(m, 'renderOutcome is on the page');
+  const run = (s) => {
+    const el = () => ({ hidden: true, textContent: '', className: '' });
+    const e = { outcomeSection: el(), outcomeHeading: el(), outcomeLine: el(), alreadyRegistered: el(), verdictJson: el(), storeState: el() };
+    new Function('outcomeSection', 'outcomeHeading', 'outcomeLine', 'alreadyRegistered', 'verdictJson', 'storeState', 'log', 'renderTierC', `${m[0]}; renderOutcome('B', ${JSON.stringify(s)});`)(
+      e.outcomeSection, e.outcomeHeading, e.outcomeLine, e.alreadyRegistered, e.verdictJson, e.storeState, () => {}, () => {});
+    return e;
+  };
+  const verdict = { ok: true, allowed: true, valid: true };
+  const first = run({ verdict, already_registered: false, zktag_seen_before: false });
+  assert.equal(first.outcomeHeading.textContent, 'Registered as a unique adult human');
+  assert.match(first.outcomeLine.textContent, /is now registered/);
+  assert.equal(first.alreadyRegistered.hidden, true);
+  const again = run({ verdict, already_registered: true, zktag_seen_before: true });
+  assert.match(again.outcomeHeading.textContent, /^Already registered/);
+  assert.match(again.outcomeLine.textContent, /was already registered/);
+  assert.doesNotMatch(again.outcomeLine.textContent, /now registered/);
+  assert.equal(again.alreadyRegistered.hidden, false);
+});

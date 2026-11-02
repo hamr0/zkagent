@@ -54,7 +54,7 @@ export const SCENARIOS = [
   { n: 18, line: 'Tier C when the build has the operator switch OFF: the app tells the site nothing, so this page shows "No answer" when the request expires.', needs: ['Phone', 'Build (switch OFF)'], controls: [{ ...askC3, expect: 'no-reply' }] },
   { n: 19, line: 'Refusals in rows 14 to 16 show the one generic "Refused" here; rows 17 and 18 show "No answer", because the app tells an unapproved site nothing. The reasons show in the app only.', needs: ['as above'], controls: [{ ...askC3, label: 'Ask tier C (see rows 14 to 18)' }] },
   { n: 20, line: '"No answer": the holder walked away and the request expired. Shown differently from "Refused".', needs: ['Phone (walk away)'], controls: [askC3] },
-  { n: 21, line: 'Stale or already-used link: opening an old link shows "Verification session expired" in the app.', needs: ['Phone (reopen an old link)'], controls: [askA] },
+  { n: 21, line: 'Stale or already-used link: opening an old link still shows the question; tapping Verify on a link past its time shows "Verification session expired", and on a used link still in time the website refuses it and the app says "This link was already used".', needs: ['Phone (reopen an old link)'], controls: [askA] },
   { n: 22, line: 'Link once: a forced recreation of the app does not replay the link or start a second verification.', needs: ['Phone', 'ADB recreation'], controls: [askA] },
   { n: 23, line: 'Wrong document details typed in: the app re-arms and keeps the pending link, so you can retype.', needs: ['Phone (type wrong details)'], controls: [askA] },
   { n: 24, line: 'Card lifted mid-read: the app says "Couldn\'t read" and the flow stays open.', needs: ['Phone (lift the card)'], controls: [askA] },
