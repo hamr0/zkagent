@@ -48,6 +48,7 @@ import { DEV_REQUEST_SIGNER } from './dev-request-signer-key.mjs';
 // synchronously on any I/O/parse failure and that is left to propagate to
 // process top-level (fail closed, item 9 — see the bottom of this file).
 import { JsonFileStore, defaultStorePath } from './store.mjs';
+import { renderScenarios, LEAD } from './scenarios.mjs';
 // M3b chunk 2 (milestones.md §6.9.2 items 14 and 15): tier C goes through chiproof like tiers A and B. The demo-only
 // helpers (loopback gate, value-free log line, device-test hook) live in tierc.mjs.
 import {
@@ -152,6 +153,13 @@ const REQUEST_SIGNER_PRIVKEY_PEM = process.env.REQUEST_SIGNER_PRIVKEY_PEM ?? DEV
 // than 18 fatal"); the preset-bracket / per-origin-lock / named-exception
 // policy D74 actually specifies is scanner-side (§6.5 S1/S2), not M3 scope.
 const THRESHOLD = 18;
+// Item 24 / D111: TEST MODE. Off by default. `DEMO_TEST_MODE=1` shows the page's test-only controls (a second age, an
+// off-list question) AND lets the server accept the request shapes behind them (`?threshold=` and `rawPredicates`);
+// with it off the server REFUSES those shapes (400 test_mode_off). The older `TIERC_POC_ALLOW_RAW=1` gate is folded in:
+// it is now just a deprecated alias for the same switch. Read per call so a test can flip it.
+export function isTestMode() {
+  return process.env.DEMO_TEST_MODE === '1' || process.env.TIERC_POC_ALLOW_RAW === '1';
+}
 const DEFAULT_TTL_MS = 120_000;
 const MAX_TTL_MS = 600_000;
 const MAX_BODY_BYTES = 64 * 1024;
@@ -167,7 +175,7 @@ const MAX_TRANSACTIONS = 1000; // spike-grade memory cap
 // tier B requires EITHER attester-sig alternative (D31, chiproof 0.4.0's
 // any-of `require` groups), on the same instance/nonce store. Resolves the
 // former two-instance workaround; see README.md.
-export function makeVerifier() {
+export function makeVerifier(scopeDomain = SCOPE_DOMAIN, shared = null) {
   // §6.3 item 2/3/9: ONE flat JSON file (JsonFileStore) backs the nonce
   // store, BOTH attester-key stores, and the demo's own zktags-seen dedupe
   // state — persistent across restarts, no in-memory fallback anywhere.
@@ -176,7 +184,9 @@ export function makeVerifier() {
   // sets its own DEMO_STORE_PATH — never share state through a shared
   // module import. The constructor is synchronous and throws immediately on
   // any I/O/parse failure (fail closed, item 9) — never caught here.
-  const store = new JsonFileStore(process.env.DEMO_STORE_PATH ?? defaultStorePath());
+  // D122: a per-origin verifier (see createApp) shares the first one's store, so nonces, attester bindings and
+  // zktags-seen live in one file; only the scope differs.
+  const store = shared?.store ?? new JsonFileStore(process.env.DEMO_STORE_PATH ?? defaultStorePath());
   // D38 (2026-09-01): per-origin device keys, trust-on-first-sight. A real
   // device's mode-B key is no longer expected to be one operator-pinned
   // constant — it now carries its own `pubkey` and gets bound to
@@ -193,11 +203,11 @@ export function makeVerifier() {
   // predates D38): a pinned key_id is resolved before the store is ever
   // consulted, letting the owner keep pinning a real Pixel key today, ahead
   // of the scanner sending `pubkey`.
-  const challengeIssuer = generateKeyPairSync('ed25519');
+  const challengeIssuer = shared?.challengeIssuer ?? generateKeyPairSync('ed25519');
   const attesterStoreEd25519 = store.attesterView('ed25519');
   const attesterStoreP256 = store.attesterView('p256');
   const verifier = createVerifier({
-    scopeDomain: SCOPE_DOMAIN,
+    scopeDomain,
     challengeSecret: CHALLENGE_SECRET,
     threshold: THRESHOLD,
     stores: { nonce: store },
@@ -283,12 +293,19 @@ const PAGE = `<!doctype html>
   th { background: #f2f2f2; }
   td.differs { background: #fff6e8; }
   .tablewrap { overflow-x: auto; max-width: 100%; }
+  ol.rows { list-style: none; padding: 0; margin: 0; }
+  li.row { border-top: 1px solid #ddd; padding: .6rem 0; }
+  li.row p { margin: .15rem 0; }
+  .needs { color: #444; font-size: .85em; }
+  .rowctl { display: flex; flex-direction: column; gap: .4rem; margin-top: .3rem; }
+  .rowctl button { font-weight: 500; padding: .55rem .8rem; }
+  .testmode { font-weight: bold; color: #8a5400; border: 1px solid #e0b060; background: #fff6e8; padding: .5rem .7rem; border-radius: 6px; }
   details summary { cursor: pointer; font-weight: 600; margin-top: 1.2rem; }
   details p { color: #444; }
 </style>
 <div>
 <h1>zkagent age gate demo</h1>
-<p class="lead">Two things a website can ask this app to prove — no name, date of birth, or any other personal field is ever sent.</p>
+<p class="lead">${LEAD}</p>
 <div class="buttons">
   <button id="goA">Prove you're over 18</button>
   <button id="goB">Prove you're a unique adult human</button>
@@ -316,6 +333,8 @@ const PAGE = `<!doctype html>
   <div class="buttons"><button id="askC">Ask the app</button></div>
 </section>
 
+<p id="startError" class="muted" role="alert"></p>
+
 <section id="outcome" hidden>
   <h2 id="outcomeHeading"></h2>
   <div id="alreadyRegistered" hidden>Already registered at this site</div>
@@ -328,6 +347,7 @@ const PAGE = `<!doctype html>
 
 <section id="handoff" hidden>
   <h2>Continue on your phone</h2>
+  <p id="handoffNote" class="muted"></p>
   <p><a id="applink" href="#"></a></p>
   <img id="qrimg" width="240" height="240" alt="QR code encoding the av:// handoff link">
   <p class="muted">Tap the link on this phone, or scan the QR with another phone's camera app.</p>
@@ -345,6 +365,8 @@ const PAGE = `<!doctype html>
   <p class="muted">Kept in this browser tab's memory only — reloading the page resets it.</p>
 </section>
 
+<!--SCENARIOS-->
+
 <details>
   <summary>About this demo</summary>
   <p>The device's key is per-origin and bound to this site the first time it's seen (D38) —
@@ -360,6 +382,7 @@ const PAGE = `<!doctype html>
 import { diffPresentations } from '/compare.mjs';
 
 let pollTimer = null;
+let currentExpect = null; // 'no-reply' for the rows where the app deliberately sends an unapproved site nothing
 let lastTierAPresentation = null; // §6.3 item 5: last of the two kept tier-A presentations
 const outcomeSection = document.getElementById('outcome');
 const handoffSection = document.getElementById('handoff');
@@ -399,7 +422,9 @@ function renderTierC(s) {
   if (s.status === 'expired') {
     outcomeHeading.textContent = 'No answer';
     outcomeHeading.className = 'noAnswer';
-    outcomeLine.textContent = 'The request expired and nothing came back. The holder may have walked away.';
+    outcomeLine.textContent = currentExpect === 'no-reply'
+      ? 'The request expired and nothing came back, as expected here: this app tells a site it has not approved nothing at all, not even a refusal.'
+      : 'The request expired and nothing came back. The holder may have walked away.';
     verdictJson.textContent = '';
     log('outcome', { tier: 'C', status: 'expired' });
     return;
@@ -499,15 +524,28 @@ function renderCompare(tier, presentation) {
   log('tier-A compare', { differingFields });
 }
 
-async function start(tier, predicates) {
+const startError = document.getElementById('startError');
+const handoffNote = document.getElementById('handoffNote');
+// opts: { predicates, rawPredicates, threshold, host, expect } (all optional; the default page sends none of them)
+async function start(tier, opts) {
+  opts = opts || {};
   if (pollTimer) clearInterval(pollTimer);
+  currentExpect = opts.expect || null;
+  startError.textContent = '';
   const mode = tier; // wire-level field is still named "mode" (server.mjs contract, unchanged)
-  const payload = tier === 'C' ? { mode, predicates } : { mode };
-  const res = await fetch('/ui/presentations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+  const payload = { mode };
+  if (opts.predicates) payload.predicates = opts.predicates;
+  if (opts.rawPredicates) payload.rawPredicates = opts.rawPredicates;
+  if (opts.host) payload.as_host = opts.host;
+  const url = '/ui/presentations' + (opts.threshold ? '?threshold=' + encodeURIComponent(opts.threshold) : '');
+  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
   const tx = await res.json();
-  if (tier === 'C' && !res.ok) { cError.textContent = 'The request was not accepted (' + (tx.error || res.status) + ').'; return; }
+  if (!res.ok) { startError.textContent = 'The request was not accepted (' + (tx.error || res.status) + ').'; cError.textContent = startError.textContent; return; }
   outcomeSection.hidden = true;
   handoffSection.hidden = false;
+  handoffNote.textContent = opts.host
+    ? 'This request is for the site ' + opts.host + ': the same demo posing as an unlisted site.'
+    : '';
   log('transaction created', { transactionId: tx.transactionId, tier });
   const a = document.getElementById('applink');
   a.href = tx.app_link; a.textContent = tx.app_link;
@@ -534,6 +572,29 @@ const cError = document.getElementById('cError');
 const cText = ['cNatIs', 'cNatNot', 'cGiven', 'cSurname', 'cNumber'].map((id) => document.getElementById(id));
 if (['127.0.0.1', 'localhost', '[::1]'].includes(location.hostname)) goC.hidden = false;
 goC.addEventListener('click', () => { tierCForm.hidden = !tierCForm.hidden; });
+// Scenario rows (item 24): one delegated handler. Tier-C rows are disabled off loopback, like the form.
+const onLoopback = ['127.0.0.1', 'localhost', '[::1]'].includes(location.hostname);
+for (const b of document.querySelectorAll('button.rowgo[data-tier="C"]')) if (!onLoopback) b.disabled = true;
+document.getElementById('scenarios').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button.rowgo');
+  if (!b) return;
+  const tier = b.dataset.tier;
+  if (b.dataset.form) {
+    tierCForm.hidden = false;
+    document.getElementById(b.dataset.form).focus();
+    tierCForm.scrollIntoView();
+    return;
+  }
+  const opts = { host: b.dataset.host, expect: b.dataset.expect };
+  if (b.dataset.preds) opts.predicates = JSON.parse(b.dataset.preds);
+  if (b.dataset.pick) {
+    const v = document.getElementById(b.dataset.pickId).value;
+    if (b.dataset.pick === 'threshold') opts.threshold = v;
+    else if (b.dataset.pick === 'age') opts.predicates = [{ name: 'dob_at_least', age: Number(v) }];
+    else if (b.dataset.pick === 'raw') opts.rawPredicates = JSON.parse(v);
+  }
+  start(tier, opts);
+});
 function readTierC() {
   const val = (id) => document.getElementById(id).value.trim();
   const predicates = [];
@@ -555,7 +616,7 @@ document.getElementById('askC').addEventListener('click', () => {
   if (r.error) return;
   // The typed values live in the signed request only; clear the fields so nothing lingers on the page.
   for (const el of cText) el.value = '';
-  start('C', r.predicates);
+  start('C', { predicates: r.predicates });
 });
 </script>`;
 
@@ -587,7 +648,23 @@ function b64urlToJson(s) {
 
 // ------------------------------------------------------------------ app ----
 export function createApp() {
-  const { verifier, store, challengeIssuer } = makeVerifier();
+  const { verifier: defaultVerifier, store, challengeIssuer } = makeVerifier();
+  // D122: the same demo can pose as a second site at `localhost` (the app pins by exact hostname, so `localhost` and
+  // `127.0.0.1` are different sites). The scanner signs mode-B evidence with scope = the host the request arrived on,
+  // so a request minted for `localhost` must be verified with scope `localhost`. One verifier per scope, created on
+  // first use over the SAME store; every other Host keeps the single configured SCOPE_DOMAIN exactly as before. The
+  // transaction remembers its scope, so an answer is always checked against the origin it was minted for.
+  const verifiers = new Map([[SCOPE_DOMAIN, defaultVerifier]]);
+  function scopeForHost(hostHeader) {
+    let hostname = '';
+    try { hostname = new URL(`http://${hostHeader ?? ''}`).hostname; } catch { hostname = ''; }
+    return hostname === 'localhost' ? 'localhost' : SCOPE_DOMAIN;
+  }
+  function verifierFor(scope) {
+    let v = verifiers.get(scope);
+    if (!v) { v = makeVerifier(scope, { store, challengeIssuer }).verifier; verifiers.set(scope, v); }
+    return v;
+  }
   const requestSignerKey = createPrivateKey(REQUEST_SIGNER_PRIVKEY_PEM);
   const byTransactionId = new Map(); // transactionId -> tx
   const byRequestId = new Map();     // requestId -> tx
@@ -603,7 +680,7 @@ export function createApp() {
     // GET / — the demo age-gate page
     if (req.method === 'GET' && path === '/') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      res.end(PAGE);
+      res.end(PAGE.replace('<!--SCENARIOS-->', () => renderScenarios(isTestMode())));
       return;
     }
 
@@ -624,6 +701,11 @@ export function createApp() {
       }
       let body = {};
       try { body = JSON.parse((await readBody(req)) || '{}'); } catch { body = {}; }
+      // Item 24: with test mode OFF the server refuses the test-only request shapes outright (not silently ignored).
+      if (!isTestMode() && (body.rawPredicates !== undefined || url.searchParams.has('threshold'))) {
+        sendJson(res, 400, { error: 'test_mode_off' });
+        return;
+      }
       // 'C' (tier C, "prove specific attributes") is offered by the page on loopback only and by
       // scripts/tierc-poc-request.mjs; the loopback gate is applied below.
       const mode = body.mode === 'B' ? 'B' : body.mode === 'C' ? 'C' : 'A';
@@ -638,11 +720,24 @@ export function createApp() {
       // validated by chiproof first, so a bad request is a 400 here, never a half-made transaction.
       let challenge;
       let tierCLabels = null;
+      // D122 / item 24 rows 17, 25, 26: `as_host: "localhost"` mints the request for the origin http://localhost:<port>,
+      // the same demo posing as a second, unlisted site, even though the page was opened at 127.0.0.1. Accepted on
+      // loopback only, and only that one value; the scope follows the origin the link carries.
+      let siteHostHeader = req.headers.host;
+      if (body.as_host !== undefined) {
+        if (body.as_host !== 'localhost') { sendJson(res, 400, { error: 'as_host_invalid' }); return; }
+        if (!isLoopbackRequest(req.headers.host, req.socket.remoteAddress)) { sendJson(res, 403, { error: 'as_host_loopback_only' }); return; }
+        const port = new URL(`http://${req.headers.host}`).port;
+        siteHostHeader = port ? `localhost:${port}` : 'localhost';
+      }
+      const siteOrigin = `${PUBLIC_SCHEME}://${siteHostHeader ?? BIND_HOST}`;
+      const scope = scopeForHost(siteHostHeader);
+      const verifier = verifierFor(scope);
       if (mode === 'C') {
         if (!isLoopbackRequest(req.headers.host, req.socket.remoteAddress)) { sendJson(res, 403, { error: 'tier_c_loopback_only' }); return; }
-        // DEVICE-TEST HOOK (off unless TIERC_POC_ALLOW_RAW=1): signs `rawPredicates` exactly as given, so an off-list
+        // DEVICE-TEST HOOK (test mode only, DEMO_TEST_MODE=1): signs `rawPredicates` exactly as given, so an off-list
         // boundary can reach the app and its whole-request refusal can be device-checked.
-        const raw = process.env.TIERC_POC_ALLOW_RAW === '1' && Array.isArray(body.rawPredicates) ? body.rawPredicates : null;
+        const raw = isTestMode() && Array.isArray(body.rawPredicates) ? body.rawPredicates : null;
         const asked = body.predicates === undefined ? DEFAULT_PREDICATES : body.predicates;
         const issuer = { privateKey: challengeIssuer.privateKey, key_id: CHALLENGE_ISSUER_KEY_ID };
         try {
@@ -686,8 +781,8 @@ export function createApp() {
         challenge.threshold = requestedTestThreshold;
       }
 
-      const responseUri = `${origin(req)}/wallet/direct_post`;
-      const requestUri = `${origin(req)}/wallet/request.jwt/${requestId}`;
+      const responseUri = `${siteOrigin}/wallet/direct_post`;
+      const requestUri = `${siteOrigin}/wallet/request.jwt/${requestId}`;
       const requestObject = {
         // OpenID4VP-style envelope in the captured shape (M2-CAPTURE Finding 1):
         // response_mode MUST be direct_post; client_id_scheme redirect_uri
@@ -731,7 +826,7 @@ export function createApp() {
       // no separate image route/static file is needed for a throwaway spike.
       const qrDataUrl = await QRCode.toDataURL(links.av, { margin: 1, width: 240 });
       const tx = {
-        transactionId, requestId, mode, challenge, requestObject,
+        transactionId, requestId, mode, challenge, requestObject, scope,
         predicates: tierCLabels,
         status: 'pending', verdict: null, createdAt: Date.now(),
       };
@@ -827,7 +922,7 @@ export function createApp() {
         // evidence.require does the mode routing (D30, chiproof 0.3.0).
         // verify() never throws; ok:false maps to allowed:null inside the
         // library (never {ok:false,allowed:false}).
-        verdict = await verifier.verify(presentation);
+        verdict = await verifierFor(tx.scope).verify(presentation);
       }
       tx.status = 'done';
       tx.verdict = verdict;
@@ -855,10 +950,10 @@ export function createApp() {
       tx.zktagSeenBefore = false;
       tx.alreadyRegistered = false;
       if (tx.mode === 'B' && typeof verdict.zktag === 'string' && verdict.zktag.length > 0) {
-        tx.zktagSeenBefore = await store.hasZktagBeenSeen(SCOPE_DOMAIN, verdict.zktag);
+        tx.zktagSeenBefore = await store.hasZktagBeenSeen(tx.scope, verdict.zktag);
         tx.alreadyRegistered = tx.zktagSeenBefore;
         if (verdict.ok === true && verdict.allowed === true) {
-          await store.markZktagSeen(SCOPE_DOMAIN, verdict.zktag);
+          await store.markZktagSeen(tx.scope, verdict.zktag);
         }
       }
       // Value-free: no zktag, nonce, pubkey, sig, or state -- transactionId,

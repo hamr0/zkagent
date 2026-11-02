@@ -19,11 +19,13 @@ let srv;
 before(async () => {
   storeDir = mkdtempSync(join(tmpdir(), 'zkagent-demo-threshold-override-'));
   process.env.DEMO_STORE_PATH = join(storeDir, 'store.json');
+  process.env.DEMO_TEST_MODE = '1'; // item 24: the ?threshold= override is a test-only shape; the server refuses it otherwise
   srv = await startServer(0);
 });
 after(async () => {
   await srv.close();
   delete process.env.DEMO_STORE_PATH;
+  delete process.env.DEMO_TEST_MODE;
   rmSync(storeDir, { recursive: true, force: true });
 });
 

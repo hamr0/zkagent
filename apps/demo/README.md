@@ -8,7 +8,9 @@ mockup any operator can run and test the M2 scanner app against right away — "
 precise," owner's words (D73). No PII is ever shown or sent: tier A and tier B (D19) carry
 none.
 
-Two buttons on one page:
+Below the buttons the page lists **every scenario** the product offers (26 rows, milestones.md §6.9.2 item 24, D111): each has one plain line, a "Needs" marking (Phone / Build / Test-only) and a control that creates the request. The page shows verdicts, yes/no answers and question names only, never a document value. See "Test mode" and "The second site" below.
+
+The two main buttons:
 - **"Prove you're over 18"** (tier A) — bare evidence, captcha-grade (D27).
 - **"Prove you're a unique adult human"** (tier B) — requires `sig-ed25519/1` or `sig-p256/1`
   evidence (D31) and rejects a second scan of the same document at this site as
@@ -32,6 +34,14 @@ change is required or in scope (§6.3 item 13).
 
 Prerequisites, the phone-side steps and the full manual phone test are in
 `docs/product/install-and-test-guide.md`.
+
+## Test mode (item 24)
+
+`DEMO_TEST_MODE=1 npm start` turns on **test mode** (off by default). Four rows need a request shape the normal page never sends: 6 and 7 (a second age in a tier-A request), 15 (a question the app does not answer, signed unvalidated) and 16 (a tier-C age that conflicts with the site's age lock). Their controls are marked "(test-only)" and render ONLY in test mode; without it those rows are listed with their line and marking but no control, and the server answers `400 {"error":"test_mode_off"}` to `?threshold=` and `rawPredicates`. `TIERC_POC_ALLOW_RAW=1` is a deprecated alias of the same switch. The normal page keeps threshold 18 and no picker (M3 item 6).
+
+## The second site: `localhost` (D122)
+
+Rows 17, 25 and 26 need a site that is on none of the build's lists. The app pins by exact hostname, so `http://localhost:8787` is a different site from `http://127.0.0.1:8787`. Their buttons ask the demo to mint the request for the `localhost` origin (`as_host: "localhost"` in the create call; loopback only, that one value), so you can stay on the `127.0.0.1` page; the page labels it "the same demo posing as an unlisted site". The demo verifies such a request with scope `localhost` and every other with `SCOPE_DOMAIN`. Where the app deliberately tells an unapproved site nothing (rows 17, 18, 26), the page shows "No answer" when the request expires, not "Refused". The helper `scripts/tierc-poc-request.mjs` has `--as-host localhost` and `--threshold N` for the same shapes from a terminal.
 
 ## Wire steps
 
@@ -115,6 +125,7 @@ operator-facing mode).
 | `BIND_HOST` | `127.0.0.1` | listen address |
 | `LINK_SCHEME` | `av` | `av` for the custom-scheme app link (default, D76: the only scheme the sideloaded scanner reaches this demo through); `https` for the app-link variant |
 | `APP_LINK_BASE` | `https://wallet.example.invalid/authorize` | where the `https` app link points (no online hosting is in scope for M3, D76 — this stays a non-resolving placeholder unless an operator has a real wallet app-link host) |
+| `DEMO_TEST_MODE` | unset | `1` = test mode (see above) |
 | `SCOPE_DOMAIN` | `127.0.0.1` | must match the HOST the phone's request actually arrives on (D37) — stays `127.0.0.1` for the `adb reverse` recipe above |
 | `PUBLIC_SCHEME` | `http` | `http` or `https`: the scheme in the URIs the server hands out. Only for the test-only TLS run behind a proxy (`deploy/README.md`, item 23(d)); anything else stops the server at startup |
 | `CHALLENGE_SECRET` | dev-only baked-in default | HMAC key sealing the challenge nonce — a real deployment supplies its own (≥16 bytes) |

@@ -22,8 +22,13 @@
 // With none of them a tier-C request asks --months 3. The name, number and codes are signed into the request for the
 // app and are NEVER printed by this script or logged by the verifier. Pass them as environment variables
 // (TIERC_GIVEN_NAMES, TIERC_SURNAME, TIERC_DOC_NUMBER) to keep them out of the process list and shell history.
-// --raw '<json array>'      send these predicates UNVALIDATED (the verifier must run with TIERC_POC_ALLOW_RAW=1); this is
+// --raw '<json array>'      send these predicates UNVALIDATED (the verifier must run in test mode, DEMO_TEST_MODE=1); this is
 //                            how the app's whole-request refusal of an off-list boundary is device-checked.
+// --threshold 15|16|21|60|65|43   tier A or B only (finding #46): embed this age in the request instead of 18, to test the
+//                            app's one-age-per-site lock; the verifier must run in test mode (DEMO_TEST_MODE=1), else it
+//                            answers 400 test_mode_off and this script exits 1.
+// --as-host localhost       mint the request for the origin http://localhost:<port> (D122: the same demo posing as an
+//                            unlisted site) while reaching the verifier on --host. Loopback only.
 // --ttl SECONDS sets the request lifetime (default 120, the verifier clamps at 600) for human-paced device checks.
 //
 // Since D110 a refused request ends as RESULT status=done ... reason=refused_by_holder refused=true (the app posts one
@@ -43,6 +48,8 @@ const host = opt('host', '127.0.0.1');
 const port = opt('port', '8787');
 const waitSec = Number(opt('wait', '0'));
 const ttlSec = Number(opt('ttl', '0'));
+const thresholdArg = opt('threshold', undefined);
+const asHost = opt('as-host', undefined);
 if (!['A', 'B', 'C'].includes(tier)) { console.error('--tier must be A, B or C'); process.exit(2); }
 
 import { execFileSync } from 'node:child_process';
@@ -77,12 +84,19 @@ const predicates = tier === 'C' ? (rawArg !== undefined ? JSON.parse(rawArg) : b
 if (predicates === null) { console.error('--given-names and --surname must be given together'); process.exit(2); }
 const body = tier === 'C' ? (rawArg !== undefined ? { mode: 'C', rawPredicates: predicates } : { mode: 'C', predicates }) : { mode: tier };
 if (ttlSec > 0) body.ttlMs = ttlSec * 1000;
-const res = await fetch(`${base}/ui/presentations`, {
+if (asHost !== undefined) body.as_host = asHost;
+if (thresholdArg !== undefined && tier === 'C') { console.error('--threshold applies to tier A or B only'); process.exit(2); }
+if (thresholdArg !== undefined && !Number.isInteger(Number(thresholdArg))) { console.error('--threshold must be a whole number'); process.exit(2); }
+const res = await fetch(`${base}/ui/presentations${thresholdArg !== undefined ? `?threshold=${Number(thresholdArg)}` : ''}`, {
   method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
 });
-if (res.status !== 201) { console.error(`create failed: HTTP ${res.status}`); process.exit(1); }
+if (res.status !== 201) {
+  let why = '';
+  try { why = ` (${(await res.json()).error})`; } catch { /* no body */ }
+  console.error(`create failed: HTTP ${res.status}${why}`); process.exit(1);
+}
 const tx = await res.json();
-console.log(`transaction=${tx.transactionId} tier=${tier} origin_host=${host}${tier === 'C' ? ` asks=${predicates.map((p) => predicateLabel(p)).join(',')}${rawArg !== undefined ? ' (raw, unvalidated)' : ''}` : ''}${ttlSec > 0 ? ` ttl_s=${ttlSec}` : ''}`);
+console.log(`transaction=${tx.transactionId} tier=${tier} origin_host=${host}${tier === 'C' ? ` asks=${predicates.map((p) => predicateLabel(p)).join(',')}${rawArg !== undefined ? ' (raw, unvalidated)' : ''}` : ''}${ttlSec > 0 ? ` ttl_s=${ttlSec}` : ''}${thresholdArg !== undefined ? ` threshold=${Number(thresholdArg)}` : ''}${asHost !== undefined ? ` as_host=${asHost}` : ''}`);
 console.log('adb_am_start_arg (quote it, the & is eaten by adb shell otherwise):');
 console.log(`'${tx.app_link_av}'`);
 

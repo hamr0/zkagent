@@ -149,6 +149,10 @@ You need an Android phone with NFC and a chip passport or ID card.
 2. Run the demo site on your computer and reach it from the phone over USB with `adb reverse tcp:8787 tcp:8787`. The steps are in [`apps/demo/README.md`](apps/demo/README.md).
 3. To use the verifier in your own site, run `npm install chiproof`.
 
+### Test it with a real phone
+
+The demo page at `http://127.0.0.1:8787` lists every scenario the product offers (age proofs, the tier-C questions, and each way a request can be refused or go unanswered), each with one plain line saying what it shows and what it needs (a phone step, a setting of the app build, or a test-only request shape). Start it as in [`apps/demo/README.md`](apps/demo/README.md); `DEMO_TEST_MODE=1` adds the test-only controls. It runs on your own machine only and is never hosted.
+
 The full walk-through, from prerequisites and building to the automated tests and a step-by-step phone test, is [`docs/product/install-and-test-guide.md`](docs/product/install-and-test-guide.md).
 
 [`docs/product/customer-guide.md`](docs/product/customer-guide.md) explains every screen, and section 7.1 covers building and signing your own scanner.

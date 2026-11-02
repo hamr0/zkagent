@@ -422,16 +422,19 @@ test('the CLI helper reports a refusal and an expiry distinctly from a pending r
   assert.doesNotMatch(expired.stdout, /refused=true/);
 });
 
-test('raw-predicates device-test hook: ignored unless TIERC_POC_ALLOW_RAW=1, and then signed exactly as given', async () => {
+test('raw-predicates device-test hook: refused unless test mode is on (DEMO_TEST_MODE=1, or the TIERC_POC_ALLOW_RAW=1 alias), then signed exactly as given', async () => {
   const offList = [{ name: 'expiry_beyond', months: 6 }, { name: 'dob_at_least', age: 19 }];
-  const off = await (await create({ mode: 'C', rawPredicates: offList })).json();
-  assert.deepEqual((await requestObject(off)).zkagent.challenge.predicates, [{ name: 'expiry_beyond', months: 3 }]);
+  const off = await create({ mode: 'C', rawPredicates: offList });
+  assert.equal(off.status, 400);
+  assert.deepEqual(await off.json(), { error: 'test_mode_off' });
   assert.equal((await create({ mode: 'C', predicates: offList })).status, 400);
-  process.env.TIERC_POC_ALLOW_RAW = '1';
-  try {
-    const on = await (await create({ mode: 'C', rawPredicates: offList })).json();
-    const ch = (await requestObject(on)).zkagent.challenge;
-    assert.deepEqual(ch.predicates, offList);
-    assert.equal(typeof ch.sig, 'string');
-  } finally { delete process.env.TIERC_POC_ALLOW_RAW; }
+  for (const name of ['DEMO_TEST_MODE', 'TIERC_POC_ALLOW_RAW']) {
+    process.env[name] = '1';
+    try {
+      const on = await (await create({ mode: 'C', rawPredicates: offList })).json();
+      const ch = (await requestObject(on)).zkagent.challenge;
+      assert.deepEqual(ch.predicates, offList);
+      assert.equal(typeof ch.sig, 'string');
+    } finally { delete process.env[name]; }
+  }
 });

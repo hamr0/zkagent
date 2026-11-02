@@ -265,7 +265,7 @@ All optional. Full table with meanings: `apps/demo/README.md` "Config (env)".
 | `PORT` | `8787` | listen port |
 | `BIND_HOST` | `127.0.0.1` | listen address |
 | `DEMO_STORE_PATH` | `apps/demo/data/store.json` | the persistent store (nonces, zktag dedupe). Delete the file, with the server stopped, to reset |
-| `TIERC_POC_ALLOW_RAW` | unset | set to `1` to let `tierc-poc-request.mjs --raw` send unvalidated predicates (device tests of the app's whole-request refusal). Test hook only |
+| `DEMO_TEST_MODE` | unset | set to `1` for test mode: the page shows its test-only controls, and the server accepts `tierc-poc-request.mjs --raw` / `--threshold` shapes (otherwise it answers 400 `test_mode_off`). `TIERC_POC_ALLOW_RAW=1` is a deprecated alias |
 | `LINK_SCHEME`, `APP_LINK_BASE`, `SCOPE_DOMAIN`, `PUBLIC_SCHEME` | `av`, placeholder, `127.0.0.1`, `http` | link shape and origin; leave alone for the local recipe |
 | `CHALLENGE_SECRET`, `ATTESTER_*`, `REQUEST_SIGNER_*` | dev-only baked-in keys | a real deployment supplies its own |
 
@@ -299,7 +299,9 @@ node scripts/tierc-poc-request.mjs --tier A --host 127.0.0.1 --ttl 300 --launch
 | `--nationality-not-in A,B` | tier C: "is it none of these?" (at most 10 codes) |
 | `--given-names "..." --surname "..."` | tier C: name match (both required together) |
 | `--doc-number "..."` | tier C: document-number match |
-| `--raw '<json array>'` | tier C: send these predicates unvalidated; needs the demo started with `TIERC_POC_ALLOW_RAW=1` |
+| `--raw '<json array>'` | tier C: send these predicates unvalidated; needs the demo started with `DEMO_TEST_MODE=1` (`TIERC_POC_ALLOW_RAW=1` still works) |
+| `--threshold N` | tier A or B: embed this age (15, 16, 21, 60, 65, or 43 off-list) instead of 18; needs test mode |
+| `--as-host localhost` | mint the request for the origin `http://localhost:<port>` (the same demo posing as an unlisted site) |
 
 Put names and numbers in the environment (`TIERC_GIVEN_NAMES`, `TIERC_SURNAME`, `TIERC_DOC_NUMBER`)
 instead of flags, to keep them out of shell history and the process list.
