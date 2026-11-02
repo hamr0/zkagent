@@ -289,7 +289,8 @@ kill-and-restart; zktags unchanged across the restart.
 
 | Step | You do | Page shows | App shows | Verifier logs |
 |---|---|---|---|---|
-| 1 | Tap an `av://` link whose session has already expired or was already used | That transaction never gets a result | Refused up front, blocking popup, no read attempted | Transaction stays pending/expired — never receives a verdict |
+| 1 | Tap an `av://` link whose session has expired (past its time), then tap Verify | That transaction never gets a result | The app still shows the site's question when the link opens; Verify gives the blocking popup "Verification session expired — reopen the link from the site." before any chip read; nothing is sent | Transaction stays pending/expired — never receives a verdict |
+| 2 | Tap an `av://` link that was already used but is still within its time, then tap Verify | The earlier result stands; this attempt adds nothing | The app shows the question; Verify reads the chip and sends; the site answers 409 and the popup reads, in red, "This link was already used — reopen the link from the site." | The site answers 409 already_responded; the earlier verdict is unchanged |
 
 ### 6.10 Reinstalling the app
 

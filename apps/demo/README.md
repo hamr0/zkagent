@@ -111,7 +111,7 @@ One flat JSON file (`store.mjs`, `JsonFileStore`) backs nonces, both attester-ke
 the zktags-seen dedupe state — persistent across restarts, no in-memory fallback (fail closed,
 §6.3 item 9). Default path: `apps/demo/data/store.json` (override with `DEMO_STORE_PATH`).
 
-**To reset the demo** (forget every zktag/device-key binding and start fresh): stop the server
+**Reset the demo after the scanner app is reinstalled** (a reinstall creates new per-site device keys, so a tier-B scan against the old store is refused with `attester_key_mismatch` even though the phone says "Delivered" — that is D38 working as intended). **To reset the demo** (forget every zktag/device-key binding and start fresh): stop the server
 and delete the store file (`rm apps/demo/data/store.json`, or whatever `DEMO_STORE_PATH`
 points at) — the next start recreates an empty one. There is no in-app reset control by design
 (§6.3 item 9: no store fallback to in-memory once the demo is running in a persistent/
