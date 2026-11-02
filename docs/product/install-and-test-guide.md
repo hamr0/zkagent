@@ -10,8 +10,9 @@ sources: [README.md, apps/scanner/README.md, apps/demo/README.md, apps/scanner/a
 For someone who clones this repo cold and wants to build the Android scanner, install it on a phone,
 run the local test website, run every automated test, walk the manual phone checks, and reuse the
 parts. Every command below was read from the repo's own scripts, build files and CI config.
-Written 2026-10-28 for v0.9.0 and updated 2026-10-29 for the released v0.9.1 (where a screen string
-differs between them, the 0.9.1 wording is given and flagged).
+Written 2026-10-28 for v0.9.0 and updated 2026-11-02 for the released v0.10.0. No screen string the
+guide quotes changed between 0.9.1 and 0.10.0 (checked against strings.xml and the Kotlin sources), so
+where a string differs between 0.9.0 and later, the 0.9.1-and-later wording is given and flagged.
 
 Nothing here needs a Mac, a paid Apple account or Google Play: the project is Android-first and
 iOS is a non-goal.
