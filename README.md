@@ -37,11 +37,11 @@ The phone reads the chip over NFC and checks the government's own signature on i
 
 ## What's built
 
-Three parts, all open source under Apache-2.0. Tier C (below) is built and device-checked and shipped in 0.9.0. The latest release is v0.9.1.
+Three parts, all open source under Apache-2.0. Tier C (below) is built and device-checked and shipped in 0.9.0. The latest release is v0.10.0.
 
 | Part | What it is | Where |
 |---|---|---|
-| **`chiproof`** | The verifier library: what a website runs to check an answer. It never throws, issues challenges, spends single-use nonces, negotiates tiers, builds and checks tier-C requests, and has a pluggable evidence registry. Zero runtime dependencies, with TypeScript types. | [npm](https://www.npmjs.com/package/chiproof) · `packages/chiproof` |
+| **`chiproof`** | The verifier library: what a website runs to check an answer. `verify()` never throws; `issueChallenge` throws on a malformed request (for example tier C without an issuer). It issues challenges, spends single-use nonces, negotiates tiers, builds and checks tier-C requests, and has a pluggable evidence registry. Zero runtime dependencies, with TypeScript types. | [npm](https://www.npmjs.com/package/chiproof) · `packages/chiproof` |
 | **Scanner** | The reference Android app. It reads the chip, verifies it, asks the holder for consent with a biometric prompt, and sends the answer. Its Settings page has the holder's switch for tier C. | [GitHub Releases](https://github.com/hamr0/zkagent/releases) (signed APK) · `apps/scanner` |
 | **Demo** | A small local website that plays the requesting site, so you can run the whole loop end to end, tier C included. | `apps/demo` |
 
@@ -145,13 +145,13 @@ Tier C adds these limits, each stated in full in [`docs/product/customer-guide.m
 
 You need an Android phone with NFC and a chip passport or ID card.
 
-1. Sideload the signed scanner APK from [Releases](https://github.com/hamr0/zkagent/releases).
-2. Run the demo site on your computer and reach it from the phone over USB with `adb reverse tcp:8787 tcp:8787`. The steps are in [`apps/demo/README.md`](apps/demo/README.md).
+1. For real HTTPS sites, sideload the signed scanner APK from [Releases](https://github.com/hamr0/zkagent/releases). The release app allows no cleartext HTTP, so it cannot reach the local demo.
+2. To try the local demo, build a debug scanner (`./gradlew :app:assembleRegularDebug`, see [`docs/product/install-and-test-guide.md`](docs/product/install-and-test-guide.md)) and install it. Then run the demo site on your computer and reach it from the phone over USB with `adb reverse tcp:8787 tcp:8787`. The steps are in [`apps/demo/README.md`](apps/demo/README.md).
 3. To use the verifier in your own site, run `npm install chiproof`.
 
 ### Test it with a real phone
 
-The demo page at `http://127.0.0.1:8787` lists every scenario the product offers (age proofs, the tier-C questions, and each way a request can be refused or go unanswered), each with one plain line saying what it shows and what it needs (a phone step, a setting of the app build, or a test-only request shape). Start it as in [`apps/demo/README.md`](apps/demo/README.md); `DEMO_TEST_MODE=1` adds the test-only controls. It runs on your own machine only and is never hosted.
+The demo page at `http://127.0.0.1:8787` lists every scenario the product offers (age proofs, the tier-C questions, and each way a request can be refused or go unanswered), each with one plain line saying what it shows and what it needs (a phone step, a setting of the app build, or a test-only request shape). The phone side needs the debug build (the release APK cannot reach `127.0.0.1`). Start it as in [`apps/demo/README.md`](apps/demo/README.md); `DEMO_TEST_MODE=1` adds the test-only controls. It runs on your own machine only and is never hosted.
 
 The full walk-through, from prerequisites and building to the automated tests and a step-by-step phone test, is [`docs/product/install-and-test-guide.md`](docs/product/install-and-test-guide.md).
 
@@ -159,7 +159,7 @@ The full walk-through, from prerequisites and building to the automated tests an
 
 ## Reuse it
 
-The latest release is v0.9.1 (2026-10-29), a patch on 0.9.0 (tier C shipped in 0.9.0). zkagent has no production users and stays on 0.x. It's built to be picked apart. [`docs/product/reuse-map.md`](docs/product/reuse-map.md) lists every liftable part (the verdict core, the evidence plugs, the chip and masterlist check, the secure-hardware key, the handoff, the config gate and the publish workflow) with its maturity, evidence and caveats.
+The latest release is v0.10.0 (2026-11-02): the demo becomes the local test and showcase page, and chiproof's `issueChallenge` now requires an issuer for tier C (a breaking change for sites; see the [CHANGELOG](CHANGELOG.md)). Tier C shipped in 0.9.0. zkagent has no production users and stays on 0.x. It's built to be picked apart. [`docs/product/reuse-map.md`](docs/product/reuse-map.md) lists every liftable part (the verdict core, the evidence plugs, the chip and masterlist check, the secure-hardware key, the handoff, the config gate and the publish workflow) with its maturity, evidence and caveats.
 
 ## Repo layout
 

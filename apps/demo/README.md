@@ -1,6 +1,6 @@
-# apps/demo — M3 age-gate demo (PRD §6.3, D73–D76)
+# apps/demo — local test and showcase page (M3 age-gate demo, D73–D76, D111, D122)
 
-**Status: shipped with v0.6.0 and later releases. The project was closed as a complete experiment (D108) and then revived for tier C (D109); the demo's tier-C site side (`tierc.mjs`) is built and device-checked and shipped in 0.9.0.** This is the reference adopter of `chiproof`, run locally for demonstration, not a hosted service. Tests: `npm test` (node:test).
+**Status: shipped with v0.6.0 and later releases. The project was closed as a complete experiment (D108) and then revived for tier C (D109); the demo's tier-C site side (`tierc.mjs`) is built and device-checked and shipped in 0.9.0. As of 0.10.0 it is the product's local test and showcase page (26 scenarios), never hosted (NO-GO #3).** This is the reference adopter of `chiproof`, run locally for demonstration, not a hosted service. Tests: `npm test` (node:test).
 
 The M3 vanilla demo: a plain HTML/CSS/JS website (no framework, no build step) that plays the
 role of an adopter's OWN verifier around `chiproof` (the M1 verdict core). It is meant as a
@@ -135,7 +135,7 @@ operator-facing mode).
 | `REQUEST_SIGNER_KID` / `REQUEST_SIGNER_PRIVKEY_PEM` | DEV_REQUEST_SIGNER | request-object (JAR) signing key |
 
 Threshold is **hardcoded to 18** (§6.3 item 6, DP4/D74) — there is no `THRESHOLD` env override
-and no picker on the page; the preset-bracket / per-origin-lock / named-exception policy D74
+and no picker on the normal page. Test mode (`DEMO_TEST_MODE=1`) adds a second-age picker (scenario rows 6 and 7 for tier A, row 16 for tier C) and the request script `scripts/tierc-poc-request.mjs --threshold N` (tier A or B only). The preset-bracket / per-origin-lock / named-exception policy D74
 actually specifies is scanner-side work (§6.5 S1/S2), not M3 scope.
 
 ## Trust list (FR10) — finding, not implemented

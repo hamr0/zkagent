@@ -86,11 +86,11 @@ cd packages/chiproof
 node --test
 ```
 
-Tests are split per [`AGENT_RULES.md`](../../.claude/remember/AGENT_RULES.md): `tests/unit/` covers the pure logic (`verdict.js`, `canonical.js`); `tests/integration/` exercises `challenge.js`, `index.js` (boot checks) and `verify()` against the real in-memory store and real Ed25519 keys; `tests/e2e/` runs against the gitignored `spikes/m1-zk/out/` artefacts and skips cleanly when they or `bb` are absent.
+Tests are split three ways: `tests/unit/` covers the pure logic (`verdict.js`, `canonical.js`); `tests/integration/` exercises `challenge.js`, `index.js` (boot checks) and `verify()` against the real in-memory store and real Ed25519 keys; `tests/e2e/` runs against the gitignored `spikes/m1-zk/out/` artefacts and skips cleanly when they or `bb` are absent.
 
 ## Test it with a real phone
 
-The reference site in [`apps/demo`](../../apps/demo/README.md) is the local test and showcase page for adopters: every scenario this library can produce is a button on one page, each with one plain line and a marking of what it needs (a phone step, a setting of the scanner build, or a test-only request shape). Run it with the recipe in `apps/demo/README.md` (`adb reverse tcp:8787 tcp:8787`, `npm start`); `DEMO_TEST_MODE=1` adds the test-only controls. It uses a throwaway signing key on loopback and is not meant to be hosted.
+The reference site in [`apps/demo`](https://github.com/hamr0/zkagent/blob/main/apps/demo/README.md) is the local test and showcase page for adopters: every scenario this library can produce is a button on one page, each with one plain line and a marking of what it needs (a phone step, a setting of the scanner build, or a test-only request shape). Run it with the recipe in `apps/demo/README.md` (`adb reverse tcp:8787 tcp:8787`, `npm start`); `DEMO_TEST_MODE=1` adds the test-only controls. It uses a throwaway signing key on loopback and is not meant to be hosted.
 
 ## What this is not
 
