@@ -144,6 +144,64 @@ test('D119: at most one document_number_is per request; validateTierCPredicates 
   assert.equal(out.reason, 'challenge_predicates_invalid');
 });
 
+test('D120: issueChallenge at tier C without an issuer throws at mint; verify() still refuses an unsigned one', async () => {
+  const v = makeVerifier();
+  for (const noIssuer of [undefined, null]) {
+    assert.throws(() => v.issueChallenge({ tier: 'C', predicates: [NUMBER], ttlMs: 60_000, now: T0, issuer: noIssuer }), /needs an issuer.*issuer_required_at_tier_c/);
+    assert.throws(() => issueChallenge({ tier: 'C', predicates: [NUMBER], ttlMs: 60_000, now: T0, challengeSecret: SECRET, issuer: noIssuer }), /issuer_required_at_tier_c/);
+  }
+  assert.throws(() => v.issueChallenge({ tier: 'C', ttlMs: 60_000, now: T0 }), /issuer_required_at_tier_c/); // threshold form too
+  // control: with an issuer it mints, and tiers A and B still mint unsigned
+  assert.equal(issue(v, [NUMBER]).tier, 'C');
+  assert.equal(v.issueChallenge({ tier: 'B', ttlMs: 60_000, now: T0 }).tier, 'B');
+  // the defensive path stays: strip the signature off a good challenge and verify() refuses it
+  const { sig, key_id: keyId, ...unsigned } = issue(v, [NUMBER]);
+  assert.ok(sig && keyId);
+  const out = await v.verify(present(unsigned, answersFor(unsigned.predicates)), { now: T0 });
+  assert.deepEqual([out.ok, out.allowed], [true, false]);
+  assert.equal(out.reason, 'signature_required_at_tier_c');
+});
+
+// D121 shared truth table. The SAME list (same inputs, same expectation) is pinned on the app side in
+// apps/scanner .../TierCNameWordsTest.kt. Expectations come from reading TierCNameMatch.kt (APOSTROPHES, isSeparator,
+// Char.isWhitespace, NFC, mark stripping), not from the constants in src/tier-c.js. `true` = a word is left = accepted.
+const NAME_WORD_TABLE = [
+  ["'", false], ['’', false], ['‘', false], ['ʼ', false], ['`', false], ['´', false], // apostrophes drop
+  ['-', false], ['‐', false], ['‑', false], ['‒', false], ['–', false], // hyphens/dashes separate
+  ['\u2014', false], ['\u2015', false], ['\u2212', false], ['\u2E3A', false], ['\u2E3B', false], // em dash, bar, minus, 2/3-em dash
+  ['\uFE58', false], ['\uFE63', false], ['\uFF0D', false], // small em dash, small and fullwidth hyphen-minus
+  ['\u301C', true], ['\u3030', true], ['~', true], // wave dashes and tilde are NOT hyphens: ordinary characters
+  ['<', false], ['<<', false], ['', false], ['   ', false], ['\t\n\r', false],
+  [' ', false], ['　', false], [' ', false], ['\u001F', false], // Kotlin isWhitespace/isSpaceChar
+  ['﻿', true], // not whitespace to the app
+  ['́', false], ['-́', false], // a lone combining mark contributes nothing
+  ['≮', true], // NFC composes to U+226E, an ordinary character
+  ["'-<  ’", false],
+  ["O'Neil", true], ['O’Neil', true], ['Jean-Pierre', true], ['Jean–Pierre', true], ['Jean\u2014Pierre', true], ['Jean\u2212Pierre', true], ['  Anna  ', true],
+  ['Müller', true], ['ß', true], ["'A'", true], ['A', true], ['😀', true],
+];
+
+test('D121: names are normalised as the app does: only a name left with no word is refused, with the app\'s reason', () => {
+  let accepted = 0; let refused = 0;
+  for (const [input, expectWord] of NAME_WORD_TABLE) {
+    const r = validateTierCPredicates([{ name: 'name_match', given_names: input, surname: 'Examplesson' }]);
+    const r2 = validateTierCPredicates([{ name: 'name_match', given_names: 'Testa', surname: input }]);
+    const label = JSON.stringify(input);
+    assert.equal(r.ok, expectWord, label); assert.equal(r2.ok, expectWord, label);
+    if (expectWord) { accepted += 1; assert.equal(r.predicates[0].given_names, input, label); } // kept as given
+    else { refused += 1; assert.equal(r.reason, 'name_fields_malformed', label); assert.equal(r2.reason, 'name_fields_malformed', label); }
+  }
+  assert.ok(accepted > 10 && refused > 10); // non-vacuous: the table excludes and includes
+  // non-strings and a missing field are the same refusal
+  for (const bad of [5, null, undefined, {}, ['a']]) {
+    assert.equal(validateTierCPredicates([{ name: 'name_match', given_names: bad, surname: 'X' }]).reason, 'name_fields_malformed');
+  }
+  // issuing throws with the reason; a real apostrophe/dash name mints
+  const v = makeVerifier();
+  assert.throws(() => issue(v, [{ name: 'name_match', given_names: "'", surname: 'Examplesson' }]), /name_fields_malformed/);
+  assert.equal(issue(v, [{ name: 'name_match', given_names: "Jean-Pierre", surname: "O'Neil" }]).tier, 'C');
+});
+
 test('codes are normalised to upper case; name and number values are kept as given', () => {
   const r = validateTierCPredicates(ALL_FIVE);
   assert.equal(r.ok, true);
@@ -266,8 +324,8 @@ test('the challenge is checked first: forged, tampered predicates, unsigned, exp
   const tampered = { ...c, predicates: [NAME] };
   assert.equal((await v.verify(present(tampered, [a[0]]), { now: T0 })).reason, 'signature_invalid');
 
-  // unsigned tier-C challenge
-  const unsigned = issue(v, [NAME], { issuer: null });
+  // unsigned tier-C challenge (D120: issueChallenge will not mint one, so strip a signed one)
+  const { sig: _sig, key_id: _kid, ...unsigned } = issue(v, [NAME]);
   assert.equal((await v.verify(present(unsigned, answersFor(unsigned.predicates)), { now: T0 })).reason, 'signature_required_at_tier_c');
 
   // a forged nonce

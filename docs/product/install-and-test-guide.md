@@ -474,7 +474,7 @@ Release-build evidence and debug-build evidence are different evidence: scenario
 run on debug (they need the local demo), so they say nothing about the released APK beyond what P1
 covers.
 
-### 7.4 Site-side check of the D118 rule (no phone)
+### 7.4 Site-side check of the D118, D119 and D121 rules (no phone)
 
 D118: a tier-C request may contain at most one `nationality_is` and one `nationality_not_in`. The
 verifier library refuses more at creation:
@@ -493,6 +493,18 @@ curl -s -w ' http=%{http_code}\n' -X POST -H 'content-type: application/json' \
   -d '{"mode":"C","predicates":[{"name":"document_number_is","number":"AB1"},{"name":"document_number_is","number":"AB2"}]}' \
   http://127.0.0.1:8787/ui/presentations
 # expect {"error":"document_number_asked_more_than_once"} http=400   (D119: one document-number test per request)
+curl -s -w ' http=%{http_code}\n' -X POST -H 'content-type: application/json' \
+  -d '{"mode":"C","predicates":[{"name":"name_match","given_names":"'"'"'","surname":"Examplesson"}]}' \
+  http://127.0.0.1:8787/ui/presentations
+# expect {"error":"name_fields_malformed"} http=400   (D121: a name with no word left after the app's normalisation; same with "-")
+curl -s -o /dev/null -w 'http=%{http_code}\n' -X POST -H 'content-type: application/json' \
+  -d '{"mode":"C","predicates":[{"name":"name_match","given_names":"Jean-Pierre","surname":"O'"'"'Neil"}]}' \
+  http://127.0.0.1:8787/ui/presentations
+# expect http=201   (D121: real names with a hyphen or an apostrophe are accepted as written)
+curl -s -w ' http=%{http_code}\n' -X POST -H 'content-type: application/json' \
+  -d '{"mode":"C","predicates":[{"name":"name_match","given_names":"—","surname":"Examplesson"}]}' \
+  http://127.0.0.1:8787/ui/presentations
+# expect {"error":"name_fields_malformed"} http=400   (D121 point 2: an em dash alone is a separator, so no word is left)
 demo_stop
 ```
 

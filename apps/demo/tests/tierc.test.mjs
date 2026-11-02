@@ -222,6 +222,15 @@ test('D119: two document_number_is in one request is a 400 with the reason and m
   assert.equal((await create({ mode: 'C', predicates: [one] })).status, 201); // control
 });
 
+test("D121: a name with no word left is a 400 name_fields_malformed and makes no transaction; real names with ' or - are accepted", async () => {
+  const nm = (given_names, surname = 'Examplesson') => [{ name: 'name_match', given_names, surname }];
+  for (const bad of ["'", '-', '\u2019', '<', '\u2014', '\u2212']) {
+    const res = await create({ mode: 'C', predicates: nm(bad) });
+    assert.equal(res.status, 400); assert.equal((await res.json()).error, 'name_fields_malformed');
+  }
+  assert.equal((await create({ mode: 'C', predicates: nm('Jean-Pierre', "O'Neil") })).status, 201); // control
+});
+
 test('tier A and B requests are unchanged by the tier-C addition', async () => {
   const a = await (await create({ mode: 'A' })).json();
   const reqA = await requestObject(a);

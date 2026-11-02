@@ -48,8 +48,16 @@ object TierCNameMatch {
     /** D109(k)4: apostrophes are dropped (typographic variants included). */
     private val APOSTROPHES = setOf('\'', '’', '‘', 'ʼ', '`', '´')
 
+    /**
+     * D121: `<`, whitespace and the dash/hyphen look-alikes a site could send all end a word: U+002D, U+2010 to U+2015
+     * (hyphen, non-breaking hyphen, figure dash, en dash, em dash, horizontal bar), U+2212 minus sign, U+2E3A/U+2E3B
+     * (two- and three-em dash), U+FE58 small em dash, U+FE63 small hyphen-minus, U+FF0D fullwidth hyphen-minus. An explicit
+     * list, not the whole Unicode Pd category: Pd also holds wave dashes (U+301C, U+3030), U+30A0 and script-specific
+     * marks that are not hyphens between name parts, and its membership grows with each Unicode version.
+     */
     private fun isSeparator(c: Char): Boolean =
-        c == '<' || c == '-' || c == '‐' || c == '‑' || c == '‒' || c == '–' || c.isWhitespace()
+        c == '<' || c == '-' || c in '\u2010'..'\u2015' || c == '\u2212' || c == '\u2E3A' || c == '\u2E3B' ||
+            c == '\uFE58' || c == '\uFE63' || c == '\uFF0D' || c.isWhitespace()
 
     /** The site string as words, each word a list of per-character allowed forms. Empty words are dropped. */
     internal fun siteWords(raw: String): List<List<List<String>>> {

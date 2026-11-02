@@ -170,6 +170,11 @@ export function issueChallenge({
   } else if (typeof threshold !== 'number' || !Number.isFinite(threshold)) {
     throw new TypeError(`issueChallenge: threshold must be a finite number, got ${threshold}`);
   }
+  // D120: verify() always refuses an unsigned tier-C challenge (D20, `signature_required_at_tier_c`), so minting one is
+  // the site's own programming error. Fail at the first test run, not after a real scan.
+  if (tier === 'C' && !issuer) {
+    throw new TypeError("issueChallenge: tier 'C' needs an issuer (a signing key); an unsigned tier-C challenge is always refused (issuer_required_at_tier_c)");
+  }
   if (typeof ttlMs !== 'number' || !Number.isFinite(ttlMs) || ttlMs <= 0) {
     throw new TypeError(`issueChallenge: ttlMs must be a positive finite number, got ${ttlMs}`);
   }

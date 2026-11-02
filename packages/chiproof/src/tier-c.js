@@ -43,8 +43,33 @@ export const TIER_C_MAX_EXCLUSION_SET = 10;
 const CODE = /^[A-Za-z]{1,3}$/;
 const isCode = (c) => typeof c === 'string' && CODE.test(c.trim());
 const normCode = (c) => c.trim().toUpperCase();
-/** Non-blank once the MRZ filler `<`, spaces and hyphens are removed. */
+/** Non-blank once the MRZ filler `<`, spaces and hyphens are removed (document numbers only; names use `nameHasWord`). */
 const nonBlank = (s) => typeof s === 'string' && s.replace(/[<\s-]/g, '').length > 0;
+
+// D121: a site-supplied name is normalised EXACTLY as the holder app does (TierCNameMatch.siteWords in
+// apps/scanner), so a name chiproof signs is a name the app does not refuse as `name_fields_malformed`.
+// The app's sets, mirrored code point for code point (the app is the reference; never widen or narrow here):
+//  - apostrophes are dropped: U+0027 ' , U+2019 , U+2018 , U+02BC , U+0060 ` , U+00B4
+//  - separators (end a word): U+003C `<`, U+002D `-`, U+2010 to U+2015 (hyphen, non-breaking hyphen, figure dash,
+//    en dash, em dash, horizontal bar), U+2212 minus sign, U+2E3A, U+2E3B, U+FE58, U+FE63, U+FF0D, and Kotlin
+//    Char.isWhitespace = Java isWhitespace or isSpaceChar = U+0009-000D, U+001C-001F, and every Z-category code point.
+//    An explicit list, not Unicode Pd: Pd also holds wave dashes (U+301C, U+3030) and script marks that are not
+//    hyphens between name parts, and its membership changes with each Unicode version.
+//  - the string is NFC-normalised first; a lone combining mark (Mn) contributes nothing (the app strips marks)
+// A name field must leave at least one word. Letters/forms the app maps (umlauts, ss, th ...) all yield a word,
+// so only the "no word left" case is decided here.
+const NAME_DROPPED = /^[\u0027\u2019\u2018\u02BC\u0060\u00B4]$/u;
+const NAME_SEPARATOR = /^[<\u002D\u2010-\u2015\u2212\u2E3A\u2E3B\uFE58\uFE63\uFF0D\t-\r\u001C-\u001F\p{Z}]$/u;
+const COMBINING_MARK = /^\p{Mn}$/u;
+/** @param {unknown} s true iff the app's siteWords(s) would be non-empty */
+export const nameHasWord = (s) => {
+  if (typeof s !== 'string') return false;
+  for (const ch of s.normalize('NFC')) {
+    if (NAME_SEPARATOR.test(ch) || NAME_DROPPED.test(ch) || COMBINING_MARK.test(ch)) continue;
+    return true;
+  }
+  return false;
+};
 /** @param {unknown} v @returns {v is Record<string, any>} */
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -97,7 +122,8 @@ export function validateTierCPredicates(input) {
         out.push({ name: p.name, codes: p.codes.map(normCode) });
         break;
       case 'name_match':
-        if (!nonBlank(p.given_names) || !nonBlank(p.surname)) return { ok: false, reason: 'name_fields_invalid' };
+        // D121: same rule and same reason as the app (`name_fields_malformed`); the value is kept as given.
+        if (!nameHasWord(p.given_names) || !nameHasWord(p.surname)) return { ok: false, reason: 'name_fields_malformed' };
         out.push({ name: p.name, given_names: p.given_names, surname: p.surname });
         break;
       default: // document_number_is

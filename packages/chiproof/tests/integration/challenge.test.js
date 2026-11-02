@@ -63,7 +63,13 @@ test('matrix 3: tier C signed by an unlisted key is refused; listed key with max
 // --- Matrix 4: unsigned challenge at tier C vs tier B ------------------------
 
 test('matrix 4: unsigned tier C is refused, unsigned tier B is valid', () => {
-  const tierC = issueChallenge({ tier: 'C', threshold: 18, ttlMs: 60_000, challengeSecret: SECRET, now: 1000 });
+  // D120: issueChallenge no longer MINTS an unsigned tier C; build one by stripping a signed challenge, so the
+  // defensive verifyChallenge path is still exercised (the signature is outside the nonce seal).
+  const { privateKey } = issuerKeyPair();
+  const { sig, key_id: keyId, ...tierC } = issueChallenge({
+    tier: 'C', threshold: 18, ttlMs: 60_000, challengeSecret: SECRET, now: 1000, issuer: { privateKey, key_id: 'issuer-1' },
+  });
+  assert.ok(sig && keyId); // the strip removed something
   const cResult = verifyChallenge(tierC, { now: 1000, challengeSecret: SECRET });
   assert.equal(cResult.valid, false);
   assert.equal(cResult.reason, 'signature_required_at_tier_c');

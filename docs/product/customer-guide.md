@@ -140,6 +140,12 @@ Nothing below is hidden by the design and none of it is fixed; each is a disclos
   the in-app Log. **Upgrading from chiproof 0.9.0 to 0.9.1:** 0.9.0 accepted two
   `document_number_is` in one request, 0.9.1 throws, so a site that built two must send them as
   separate requests (one per scan) or its challenge route will fail on every scan.
+  Also from 0.10.0: `issueChallenge` at tier C throws when it is given no `issuer` (no signing key),
+  because an unsigned tier-C challenge is always refused (D120); a site that minted one without a key
+  used to learn only after a real scan, and now learns on its first test run. Names are normalised as
+  the app does (D121): apostrophes are dropped and hyphens, dashes (en dash, em dash, minus sign and look-alikes) separate words, so `O'Neil`,
+  `Jean-Pierre` and `Jean—Pierre` work as written, and the app now matches an em-dash or minus-sign name against the document; only a name field with no letters left (for example just `'`) is
+  refused at creation, with reason `name_fields_malformed`.
 - **Expiry date.** The 3, 6 and 12 month expiry questions are three different questions and are not
   locked, so a site can combine them to narrow down your document's expiry date. That is not prevented.
 - **Age.** Age narrowing is prevented: a site gets one age in total, whichever it asks first, through an
