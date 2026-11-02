@@ -15,6 +15,11 @@
   <img src="https://img.shields.io/badge/license-Apache%202.0-2a4f8c" alt="license: Apache 2.0">
 </p>
 
+<p align="center">
+  <img src="docs/assets/how-it-works.gif" width="300" alt="One age check on a phone: the site asks to prove over 18, the scanner app reads the passport chip, and the site gets a yes">
+</p>
+<p align="center"><sub>One "over 18" check with the local demo (debug build): the site asks, the phone reads the chip, the site gets "over 18: yes" and nothing else. Document details are blurred.</sub></p>
+
 ---
 
 ## Why this exists
